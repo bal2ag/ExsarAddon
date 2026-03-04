@@ -1,0 +1,2 @@
+-- This file has been superseded by Core.lua and CooldownTracker.lua.
+-- It is no longer listed in ExsarAddon.toc and will not be loaded by the game.

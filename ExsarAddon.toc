@@ -1,0 +1,13 @@
+## Interface: 20505
+## Title: ExsarAddon
+## Notes: Hunter toolkit
+## Author: Exsar
+## Version: 1.0
+## SavedVariables: ExsarAddonDB
+
+Core.lua
+CooldownTracker.lua
+SwingTimer.lua
+CastBar.lua
+KillCommandAlert.lua
+MeleeSwingTimer.lua
