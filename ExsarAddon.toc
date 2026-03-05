@@ -15,3 +15,5 @@ ActiveEffectsTracker.lua
 UsableItemsWidget.lua
 TargetDebuffTracker.lua
 MendPetTracker.lua
+FoodAndDrinkWidget.lua
+ConsumableBuffWidget.lua

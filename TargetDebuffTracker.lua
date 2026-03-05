@@ -109,10 +109,11 @@ end
 
 local function MakeSlot()
     local s = {
-        active  = false,
-        expTime = 0,
-        name    = nil,
-        id      = nil,
+        active   = false,
+        expTime  = 0,
+        name     = nil,
+        id       = nil,
+        spellId  = nil,   -- populated during scan; used for tooltip
     }
 
     s.iconFrame = CreateFrame("Frame", nil, frame)
@@ -150,6 +151,19 @@ local function MakeSlot()
     s.text:SetPoint("CENTER", s.iconFrame, "CENTER", 0, 0)
     s.text:SetTextColor(1, 1, 1, 1)
     s.text:SetText("")
+
+    s.iconFrame:EnableMouse(true)
+    s.iconFrame:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if s.spellId then
+            GameTooltip:SetSpellByID(s.spellId)
+        elseif s.name then
+            local id = select(7, GetSpellInfo(s.name))
+            if id then GameTooltip:SetSpellByID(id) end
+        end
+        GameTooltip:Show()
+    end)
+    s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     s.iconFrame:Hide()
     return s
@@ -215,10 +229,10 @@ local function UpdateDebuffs()
                 UnitDebuff("target", i)
             if not bName then break end
             if bSpellId and bSpellId > 0 then
-                byId[bSpellId] = { icon = bIcon, expTime = bExpTime or 0, duration = bDuration or 0 }
+                byId[bSpellId] = { icon = bIcon, expTime = bExpTime or 0, duration = bDuration or 0, spellId = bSpellId }
             end
             if not byName[bName] then
-                byName[bName] = { icon = bIcon, expTime = bExpTime or 0, duration = bDuration or 0 }
+                byName[bName] = { icon = bIcon, expTime = bExpTime or 0, duration = bDuration or 0, spellId = bSpellId }
             end
         end
     end
@@ -233,8 +247,9 @@ local function UpdateDebuffs()
         local wasActive = s.active
 
         if match then
-            s.active  = true
-            s.expTime = match.expTime
+            s.active   = true
+            s.expTime  = match.expTime
+            s.spellId  = match.spellId
             s.icon:SetTexture(match.icon)
             s.glow:Show()
 

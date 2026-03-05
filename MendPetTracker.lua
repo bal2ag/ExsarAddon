@@ -90,6 +90,17 @@ timeText:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
 timeText:SetTextColor(1, 1, 1, 1)
 timeText:SetText("")
 
+iconFrame:EnableMouse(true)
+iconFrame:SetScript("OnEnter", function(self)
+    local spellId = select(7, GetSpellInfo(MEND_PET_NAME))
+    if spellId then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetSpellByID(spellId)
+        GameTooltip:Show()
+    end
+end)
+iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 iconFrame:Hide()
 
 -- =========================================================
@@ -112,8 +123,8 @@ local function UpdateMendPet()
             local bName, bIcon, _, _, bDuration, bExpTime = UnitBuff("pet", i)
             if not bName then break end
             if bName == MEND_PET_NAME then
-                found     = true
-                active    = true
+                found  = true
+                active = true
                 icon:SetTexture(bIcon)
                 iconFrame:Show()
 

@@ -168,6 +168,21 @@ local function MakeSlot()
     s.text:SetTextColor(1, 1, 1, 1)
     s.text:SetText("")
 
+    s.iconFrame:EnableMouse(true)
+    s.iconFrame:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if s.slotId then
+            GameTooltip:SetInventoryItem("player", s.slotId)
+        elseif s.id then
+            GameTooltip:SetSpellByID(s.id)
+        elseif s.name then
+            local id = select(7, GetSpellInfo(s.name))
+            if id then GameTooltip:SetSpellByID(id) end
+        end
+        GameTooltip:Show()
+    end)
+    s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     s.iconFrame:Hide()
     return s
 end

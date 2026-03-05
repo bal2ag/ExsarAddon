@@ -106,6 +106,15 @@ for g, group in ipairs(SPELL_GROUPS) do
         sf.text:SetPoint("CENTER", sf.frame, "CENTER", 0, 0)
         sf.text:SetText("")
 
+        sf.frame:EnableMouse(true)
+        sf.frame:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            local id = sf.spellId or select(7, GetSpellInfo(sf.spellName))
+            if id then GameTooltip:SetSpellByID(id) end
+            GameTooltip:Show()
+        end)
+        sf.frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
         sf.frame:Hide()  -- shown by ApplyLayout once known status is determined
         spellFrames[#spellFrames + 1] = sf
         spellGroups[g][#spellGroups[g] + 1] = sf
@@ -139,6 +148,16 @@ local function MakeIconFrame()
     f.text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     f.text:SetPoint("CENTER", f.frame, "CENTER", 0, 0)
     f.text:SetText("")
+
+    f.frame:EnableMouse(true)
+    f.frame:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if f.slotId then
+            GameTooltip:SetInventoryItem("player", f.slotId)
+        end
+        GameTooltip:Show()
+    end)
+    f.frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     f.frame:Hide()
     return f

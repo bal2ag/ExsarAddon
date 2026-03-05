@@ -15,22 +15,21 @@ end
 -- =========================================================
 -- Item definitions
 -- =========================================================
--- useTinnitus = true  →  cooldown driven by the player's Tinnitus debuff
---                        rather than the item's own cooldown.
+-- cdDebuff = "Debuff Name"  →  cooldown driven by a player debuff rather than
+--                              the item's own cooldown (e.g. Tinnitus, Recently Bandaged).
 
 -- col/row define fixed grid positions (0-based):
 --   col 0 = left,  col 1 = right
---   row 0 = top,   row 1 = bottom
+--   row 0 = top,   row 1 = bottom,  row 2 = extra row (left only)
 local TRACKED_ITEMS = {
-    { name = "Super Mana Potion",    id = 22832, col = 0, row = 0 },
-    { name = "Super Healing Potion", id = 22829, col = 1, row = 0 },
-    { name = "Drums of Battle",      id = 29529, col = 0, row = 1, useTinnitus = true },
-    { name = "Haste Potion",         id = 22838, col = 1, row = 1 },
+    { name = "Dark Rune",                  id = 20520, col = 0, row = 0 },
+    { name = "Demonic Rune",               id = 12662, col = 1, row = 0 },
+    { name = "Super Mana Potion",          id = 22832, col = 0, row = 1 },
+    { name = "Super Healing Potion",       id = 22829, col = 1, row = 1 },
+    { name = "Drums of Battle",            id = 29529, col = 0, row = 2, cdDebuff = "Tinnitus", useCharges = true },
+    { name = "Haste Potion",               id = 22838, col = 1, row = 2 },
+    { name = "Heavy Netherweave Bandage",  id = 21991, col = 0, row = 3, cdDebuff = "Recently Bandaged" },
 }
-
--- Tinnitus: the debuff applied after using Drums of Battle that gates re-use.
--- Matched by name; spell ID not used as it may vary across patch revisions.
-local TINNITUS_NAME = "Tinnitus"
 
 -- Durations at or below this threshold are just the GCD, not a real cooldown.
 local MIN_COOLDOWN = 1.6
@@ -43,9 +42,9 @@ local ICON_SIZE = 29
 local ICON_GAP  = 4
 local PADDING   = 6
 
--- Fixed 2×2 grid dimensions
+-- Fixed grid dimensions (2 cols × 4 rows, though row 3 only has col 0)
 local GRID_W = 2 * ICON_SIZE + ICON_GAP + PADDING * 2
-local GRID_H = 2 * ICON_SIZE + ICON_GAP + PADDING * 2
+local GRID_H = 4 * ICON_SIZE + 3 * ICON_GAP + PADDING * 2
 
 -- =========================================================
 -- Main frame
@@ -92,10 +91,11 @@ for i, item in ipairs(TRACKED_ITEMS) do
     local s = {
         itemId      = item.id,
         itemName    = item.name,
-        useTinnitus = item.useTinnitus,
+        cdDebuff    = item.cdDebuff,
+        useCharges  = item.useCharges,
         col         = item.col,
         row         = item.row,
-        count       = 0,
+        count       = -1,   -- -1 forces countText update on first ScanBags
         known       = false,
     }
 
@@ -106,19 +106,27 @@ for i, item in ipairs(TRACKED_ITEMS) do
     s.iconFrame:RegisterForClicks("AnyUp", "AnyDown")
     s.iconFrame:SetAttribute("type", "item")
     s.iconFrame:SetAttribute("item", item.name)
+    s.iconFrame:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetItemByID(s.itemId)
+        GameTooltip:Show()
+    end)
+    s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Slot background (only visible when this slot is shown)
-    local slotBg = s.iconFrame:CreateTexture(nil, "BACKGROUND")
-    slotBg:SetAllPoints()
-    slotBg:SetColorTexture(0, 0, 0, 0.6)
-
-    -- Ready border: 1px golden ring around the icon, shown only when off cooldown.
-    -- Positioned 1px outside the icon frame so it peeks out around all edges.
+    -- Ready border: golden ring around the icon.
+    -- Created first so slotBg (same layer, created after) covers the center,
+    -- leaving only the outer 1px ring visible.
     s.border = s.iconFrame:CreateTexture(nil, "BACKGROUND")
     s.border:SetPoint("TOPLEFT",     s.iconFrame, "TOPLEFT",     -1,  1)
     s.border:SetPoint("BOTTOMRIGHT", s.iconFrame, "BOTTOMRIGHT",  1, -1)
     s.border:SetColorTexture(1, 0.82, 0.25, 0.85)
     s.border:Hide()
+
+    -- Slot background: fully opaque so it covers the border's center area,
+    -- leaving only the outer 1px ring of the border visible.
+    local slotBg = s.iconFrame:CreateTexture(nil, "BACKGROUND")
+    slotBg:SetAllPoints()
+    slotBg:SetColorTexture(0, 0, 0, 1.0)
 
     -- Item icon
     s.icon = s.iconFrame:CreateTexture(nil, "ARTWORK")
@@ -166,32 +174,17 @@ local function ApplyLayout()
     -- non-secure code during combat.
     if InCombatLockdown() then return end
 
-    local anyKnown = false
     for _, s in ipairs(slots) do
-        if s.known then
-            anyKnown = true
-            s.iconFrame:ClearAllPoints()
-            s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                PADDING + s.col * (ICON_SIZE + ICON_GAP),
-                -(PADDING + s.row * (ICON_SIZE + ICON_GAP)))
-            s.iconFrame:Show()
-        else
-            s.iconFrame:Hide()
-        end
+        s.iconFrame:ClearAllPoints()
+        s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT",
+            PADDING + s.col * (ICON_SIZE + ICON_GAP),
+            -(PADDING + s.row * (ICON_SIZE + ICON_GAP)))
+        s.iconFrame:Show()
     end
 
-    if anyKnown then
-        placeholderText:Hide()
-        frame:SetSize(GRID_W, GRID_H)
-        frame:Show()
-    elseif not C_locked then
-        frame:SetSize(60, ICON_SIZE + PADDING * 2)
-        placeholderText:Show()
-        frame:Show()
-    else
-        placeholderText:Hide()
-        frame:Hide()
-    end
+    placeholderText:Hide()
+    frame:SetSize(GRID_W, GRID_H)
+    frame:Show()
 end
 
 -- =========================================================
@@ -199,27 +192,25 @@ end
 -- =========================================================
 
 local function ScanBags()
-    local changed = false
     for _, s in ipairs(slots) do
-        local count    = GetItemCount(s.itemId)
-        local wasKnown = s.known
+        local count = GetItemCount(s.itemId, false, s.useCharges and true or false)
         s.known = count > 0
 
         if count ~= s.count then
             s.count = count
-            s.countText:SetText(count > 1 and tostring(count) or "")
+            if count == 0 then
+                s.countText:SetText("0")
+            else
+                s.countText:SetText(tostring(count))
+            end
         end
 
         -- Retry icon load if GetItemInfo wasn't cached at slot-creation time.
-        if s.known and not s.icon:GetTexture() then
+        if not s.icon:GetTexture() then
             local tex = select(10, GetItemInfo(s.itemId))
             if tex then s.icon:SetTexture(tex) end
         end
-
-        if s.known ~= wasKnown then changed = true end
     end
-
-    if changed then ApplyLayout() end
 end
 
 -- =========================================================
@@ -236,12 +227,12 @@ local function FormatCooldown(remaining)
     end
 end
 
--- Returns start, duration for the Tinnitus debuff if it is currently active.
-local function GetTinnitusCooldown()
+-- Returns start, duration for a named player debuff if it is currently active.
+local function GetDebuffCooldown(debuffName)
     for i = 1, 40 do
         local name, _, _, _, duration, expTime = UnitDebuff("player", i)
         if not name then break end
-        if name == TINNITUS_NAME and duration and duration > 0 then
+        if name == debuffName and duration and duration > 0 then
             return expTime - duration, duration
         end
     end
@@ -251,10 +242,18 @@ end
 local function UpdateCooldowns()
     local now = GetTime()
     for _, s in ipairs(slots) do
-        if s.known then
+        -- Items with no debuff CD and none in bags: greyed out, no cooldown.
+        if not s.known and not s.cdDebuff then
+            s.icon:SetDesaturated(true)
+            s.icon:SetAlpha(0.35)
+            s.cooldown:SetCooldown(0, 0)
+            s.timeText:SetText("")
+            s.border:Hide()
+        else
+            -- Debuff-based CDs are visible even when the item is depleted.
             local start, duration
-            if s.useTinnitus then
-                start, duration = GetTinnitusCooldown()
+            if s.cdDebuff then
+                start, duration = GetDebuffCooldown(s.cdDebuff)
             else
                 -- GetItemCooldown does not exist in TBC Classic.  Scan bags to
                 -- find the item's location and use GetContainerItemCooldown,
@@ -278,13 +277,13 @@ local function UpdateCooldowns()
                 s.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 s.timeText:SetText(remaining > 0 and FormatCooldown(remaining) or "")
-                s.border:Hide()
+                s.border:SetShown(s.known and true or false)
             else
-                s.icon:SetDesaturated(false)
-                s.icon:SetAlpha(1.0)
+                s.icon:SetDesaturated(not s.known)
+                s.icon:SetAlpha(s.known and 1.0 or 0.35)
                 s.cooldown:SetCooldown(0, 0)
                 s.timeText:SetText("")
-                s.border:Show()
+                s.border:SetShown(s.known and true or false)
             end
         end
     end
@@ -309,6 +308,7 @@ end)
 
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+frame:RegisterEvent("PLAYER_ALIVE")
 frame:RegisterEvent("BAG_UPDATE")
 frame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 frame:RegisterEvent("UNIT_AURA")
@@ -328,6 +328,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        ScanBags()
+        UpdateCooldowns()
+
+    elseif event == "PLAYER_ALIVE" then
         ScanBags()
         UpdateCooldowns()
 
