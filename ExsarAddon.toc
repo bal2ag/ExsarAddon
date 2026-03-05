@@ -17,3 +17,4 @@ TargetDebuffTracker.lua
 MendPetTracker.lua
 FoodAndDrinkWidget.lua
 ConsumableBuffWidget.lua
+MountWidget.lua
