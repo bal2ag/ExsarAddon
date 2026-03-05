@@ -30,6 +30,9 @@ Then reload the UI in-game with `/reload`. There is no build step.
 | `SwingTimer.lua` | Ranged auto shot cycle tracker |
 | `CastBar.lua` | Cast bar for hunter shots (Auto Shot aim window, Aimed Shot, Steady Shot, Multi-Shot) |
 | `KillCommandAlert.lua` | Pulsing aura indicator when Kill Command is off cooldown and pet is active |
+| `ActiveEffectsTracker.lua` | Icons with marching-ants border and countdown for active buffs (Quick Shots, Haste Potion, Bloodlust, Heroism, Rapid Fire, The Beast Within, Drums of Battle) plus trinket on-use buffs |
+| `UsableItemsWidget.lua` | Mini action bar showing consumables in bags (Super Healing Potion 22829, Super Mana Potion 22832, Haste Potion 22838, Drums of Battle 29529); click to use; Drums cooldown driven by Tinnitus debuff |
+| `TargetDebuffTracker.lua` | Single-column vertical widget showing tracked debuffs (Hunter's Mark, Serpent Sting) currently active on the player's target; marching-ants border, reverse sweep, countdown timer |
 
 **Adding a new feature module:**
 1. Create a new `.lua` file and add it to `ExsarAddon.toc`
@@ -99,6 +102,14 @@ The `.toc` file uses `## Interface: 20505` (TBC Classic Anniversary). To verify 
 /run print(select(4, GetBuildInfo()))
 ```
 
+## SecureActionButtonTemplate in TBC Classic Anniversary
+
+TBC Classic Anniversary uses the modern WoW client with `ActionButtonUseKeyDown = 1` by default. `SecureActionButton_OnClick` only fires on **down** events, so buttons registered with only `"AnyUp"` silently do nothing. Always use:
+```lua
+btn:RegisterForClicks("AnyUp", "AnyDown")
+```
+Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `SecureActionButtonTemplate` button — this can taint the button and prevent the secure action. Use `PreClick`/`PostClick` for any surrounding logic instead. Also avoid cross-parent `SetAllPoints` anchoring on secure buttons (e.g. a UIParent-child secure button anchored to a child of a custom frame) — the anchor silently fails and `GetCenter()` returns nil.
+
 ## SavedVariables
 
 `ExsarAddonDB` is the top-level table. Each module namespaces its settings:
@@ -106,3 +117,6 @@ The `.toc` file uses `## Interface: 20505` (TBC Classic Anniversary). To verify 
 - `ExsarAddonDB.swingTimer` — position (x, y), scale, width, locked
 - `ExsarAddonDB.castBar` — position (x, y), scale, width, locked
 - `ExsarAddonDB.killCommandAlert` — position (x, y), scale, size, locked
+- `ExsarAddonDB.activeEffects` — position (x, y), scale, locked
+- `ExsarAddonDB.usableItems` — position (x, y), scale, locked
+- `ExsarAddonDB.targetDebuffs` — position (x, y), scale, locked

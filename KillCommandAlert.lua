@@ -104,7 +104,7 @@ local function IsReady()
 end
 
 local function UpdateAura()
-    local ready = IsReady()
+    local ready = IsReady() and UnitAffectingCombat("player")
     K.active = ready
     local shouldShow = ready or not kcDB().locked
     if shouldShow then
@@ -152,6 +152,8 @@ frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("SPELL_UPDATE_USABLE")
 frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 frame:RegisterEvent("UNIT_PET")
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -178,6 +180,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "UNIT_PET" then
         if arg1 == "player" then UpdateAura() end
+
+    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        UpdateAura()
     end
 end)
 

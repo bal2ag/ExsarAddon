@@ -36,6 +36,10 @@ local ICON_GAP  = 4
 local GROUP_GAP = 14  -- default extra space between groups
 local PADDING   = 6
 
+-- Inventory slots for trinkets
+local TRINKET_SLOT_1 = 13
+local TRINKET_SLOT_2 = 14
+
 -- =========================================================
 -- Main frame
 -- =========================================================
@@ -109,12 +113,68 @@ for g, group in ipairs(SPELL_GROUPS) do
 end
 
 -- =========================================================
+-- Trinket icon frames
+-- =========================================================
+
+-- Reuses the same visual structure as spell frames.
+local function MakeIconFrame()
+    local f = { known = false }
+
+    f.frame = CreateFrame("Frame", nil, mainFrame)
+    f.frame:SetSize(ICON_SIZE, ICON_SIZE)
+    f.frame:SetPoint("LEFT", mainFrame, "LEFT", PADDING, 0)
+
+    f.icon = f.frame:CreateTexture(nil, "BACKGROUND")
+    f.icon:SetAllPoints()
+    f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    f.cooldown = CreateFrame("Cooldown", nil, f.frame, "CooldownFrameTemplate")
+    f.cooldown:SetAllPoints()
+    f.cooldown:SetDrawEdge(false)
+    if f.cooldown.SetHideCountdownNumbers then
+        f.cooldown:SetHideCountdownNumbers(true)
+    end
+
+    f.text = f.frame:CreateFontString(nil, "OVERLAY")
+    f.text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    f.text:SetPoint("CENTER", f.frame, "CENTER", 0, 0)
+    f.text:SetText("")
+
+    f.frame:Hide()
+    return f
+end
+
+-- One frame per trinket slot; shown only when the slot has an on-use effect.
+local trinketFrames = {
+    MakeIconFrame(),  -- slot 13
+    MakeIconFrame(),  -- slot 14
+}
+trinketFrames[1].slotId = TRINKET_SLOT_1
+trinketFrames[2].slotId = TRINKET_SLOT_2
+
+-- =========================================================
 -- Layout
 -- =========================================================
 
 local function ApplyLayout(gap)
     local x = PADDING
     local anyPlaced = false
+
+    -- Trinket group: shown first (left side) when any trinket has an on-use effect
+    local trinketVisible = {}
+    for _, tf in ipairs(trinketFrames) do
+        if tf.known then trinketVisible[#trinketVisible + 1] = tf
+        else tf.frame:Hide() end
+    end
+    if #trinketVisible > 0 then
+        for _, tf in ipairs(trinketVisible) do
+            tf.frame:ClearAllPoints()
+            tf.frame:SetPoint("LEFT", mainFrame, "LEFT", x, 0)
+            tf.frame:Show()
+            x = x + ICON_SIZE + ICON_GAP
+            anyPlaced = true
+        end
+    end
 
     for _, group in ipairs(spellGroups) do
         local visible = {}
@@ -169,6 +229,36 @@ local function UpdateKnownSpells()
     ApplyLayout(cDB().groupGap or GROUP_GAP)
 end
 
+-- Checks each trinket slot for an equipped item with a USE effect.
+-- Loads the icon texture and updates the layout.  Called on login,
+-- world entry, and whenever equipment changes.
+local function ScanTrinkets()
+    local changed = false
+    for _, tf in ipairs(trinketFrames) do
+        local itemId   = GetInventoryItemID("player", tf.slotId)
+        local wasKnown = tf.known
+        tf.known = false
+        if itemId and itemId > 0 then
+            local spellName = GetItemSpell(itemId)
+            if spellName then
+                tf.known = true
+                -- Refresh texture in case the item changed
+                local tex = GetInventoryItemTexture("player", tf.slotId)
+                if tex then tf.icon:SetTexture(tex) end
+            end
+        end
+        if not tf.known then
+            tf.icon:SetTexture(nil)
+            tf.icon:SetDesaturated(false)
+            tf.icon:SetAlpha(1.0)
+            tf.cooldown:SetCooldown(0, 0)
+            tf.text:SetText("")
+        end
+        if tf.known ~= wasKnown then changed = true end
+    end
+    if changed then ApplyLayout(cDB().groupGap or GROUP_GAP) end
+end
+
 -- =========================================================
 -- Cooldown updates
 -- =========================================================
@@ -189,10 +279,17 @@ local function UpdateCooldowns()
         if sf.known then
             local start, duration = GetSpellCooldown(sf.spellName)
             local onCooldown = start and start > 0 and duration and duration > MIN_COOLDOWN_DURATION
+            local onGCD      = not onCooldown and start and start > 0 and duration and duration > 0
 
             if onCooldown then
                 sf.icon:SetDesaturated(true)
                 sf.icon:SetAlpha(0.4)
+                sf.cooldown:SetCooldown(start, duration)
+                local remaining = (start + duration) - now
+                sf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+            elseif onGCD then
+                sf.icon:SetDesaturated(false)
+                sf.icon:SetAlpha(1.0)
                 sf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 sf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
@@ -206,12 +303,42 @@ local function UpdateCooldowns()
     end
 end
 
+local function UpdateTrinketCooldowns()
+    local now = GetTime()
+    for _, tf in ipairs(trinketFrames) do
+        if tf.known then
+            local start, duration = GetInventoryItemCooldown("player", tf.slotId)
+            local onCD  = start and start > 0 and duration and duration > MIN_COOLDOWN_DURATION
+            local onGCD = not onCD and start and start > 0 and duration and duration > 0
+            if onCD then
+                tf.icon:SetDesaturated(true)
+                tf.icon:SetAlpha(0.4)
+                tf.cooldown:SetCooldown(start, duration)
+                local remaining = (start + duration) - now
+                tf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+            elseif onGCD then
+                tf.icon:SetDesaturated(false)
+                tf.icon:SetAlpha(1.0)
+                tf.cooldown:SetCooldown(start, duration)
+                local remaining = (start + duration) - now
+                tf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+            else
+                tf.icon:SetDesaturated(false)
+                tf.icon:SetAlpha(1.0)
+                tf.cooldown:SetCooldown(0, 0)
+                tf.text:SetText("")
+            end
+        end
+    end
+end
+
 local updateElapsed = 0
 mainFrame:SetScript("OnUpdate", function(self, elapsed)
     updateElapsed = updateElapsed + elapsed
     if updateElapsed >= 0.1 then
         updateElapsed = 0
         UpdateCooldowns()
+        UpdateTrinketCooldowns()
     end
 end)
 
@@ -223,6 +350,7 @@ mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("SPELLS_CHANGED")
+mainFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 mainFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -241,8 +369,14 @@ mainFrame:SetScript("OnEvent", function(self, event, arg1)
         -- appear or disappear immediately if the player respeccs.
         UpdateKnownSpells()
         UpdateCooldowns()
+        ScanTrinkets()
+        UpdateTrinketCooldowns()
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        ScanTrinkets()
+        UpdateTrinketCooldowns()
     else
         UpdateCooldowns()
+        UpdateTrinketCooldowns()
     end
 end)
 

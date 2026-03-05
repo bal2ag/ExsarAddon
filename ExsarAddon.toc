@@ -11,3 +11,6 @@ SwingTimer.lua
 CastBar.lua
 KillCommandAlert.lua
 MeleeSwingTimer.lua
+ActiveEffectsTracker.lua
+UsableItemsWidget.lua
+TargetDebuffTracker.lua
