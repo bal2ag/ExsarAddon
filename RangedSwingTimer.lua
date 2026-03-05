@@ -1,14 +1,14 @@
--- SwingTimer module
+-- RangedSwingTimer module
 -- Ranged auto shot cycle tracker. Displays a bar that drains toward the center
 -- following each Auto Shot, with a pair of red reticules marking the aim window:
 --   stop moving before the bar edge reaches the reticules or the shot will delay.
--- Settings are stored under ExsarAddonDB.swingTimer.
+-- Settings are stored under ExsarAddonDB.rangedSwingTimer.
 
 local ADDON_NAME = "ExsarAddon"
 
 local function sDB()
-    ExsarAddonDB.swingTimer = ExsarAddonDB.swingTimer or {}
-    return ExsarAddonDB.swingTimer
+    ExsarAddonDB.rangedSwingTimer = ExsarAddonDB.rangedSwingTimer or {}
+    return ExsarAddonDB.rangedSwingTimer
 end
 
 -- =========================================================
@@ -51,7 +51,7 @@ local S = {
 -- Frame
 -- =========================================================
 
-local frame = CreateFrame("Frame", ADDON_NAME .. "SwingFrame", UIParent)
+local frame = CreateFrame("Frame", ADDON_NAME .. "RangedSwingFrame", UIParent)
 frame:SetMovable(true)
 frame:EnableMouse(true)
 frame:RegisterForDrag("LeftButton")
@@ -419,12 +419,12 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("swingreset", function()
+ExsarAddon.AddSlashCommand("rangedswingreset", function()
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, -240)
     sDB().x = nil
     sDB().y = nil
-    print(ADDON_NAME .. ": Swing timer position reset.")
+    print(ADDON_NAME .. ": Ranged swing timer position reset.")
 end)
 
 -- =========================================================
@@ -432,7 +432,7 @@ end)
 -- =========================================================
 
 ExsarAddon.RegisterModule({
-    name = "Swing Timer",
+    name = "Ranged Swing Timer",
     BuildConfig = function(parent, y)
         ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
             function() return sDB().scale or 1.0 end,
@@ -470,7 +470,7 @@ ExsarAddon.RegisterModule({
             frame:SetPoint("CENTER", UIParent, "CENTER", 0, -240)
             sDB().x = nil
             sDB().y = nil
-            print(ADDON_NAME .. ": Swing timer position reset.")
+            print(ADDON_NAME .. ": Ranged swing timer position reset.")
         end)
         y = y - 30
 

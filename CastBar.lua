@@ -193,7 +193,7 @@ end
 local function GetBarColor(name)
     if name == C.nameAuto   then return 0.25, 0.85, 0.25, 0.85 end  -- green
     if name == C.nameAimed  then return 0.90, 0.80, 0.10, 0.90 end  -- gold
-    if name == C.nameSteady then return 0.15, 0.55, 0.95, 0.85 end  -- blue
+    if name == C.nameSteady then return 0.65, 0.30, 0.95, 0.85 end  -- purple
     if name == C.nameMulti  then return 0.90, 0.50, 0.10, 0.90 end  -- orange
     return 0.60, 0.60, 0.90, 0.85                                    -- fallback
 end
@@ -275,6 +275,10 @@ end)
 -- also write to these when auto shot is first enabled).
 local autoAimMoving   = false   -- player was moving on the previous ticker tick
 local autoAimStopTime = 0       -- GetTime() when the player most recently stopped
+
+-- Forward declaration: EndCast is defined after the autoAimTicker closure that
+-- calls it, so we need a local variable in scope before the closure is created.
+local EndCast
 
 -- Auto Shot aim-window ticker.
 -- The main cast bar frame is hidden between casts, so its OnUpdate does not fire
@@ -400,7 +404,7 @@ local function StartCast(eventSpellName)
     end
 end
 
-local function EndCast(failed)
+EndCast = function(failed)
     if not C.casting then return end
     if not failed then
         -- Guard: some spells (Aimed Shot in TBC Classic) fire

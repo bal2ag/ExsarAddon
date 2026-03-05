@@ -108,54 +108,80 @@ local function BuildOptions()
     if Options._built then return end
     Options._built = true
 
-    -- Scroll container so the panel works in both old and new Settings UI
-    local scroll = CreateFrame("ScrollFrame", ADDON_NAME .. "OptionsScroll", Options, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT",     Options, "TOPLEFT",     0,   0)
-    scroll:SetPoint("BOTTOMRIGHT", Options, "BOTTOMRIGHT", -30, 0)
-    scroll:EnableMouseWheel(true)
-    scroll:SetScript("OnMouseWheel", function(self, delta)
-        local sb = self.ScrollBar or _G[self:GetName() .. "ScrollBar"]
-        if not sb then return end
-        local minv, maxv = sb:GetMinMaxValues()
-        local cur = self:GetVerticalScroll() or 0
-        if delta < 0 then
-            self:SetVerticalScroll(math.min(cur + 40, maxv))
-        else
-            self:SetVerticalScroll(math.max(cur - 40, minv))
+    local SIDEBAR_W = 155
+
+    -- Sidebar: dark background strip on the left
+    local sidebarBg = Options:CreateTexture(nil, "BACKGROUND")
+    sidebarBg:SetColorTexture(0, 0, 0, 0.25)
+    sidebarBg:SetPoint("TOPLEFT",    Options, "TOPLEFT",    0, 0)
+    sidebarBg:SetPoint("BOTTOMLEFT", Options, "BOTTOMLEFT", 0, 0)
+    sidebarBg:SetWidth(SIDEBAR_W)
+
+    -- Vertical divider between sidebar and content
+    local divider = Options:CreateTexture(nil, "ARTWORK")
+    divider:SetColorTexture(0.4, 0.4, 0.4, 0.8)
+    divider:SetWidth(1)
+    divider:SetPoint("TOPLEFT",    Options, "TOPLEFT",    SIDEBAR_W, 0)
+    divider:SetPoint("BOTTOMLEFT", Options, "BOTTOMLEFT", SIDEBAR_W, 0)
+
+    local navButtons    = {}
+    local contentPanels = {}
+
+    local function SelectModule(idx)
+        for i = 1, #contentPanels do
+            contentPanels[i]:SetShown(i == idx)
         end
-    end)
+        for i, btn in ipairs(navButtons) do
+            if i == idx then
+                btn:LockHighlight()
+            else
+                btn:UnlockHighlight()
+            end
+        end
+    end
 
-    local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(1, 1)
-    scroll:SetScrollChild(content)
+    -- Sidebar navigation buttons, one per module
+    local navY = -10
+    for i, module in ipairs(registeredModules) do
+        local btn = CreateFrame("Button", ADDON_NAME .. "NavBtn" .. i, Options,
+                                "UIPanelButtonTemplate")
+        btn:SetPoint("TOPLEFT", Options, "TOPLEFT", 6, navY)
+        btn:SetWidth(SIDEBAR_W - 12)
+        btn:SetHeight(24)
+        btn:SetText(module.name)
+        local idx = i
+        btn:SetScript("OnClick", function() SelectModule(idx) end)
+        navButtons[i] = btn
+        navY = navY - 28
+    end
 
-    Options:SetScript("OnSizeChanged", function()
-        local w = Options:GetWidth() or 0
-        if w > 0 then content:SetWidth(math.max(400, w - 45)) end
-    end)
+    -- Content panels: one per module, shown/hidden on nav selection
+    for i, module in ipairs(registeredModules) do
+        local panel = CreateFrame("Frame", nil, Options)
+        panel:SetPoint("TOPLEFT",     Options, "TOPLEFT",     SIDEBAR_W + 10, 0)
+        panel:SetPoint("BOTTOMRIGHT", Options, "BOTTOMRIGHT",             0,  0)
 
-    local y = -16
+        local y = -16
 
-    for _, module in ipairs(registeredModules) do
-        -- Section header
-        local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        header:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+        local header = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        header:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, y)
         header:SetText(module.name)
         y = y - 24
 
-        local line = content:CreateTexture(nil, "ARTWORK")
+        local line = panel:CreateTexture(nil, "ARTWORK")
         line:SetColorTexture(0.4, 0.4, 0.4, 0.6)
         line:SetHeight(1)
-        line:SetPoint("TOPLEFT",  content, "TOPLEFT",  16,  y)
-        line:SetPoint("TOPRIGHT", content, "TOPRIGHT", -16, y)
+        line:SetPoint("TOPLEFT",  panel, "TOPLEFT",  16, y)
+        line:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, y)
         y = y - 14
 
-        -- Module builds its own widgets and returns the final Y
-        y = module.BuildConfig(content, y)
-        y = y - 24  -- gap between sections
+        module.BuildConfig(panel, y)
+
+        panel:Hide()
+        contentPanels[i] = panel
     end
 
-    content:SetHeight(math.abs(y) + 30)
+    SelectModule(1)
 end
 
 Options:SetScript("OnShow", BuildOptions)

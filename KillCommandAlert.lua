@@ -94,6 +94,8 @@ BuildWing(-1)   -- left wing (mirrored)
 -- =========================================================
 
 local function IsReady()
+    -- Require a live, active pet.
+    if not UnitExists("pet") or UnitIsDead("pet") then return false end
     -- IsUsableSpell: true when the Kill Command proc is active (crit scored).
     -- GetSpellCooldown: guards against IsUsableSpell returning true while
     -- the 1-minute cooldown is still running after a cast.

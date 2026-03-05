@@ -27,7 +27,7 @@ Then reload the UI in-game with `/reload`. There is no build step.
 | `ExsarAddon.toc` | Addon metadata, interface version, SavedVariables declaration |
 | `Core.lua` | `ExsarAddon` namespace, module registration API, shared config widget helpers, config panel, slash command dispatch, DB init |
 | `CooldownTracker.lua` | Cooldown tracker feature module |
-| `SwingTimer.lua` | Ranged auto shot cycle tracker |
+| `RangedSwingTimer.lua` | Ranged auto shot cycle tracker |
 | `CastBar.lua` | Cast bar for hunter shots (Auto Shot aim window, Aimed Shot, Steady Shot, Multi-Shot) |
 | `KillCommandAlert.lua` | Pulsing aura indicator when Kill Command is off cooldown and pet is active |
 | `ActiveEffectsTracker.lua` | Icons with marching-ants border and countdown for active buffs (Quick Shots, Haste Potion, Bloodlust, Heroism, Rapid Fire, The Beast Within, Drums of Battle) plus trinket on-use buffs |
@@ -54,7 +54,7 @@ Then reload the UI in-game with `/reload`. There is no build step.
 - `UpdateKnownSpells()` — checks spellbook, loads icon textures, calls `ApplyLayout`; triggered by `PLAYER_ENTERING_WORLD` and `SPELLS_CHANGED`
 - `UpdateCooldowns()` — runs every 0.1s via `OnUpdate` and on `SPELL_UPDATE_COOLDOWN`
 
-**`SwingTimer.lua` structure:**
+**`RangedSwingTimer.lua` structure:**
 - Bar drains from full width to zero width (centered) over the ranged weapon speed cycle; resets on each Auto Shot
 - `S.speed` — hasted weapon speed from `UnitRangedDamage("player")`, refreshed on `UNIT_AURA` and `PLAYER_EQUIPMENT_CHANGED`
 - `S.aimWindow` — stop-moving window = `0.5 + latency` (seconds); the ~0.5s shot wind-up animation plus server latency
@@ -114,7 +114,7 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 
 `ExsarAddonDB` is the top-level table. Each module namespaces its settings:
 - `ExsarAddonDB.cooldownTracker` — position (x, y), scale, locked, groupGap
-- `ExsarAddonDB.swingTimer` — position (x, y), scale, width, locked
+- `ExsarAddonDB.rangedSwingTimer` — position (x, y), scale, width, locked
 - `ExsarAddonDB.castBar` — position (x, y), scale, width, locked
 - `ExsarAddonDB.killCommandAlert` — position (x, y), scale, size, locked
 - `ExsarAddonDB.activeEffects` — position (x, y), scale, locked
