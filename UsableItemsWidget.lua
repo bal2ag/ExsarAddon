@@ -21,15 +21,30 @@ end
 -- col/row define fixed grid positions (0-based):
 --   col 0 = left,  col 1 = right
 --   row 0 = top,   row 1 = bottom,  row 2 = extra row (left only)
+-- alternate: a zone-restricted substitute shown instead of the primary item
+--   when (a) the player is in one of the valid zones AND (b) count > 0.
 local TRACKED_ITEMS = {
     { name = "Dark Rune",                  id = 20520, col = 0, row = 0 },
     { name = "Demonic Rune",               id = 12662, col = 1, row = 0 },
-    { name = "Super Mana Potion",          id = 22832, col = 0, row = 1 },
-    { name = "Super Healing Potion",       id = 22829, col = 1, row = 1 },
+    { name = "Super Mana Potion",          id = 22832, col = 0, row = 1,
+      alternate = { name = "Bottled Nethergon Energy", id = 32902 } },
+    { name = "Super Healing Potion",       id = 22829, col = 1, row = 1,
+      alternate = { name = "Bottled Nethergon Vapor",  id = 32905 } },
     { name = "Drums of Battle",            id = 29529, col = 0, row = 2, cdDebuff = "Tinnitus", useCharges = true },
     { name = "Haste Potion",               id = 22838, col = 1, row = 2 },
     { name = "Heavy Netherweave Bandage",  id = 21991, col = 0, row = 3, cdDebuff = "Recently Bandaged" },
 }
+
+-- Zones where Bottled Nethergon items are usable (Tempest Keep subzones).
+local TK_ZONES = {
+    ["The Eye"]      = true,
+    ["The Botanica"] = true,
+    ["The Arcatraz"] = true,
+    ["The Mechanar"] = true,
+}
+local function InTempestKeep()
+    return TK_ZONES[GetRealZoneText()] and true or false
+end
 
 -- Durations at or below this threshold are just the GCD, not a real cooldown.
 local MIN_COOLDOWN = 1.6
@@ -89,15 +104,25 @@ local slots = {}
 
 for i, item in ipairs(TRACKED_ITEMS) do
     local s = {
-        itemId      = item.id,
-        itemName    = item.name,
-        cdDebuff    = item.cdDebuff,
-        useCharges  = item.useCharges,
-        col         = item.col,
-        row         = item.row,
-        count       = -1,   -- -1 forces countText update on first ScanBags
-        known       = false,
+        itemId        = item.id,
+        itemName      = item.name,
+        primaryId     = item.id,
+        primaryName   = item.name,
+        altId         = item.alternate and item.alternate.id   or nil,
+        altName       = item.alternate and item.alternate.name or nil,
+        useAlternate  = false,
+        cdDebuff      = item.cdDebuff,
+        useCharges    = item.useCharges,
+        col           = item.col,
+        row           = item.row,
+        count         = -1,   -- -1 forces countText update on first ScanBags
+        known         = false,
     }
+
+    -- Pre-load alternate item data so the icon is ready before entering the zone.
+    if item.alternate and C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(item.alternate.id)
+    end
 
     s.iconFrame = CreateFrame("Button", ADDON_NAME .. "ItemBtn" .. i, frame,
                               "SecureActionButtonTemplate")
@@ -185,6 +210,33 @@ local function ApplyLayout()
     placeholderText:Hide()
     frame:SetSize(GRID_W, GRID_H)
     frame:Show()
+end
+
+-- =========================================================
+-- Alternate item switching
+-- =========================================================
+-- Swaps a slot between its primary and alternate item when zone/count changes.
+-- Cannot run during combat lockdown; PLAYER_REGEN_ENABLED triggers a retry.
+
+local function UpdateActiveItems()
+    if InCombatLockdown() then return end
+    local inTK = InTempestKeep()
+    for _, s in ipairs(slots) do
+        if s.altId then
+            local shouldUseAlt = inTK and GetItemCount(s.altId) > 0
+            if shouldUseAlt ~= s.useAlternate then
+                s.useAlternate = shouldUseAlt
+                local newId   = shouldUseAlt and s.altId   or s.primaryId
+                local newName = shouldUseAlt and s.altName or s.primaryName
+                s.itemId   = newId
+                s.itemName = newName
+                s.iconFrame:SetAttribute("item", newName)
+                local tex = select(10, GetItemInfo(newId))
+                s.icon:SetTexture(tex or nil)
+                s.count = -1  -- force countText refresh in ScanBags
+            end
+        end
+    end
 end
 
 -- =========================================================
@@ -312,6 +364,8 @@ frame:RegisterEvent("PLAYER_ALIVE")
 frame:RegisterEvent("BAG_UPDATE")
 frame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -326,16 +380,29 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         self:EnableMouse(not db.locked)
         C_locked = db.locked and true or false
         ApplyLayout()
+        UpdateActiveItems()
+        ScanBags()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        UpdateActiveItems()
         ScanBags()
         UpdateCooldowns()
 
     elseif event == "PLAYER_ALIVE" then
+        UpdateActiveItems()
         ScanBags()
         UpdateCooldowns()
 
     elseif event == "BAG_UPDATE" then
+        UpdateActiveItems()
+        ScanBags()
+
+    elseif event == "ZONE_CHANGED_NEW_AREA" then
+        UpdateActiveItems()
+        ScanBags()
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        UpdateActiveItems()
         ScanBags()
 
     elseif event == "BAG_UPDATE_COOLDOWN" then
