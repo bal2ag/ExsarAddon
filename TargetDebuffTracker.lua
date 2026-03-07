@@ -226,7 +226,7 @@ local function UpdateDebuffs()
     if UnitExists("target") then
         for i = 1, 40 do
             local bName, bIcon, _, _, bDuration, bExpTime, _, _, _, bSpellId =
-                UnitDebuff("target", i)
+                UnitDebuff("target", i, "PLAYER")
             if not bName then break end
             if bSpellId and bSpellId > 0 then
                 byId[bSpellId] = { icon = bIcon, expTime = bExpTime or 0, duration = bDuration or 0, spellId = bSpellId }
@@ -264,7 +264,7 @@ local function UpdateDebuffs()
             if not remaining then
                 newStr = ""
             elseif remaining >= 60 then
-                newStr = string.format("%dm", math.floor(remaining / 60))
+                newStr = string.format("%dm", math.ceil(remaining / 60))
             elseif remaining >= 10 then
                 newStr = string.format("%d", math.ceil(remaining))
             else

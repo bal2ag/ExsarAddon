@@ -229,6 +229,73 @@ end)
 -- Slash commands
 -- =========================================================
 
+-- Temporary debug helper: /exsar debugframe
+-- Inspects TargetFrame regions and shows results in a copyable popup.
+-- Remove once the elite dragon texture info is captured.
+local function DebugTargetFrameRegions()
+    local lines = {}
+
+    local function ScanRegions(parent, prefix)
+        for i, r in ipairs({parent:GetRegions()}) do
+            if r:GetObjectType() == "Texture" then
+                local s1,s2,s3,s4,s5,s6,s7,s8 = r:GetTexCoord()
+                local w, h = r:GetSize()
+                local px, py
+                local numPoints = r.GetNumPoints and r:GetNumPoints() or 0
+                if numPoints > 0 then
+                    local _, _, _, ox, oy = r:GetPoint(1)
+                    px, py = ox, oy
+                end
+                lines[#lines + 1] = string.format(
+                    "%s%d %s %s %.0fx%.0f tc(%.2f,%.2f,%.2f,%.2f) off(%s,%s)",
+                    prefix, i,
+                    r:IsShown() and "SHOWN" or "hidden",
+                    tostring(r:GetTexture()),
+                    w, h,
+                    s1, s2, s7, s8,
+                    tostring(px), tostring(py)
+                )
+            end
+        end
+        for i, c in ipairs({parent:GetChildren()}) do
+            lines[#lines + 1] = string.format("%schild%d %s %s",
+                prefix, i,
+                c:GetName() or "(anon)",
+                c:IsShown() and "SHOWN" or "hidden")
+            ScanRegions(c, prefix .. "  ")
+        end
+    end
+
+    ScanRegions(TargetFrame, "")
+
+    local existing = _G["ExsarDbgFrame"]
+    if existing then existing:Hide() end
+
+    local f = CreateFrame("Frame", "ExsarDbgFrame", UIParent)
+    f:SetSize(750, 320)
+    f:SetPoint("CENTER")
+    f:EnableMouse(true)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop",  f.StopMovingOrSizing)
+
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.92)
+
+    local eb = CreateFrame("EditBox", nil, f)
+    eb:SetMultiLine(true)
+    eb:SetSize(730, 300)
+    eb:SetPoint("CENTER")
+    eb:SetFontObject(ChatFontNormal)
+    eb:SetAutoFocus(true)
+    eb:SetText(table.concat(lines, "\n"))
+    eb:HighlightText()
+    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+end
+
 SLASH_EXSAR1 = "/exsar"
 SlashCmdList["EXSAR"] = function(msg)
     local cmd = msg:match("^(%S+)") or ""
@@ -236,6 +303,8 @@ SlashCmdList["EXSAR"] = function(msg)
 
     if cmd == "config" then
         ToggleConfig()
+    elseif cmd == "debugframe" then
+        DebugTargetFrameRegions()
     elseif slashHandlers[cmd] then
         slashHandlers[cmd]()
     else

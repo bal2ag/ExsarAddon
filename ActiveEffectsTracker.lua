@@ -322,7 +322,7 @@ local function UpdateBuffs()
                 if not remaining then
                     newStr = ""
                 elseif remaining >= 60 then
-                    newStr = string.format("%dm", math.floor(remaining / 60))
+                    newStr = string.format("%dm", math.ceil(remaining / 60))
                 elseif remaining >= 10 then
                     newStr = string.format("%d", math.ceil(remaining))
                 else

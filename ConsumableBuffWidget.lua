@@ -24,7 +24,7 @@ local TRACKED_ITEMS = {
     { name = "Elixir of Demonslaying",        id = 9224,  buffName = "Elixir of Demonslaying",      buffId = 11406 },
     { name = "Elixir of Major Mageblood",     id = 22840, buffName = "Greater Mana Regeneration",   buffId = 28509 },
     { name = "Scroll of Agility V",           id = 27498, buffName = "Agility",                     buffId = 33077 },
-    { name = "Adamantite Sharpening Stone",   id = 23529, buffName = "Sharpen Blade",               buffId = 29453 },
+    { name = "Adamantite Sharpening Stone",   id = 23529, weaponSlot = "mainhand", buffDuration = 1800 },
     { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261 },
 }
 
@@ -86,6 +86,8 @@ for i, item in ipairs(TRACKED_ITEMS) do
         itemName    = item.name,
         buffName    = item.buffName,
         buffId      = item.buffId,
+        weaponSlot  = item.weaponSlot,
+        buffDuration = item.buffDuration,
         count       = -1,
         known       = false,
         buffActive  = false,
@@ -207,8 +209,21 @@ local function UpdateBuffs()
         end
     end
 
+    -- Weapon enchant info (temporary sharpening/weightstones etc.)
+    local hasMainEnchant, mainExpMs = GetWeaponEnchantInfo()
+
     for _, s in ipairs(slots) do
-        local match = activeById[s.buffId]
+        local match
+        if s.weaponSlot == "mainhand" then
+            if hasMainEnchant and mainExpMs and mainExpMs > 0 then
+                local remaining = mainExpMs / 1000
+                local expTime = now + remaining
+                local duration = s.buffDuration or remaining
+                match = { duration = duration, expTime = expTime }
+            end
+        else
+            match = activeById[s.buffId]
+        end
 
         if match and match.duration > 0 then
             s.buffActive = true
@@ -218,7 +233,7 @@ local function UpdateBuffs()
             local remaining = math.max(0, match.expTime - now)
             local newStr
             if remaining >= 60 then
-                newStr = string.format("%dm", math.floor(remaining / 60))
+                newStr = string.format("%dm", math.ceil(remaining / 60))
             elseif remaining >= 10 then
                 newStr = string.format("%d", math.ceil(remaining))
             else
@@ -262,6 +277,7 @@ frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_ALIVE")
 frame:RegisterEvent("BAG_UPDATE")
 frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
@@ -291,6 +307,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then UpdateBuffs() end
+
+    elseif event == "UNIT_INVENTORY_CHANGED" then
+        UpdateBuffs()
 
     elseif event == "ITEM_DATA_LOAD_RESULT" then
         ScanBags()

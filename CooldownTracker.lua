@@ -284,7 +284,7 @@ end
 
 local function FormatCooldown(remaining)
     if remaining >= 60 then
-        return string.format("%dm", math.floor(remaining / 60))
+        return string.format("%dm", math.ceil(remaining / 60))
     elseif remaining >= 10 then
         return string.format("%d", math.ceil(remaining))
     else

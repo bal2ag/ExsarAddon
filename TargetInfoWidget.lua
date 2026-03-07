@@ -145,6 +145,7 @@ local portrait = frame:CreateTexture(nil, "ARTWORK")
 portrait:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -PAD)
 portrait:SetSize(PORT_SIZE, PORT_SIZE)
 
+
 -- =========================================================
 -- Name, level, type
 -- =========================================================
@@ -371,6 +372,15 @@ local function UpdateTarget()
     levelText:SetText(lvlStr)
     local lr, lg, lb, la = LevelColor(level)
     levelText:SetTextColor(lr, lg, lb, la)
+
+    -- Portrait ring color: gold for elite/boss, silver for rare, grey for normal
+    if classif == "worldboss" or classif == "elite" or classif == "rareelite" then
+        portRing:SetColorTexture(1.00, 0.82, 0.00, 1.0)
+    elseif classif == "rare" then
+        portRing:SetColorTexture(0.75, 0.75, 0.75, 1.0)
+    else
+        portRing:SetColorTexture(0.45, 0.45, 0.45, 0.9)
+    end
 
     -- Creature type or player class
     if UnitIsPlayer("target") then

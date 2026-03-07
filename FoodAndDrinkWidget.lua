@@ -57,6 +57,7 @@ frameBg:SetColorTexture(0, 0, 0, 0.6)
 frame:Hide()
 
 local C_locked = false
+local C_inCombat = false
 
 -- =========================================================
 -- Slot construction
@@ -141,8 +142,16 @@ local function ScanBags()
             if tex then s.icon:SetTexture(tex) end
         end
 
-        s.icon:SetDesaturated(not s.known)
-        s.icon:SetAlpha(s.known and 1.0 or 0.35)
+        if not s.known then
+            s.icon:SetDesaturated(true)
+            s.icon:SetAlpha(0.35)
+        elseif C_inCombat then
+            s.icon:SetDesaturated(false)
+            s.icon:SetAlpha(0.5)
+        else
+            s.icon:SetDesaturated(false)
+            s.icon:SetAlpha(1.0)
+        end
     end
 end
 
@@ -154,6 +163,8 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_ALIVE")
 frame:RegisterEvent("BAG_UPDATE")
+frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -170,12 +181,21 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        C_inCombat = InCombatLockdown()
         ScanBags()
 
     elseif event == "PLAYER_ALIVE" then
         ScanBags()
 
     elseif event == "BAG_UPDATE" then
+        ScanBags()
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        C_inCombat = true
+        ScanBags()
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        C_inCombat = false
         ScanBags()
     end
 end)

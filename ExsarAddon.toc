@@ -21,3 +21,4 @@ MountWidget.lua
 TargetInfoWidget.lua
 PlayerInfoWidget.lua
 PetInfoWidget.lua
+AspectTracker.lua
