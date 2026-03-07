@@ -44,10 +44,10 @@ frame:Hide()
 -- Sword 1 goes from top-left to bottom-right.
 -- Sword 2 goes from top-right to bottom-left (mirrored).
 
-local SWORD_COLOR_BLADE  = { 0.85, 0.12, 0.12, 0.95 }  -- red blade
-local SWORD_COLOR_EDGE   = { 1.0,  0.30, 0.20, 0.50 }   -- glow
-local SWORD_COLOR_GUARD  = { 0.55, 0.45, 0.20, 1.0 }    -- bronze crossguard
-local SWORD_COLOR_HANDLE = { 0.40, 0.25, 0.10, 1.0 }    -- brown handle
+local SWORD_COLOR_BLADE  = { 1.0,  0.85, 0.10, 1.0 }    -- bright gold blade
+local SWORD_COLOR_EDGE   = { 1.0,  0.65, 0.0,  0.45 }   -- warm glow behind blade
+local SWORD_COLOR_GUARD  = { 0.70, 0.55, 0.25, 1.0 }    -- bronze crossguard
+local SWORD_COLOR_HANDLE = { 0.50, 0.35, 0.15, 1.0 }    -- brown handle
 
 local function MakeLine(layer, x1, y1, x2, y2, thickness, color)
     local line = frame:CreateLine(nil, layer)
@@ -64,8 +64,8 @@ local function BuildSword(sign)
     local bx1, by1 = -28 * sign,  28   -- tip (top)
     local bx2, by2 =  28 * sign, -28   -- base (bottom)
 
-    -- Glow behind blade
-    MakeLine("ARTWORK", bx1, by1, bx2, by2, 12, SWORD_COLOR_EDGE)
+    -- Warm glow behind blade
+    MakeLine("ARTWORK", bx1, by1, bx2, by2, 14, SWORD_COLOR_EDGE)
     -- Blade core
     MakeLine("OVERLAY", bx1, by1, bx2, by2, 5, SWORD_COLOR_BLADE)
 

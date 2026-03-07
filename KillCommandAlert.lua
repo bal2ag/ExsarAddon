@@ -75,14 +75,14 @@ local function BuildWing(sign)
         gl:SetStartPoint("CENTER", frame, d.sx * sign, d.sy)
         gl:SetEndPoint(  "CENTER", frame, d.ex * sign, d.ey)
         gl:SetThickness(GLOW_THICKNESS)
-        gl:SetColorTexture(1, 0.60, 0.05, 0.10)
+        gl:SetColorTexture(0.85, 0.10, 0.05, 0.12)
 
         -- Core line (narrow, bright)
         local cl = frame:CreateLine(nil, "OVERLAY")
         cl:SetStartPoint("CENTER", frame, d.sx * sign, d.sy)
         cl:SetEndPoint(  "CENTER", frame, d.ex * sign, d.ey)
         cl:SetThickness(CORE_THICKNESS)
-        cl:SetColorTexture(1, 0.88, 0.30, 0.55)
+        cl:SetColorTexture(1, 0.20, 0.15, 0.60)
     end
 end
 
