@@ -20,6 +20,7 @@ local SPELL_GROUPS = {
     {
         { name = "Multi-Shot"  },
         { name = "Arcane Shot" },
+        { name = "Raptor Strike" },
     },
     {
         { name = "Rapid Fire"     },
@@ -30,6 +31,51 @@ local SPELL_GROUPS = {
 
 -- Cooldowns at or below this duration are just the GCD, not a real cooldown
 local MIN_COOLDOWN_DURATION = 1.6
+
+-- Glow border: bright highlight when ability is ready
+local GLOW_COLOR = { 1.0, 0.82, 0.25, 0.45 }
+local GLOW_SIZE  = 3  -- pixels outward from icon edge
+
+local function AddGlow(parentFrame)
+    local glow = {}
+    -- Four edge textures forming a soft rectangular border
+    local top = parentFrame:CreateTexture(nil, "ARTWORK")
+    top:SetPoint("TOPLEFT", -GLOW_SIZE, GLOW_SIZE)
+    top:SetPoint("TOPRIGHT", GLOW_SIZE, GLOW_SIZE)
+    top:SetHeight(GLOW_SIZE)
+    top:SetColorTexture(GLOW_COLOR[1], GLOW_COLOR[2], GLOW_COLOR[3], GLOW_COLOR[4])
+    glow[#glow + 1] = top
+
+    local bot = parentFrame:CreateTexture(nil, "ARTWORK")
+    bot:SetPoint("BOTTOMLEFT", -GLOW_SIZE, -GLOW_SIZE)
+    bot:SetPoint("BOTTOMRIGHT", GLOW_SIZE, -GLOW_SIZE)
+    bot:SetHeight(GLOW_SIZE)
+    bot:SetColorTexture(GLOW_COLOR[1], GLOW_COLOR[2], GLOW_COLOR[3], GLOW_COLOR[4])
+    glow[#glow + 1] = bot
+
+    local left = parentFrame:CreateTexture(nil, "ARTWORK")
+    left:SetPoint("TOPLEFT", -GLOW_SIZE, GLOW_SIZE)
+    left:SetPoint("BOTTOMLEFT", -GLOW_SIZE, -GLOW_SIZE)
+    left:SetWidth(GLOW_SIZE)
+    left:SetColorTexture(GLOW_COLOR[1], GLOW_COLOR[2], GLOW_COLOR[3], GLOW_COLOR[4])
+    glow[#glow + 1] = left
+
+    local right = parentFrame:CreateTexture(nil, "ARTWORK")
+    right:SetPoint("TOPRIGHT", GLOW_SIZE, GLOW_SIZE)
+    right:SetPoint("BOTTOMRIGHT", GLOW_SIZE, -GLOW_SIZE)
+    right:SetWidth(GLOW_SIZE)
+    right:SetColorTexture(GLOW_COLOR[1], GLOW_COLOR[2], GLOW_COLOR[3], GLOW_COLOR[4])
+    glow[#glow + 1] = right
+
+    for _, tex in ipairs(glow) do tex:Hide() end
+    return glow
+end
+
+local function SetGlowShown(glow, show)
+    for _, tex in ipairs(glow) do
+        if show then tex:Show() else tex:Hide() end
+    end
+end
 
 local ICON_SIZE = 29
 local ICON_GAP  = 4
@@ -106,6 +152,8 @@ for g, group in ipairs(SPELL_GROUPS) do
         sf.text:SetPoint("CENTER", sf.frame, "CENTER", 0, 0)
         sf.text:SetText("")
 
+        sf.glow = AddGlow(sf.frame)
+
         sf.frame:EnableMouse(true)
         sf.frame:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -148,6 +196,8 @@ local function MakeIconFrame()
     f.text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     f.text:SetPoint("CENTER", f.frame, "CENTER", 0, 0)
     f.text:SetText("")
+
+    f.glow = AddGlow(f.frame)
 
     f.frame:EnableMouse(true)
     f.frame:SetScript("OnEnter", function(self)
@@ -306,17 +356,20 @@ local function UpdateCooldowns()
                 sf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 sf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+                SetGlowShown(sf.glow, false)
             elseif onGCD then
                 sf.icon:SetDesaturated(false)
                 sf.icon:SetAlpha(1.0)
                 sf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 sf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+                SetGlowShown(sf.glow, false)
             else
                 sf.icon:SetDesaturated(false)
                 sf.icon:SetAlpha(1.0)
                 sf.cooldown:SetCooldown(0, 0)
                 sf.text:SetText("")
+                SetGlowShown(sf.glow, InCombatLockdown())
             end
         end
     end
@@ -335,17 +388,20 @@ local function UpdateTrinketCooldowns()
                 tf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 tf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+                SetGlowShown(tf.glow, false)
             elseif onGCD then
                 tf.icon:SetDesaturated(false)
                 tf.icon:SetAlpha(1.0)
                 tf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 tf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+                SetGlowShown(tf.glow, false)
             else
                 tf.icon:SetDesaturated(false)
                 tf.icon:SetAlpha(1.0)
                 tf.cooldown:SetCooldown(0, 0)
                 tf.text:SetText("")
+                SetGlowShown(tf.glow, InCombatLockdown())
             end
         end
     end
