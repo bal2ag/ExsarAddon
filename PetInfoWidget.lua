@@ -262,6 +262,16 @@ end
 -- Update functions
 -- =========================================================
 
+local function HealthColor(pct)
+    if pct > 50 then
+        return 0.20, 0.75, 0.20
+    elseif pct > 20 then
+        return 0.90, 0.90, 0.10
+    else
+        return 0.80, 0.15, 0.15
+    end
+end
+
 local function UpdateBars()
     local hp    = UnitHealth(UNIT)
     local hpMax = UnitHealthMax(UNIT)
@@ -273,6 +283,7 @@ local function UpdateBars()
         else
             local pct = math.floor(hp / hpMax * 100 + 0.5)
             healthText:SetText(pct .. "%")
+            healthBar:SetStatusBarColor(HealthColor(pct))
         end
     end
 
