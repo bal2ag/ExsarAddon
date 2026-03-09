@@ -237,7 +237,9 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     local barW    = math.max(0.01, frac * cachedMaxBarW)
     local halfBarW = barW / 2
     bar:SetWidth(barW)
-    if S.shooting then
+    if remaining > 0 then
+        edgeGlowL:ClearAllPoints()
+        edgeGlowR:ClearAllPoints()
         edgeGlowL:SetPoint("CENTER", frame, "CENTER", -halfBarW, 0)
         edgeGlowR:SetPoint("CENTER", frame, "CENTER",  halfBarW, 0)
         edgeGlowL:Show()
