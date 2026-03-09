@@ -367,6 +367,133 @@ local function ApplyLayout(numDebuffs, numBuffs)
 end
 
 -- =========================================================
+-- Low-health danger callout
+-- =========================================================
+
+local LOW_HP_THRESHOLD   = 30  -- default, overridden from DB on load
+local LOW_HP_PULSE_FREQ  = 2.0
+local LOW_HP_PULSE_MIN   = 0.3
+local LOW_HP_PULSE_MAX   = 0.9
+
+-- Container frame for all burst visuals
+local burstFrame = CreateFrame("Frame", nil, frame)
+burstFrame:SetAllPoints()
+burstFrame:SetFrameLevel(frame:GetFrameLevel() + 12)
+burstFrame:Hide()
+
+-- Radiating lines shooting outward from the frame border.
+local burstLines = {}
+local BURST_DEFS = {
+    -- Top edge
+    { "T", 0.10, 22 },
+    { "T", 0.25, 28 },
+    { "T", 0.40, 25 },
+    { "T", 0.50, 32 },
+    { "T", 0.60, 25 },
+    { "T", 0.75, 28 },
+    { "T", 0.90, 22 },
+    -- Bottom edge
+    { "B", 0.10, 22 },
+    { "B", 0.25, 28 },
+    { "B", 0.40, 25 },
+    { "B", 0.50, 32 },
+    { "B", 0.60, 25 },
+    { "B", 0.75, 28 },
+    { "B", 0.90, 22 },
+    -- Left edge
+    { "L", 0.15, 22 },
+    { "L", 0.40, 26 },
+    { "L", 0.60, 26 },
+    { "L", 0.85, 22 },
+    -- Right edge
+    { "R", 0.15, 22 },
+    { "R", 0.40, 26 },
+    { "R", 0.60, 26 },
+    { "R", 0.85, 22 },
+}
+
+for _, def in ipairs(BURST_DEFS) do
+    local entry = { edge = def[1], pos = def[2], len = def[3] }
+
+    local line = burstFrame:CreateLine(nil, "OVERLAY")
+    line:SetThickness(3)
+    line:SetColorTexture(1.0, 0.15, 0.10, 1)
+    entry.core = line
+
+    local glow = burstFrame:CreateLine(nil, "ARTWORK")
+    glow:SetThickness(10)
+    glow:SetColorTexture(1.0, 0.10, 0.05, 0.3)
+    entry.glow = glow
+
+    burstLines[#burstLines + 1] = entry
+end
+
+-- Large pulsating "!" marker above the frame
+local bangText = burstFrame:CreateFontString(nil, "OVERLAY")
+bangText:SetFont("Fonts\\FRIZQT__.TTF", 80, "OUTLINE, THICKOUTLINE")
+bangText:SetPoint("CENTER", frame, "CENTER", 0, 0)
+bangText:SetTextColor(1.0, 0.20, 0.15, 1)
+bangText:SetText("!")
+
+local function UpdateBurstPositions()
+    local fw = frame:GetWidth()
+    local fh = frame:GetHeight()
+    if not fw or fw < 1 then fw = FRAME_W end
+    if not fh or fh < 1 then fh = PRE_AURA_H + PAD end
+    local hw, hh = fw / 2, fh / 2
+
+    for _, b in ipairs(burstLines) do
+        local bx, by
+        if b.edge == "T" then
+            bx = -hw + b.pos * fw
+            by = hh
+        elseif b.edge == "B" then
+            bx = -hw + b.pos * fw
+            by = -hh
+        elseif b.edge == "L" then
+            bx = -hw
+            by = -hh + b.pos * fh
+        else -- R
+            bx = hw
+            by = -hh + b.pos * fh
+        end
+        local mag = math.sqrt(bx * bx + by * by)
+        if mag < 0.01 then mag = 1 end
+        local dx, dy = bx / mag, by / mag
+        local ex = bx + dx * b.len
+        local ey = by + dy * b.len
+        b.core:SetStartPoint("CENTER", burstFrame, bx, by)
+        b.core:SetEndPoint("CENTER", burstFrame, ex, ey)
+        b.glow:SetStartPoint("CENTER", burstFrame, bx, by)
+        b.glow:SetEndPoint("CENTER", burstFrame, ex, ey)
+    end
+end
+
+local lowHpActive = false
+
+local function ShowLowHpWarning()
+    if not lowHpActive then
+        lowHpActive = true
+        burstFrame:Show()
+    end
+    UpdateBurstPositions()
+end
+
+local function HideLowHpWarning()
+    if not lowHpActive then return end
+    lowHpActive = false
+    burstFrame:Hide()
+end
+
+local lowHpPulseFrame = CreateFrame("Frame")
+lowHpPulseFrame:SetScript("OnUpdate", function()
+    if not lowHpActive then return end
+    local pulse = LOW_HP_PULSE_MIN + (LOW_HP_PULSE_MAX - LOW_HP_PULSE_MIN) *
+                  (0.5 + 0.5 * math.sin(GetTime() * 2 * math.pi * LOW_HP_PULSE_FREQ))
+    burstFrame:SetAlpha(pulse)
+end)
+
+-- =========================================================
 -- Update functions
 -- =========================================================
 
@@ -388,10 +515,16 @@ local function UpdateBars()
         healthBar:SetValue(hp)
         if hp == 0 then
             healthText:SetText("Dead")
+            HideLowHpWarning()
         else
             local pct = math.floor(hp / hpMax * 100 + 0.5)
             healthText:SetText(pct .. "%")
             healthBar:SetStatusBarColor(HealthColor(pct))
+            if pct <= LOW_HP_THRESHOLD then
+                ShowLowHpWarning()
+            else
+                HideLowHpWarning()
+            end
         end
     end
 
@@ -497,6 +630,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         anchorX  = db.x or -460
         anchorY  = db.y or  175
         C_enabled = db.enabled ~= false
+        LOW_HP_THRESHOLD = db.lowHpThreshold or 30
         self:SetScale(db.scale or 1.0)
         self:EnableMouse(not db.locked)
         ReAnchor()
@@ -580,6 +714,17 @@ ExsarAddon.RegisterModule({
             end
         )
         y = y - 30
+
+        ExsarAddon.CreateSlider(parent, "Low HP Alert (%)", 16, y, 5, 100, 1,
+            function() return pDB().lowHpThreshold or 30 end,
+            function(v)
+                local rounded = math.floor(v + 0.5)
+                pDB().lowHpThreshold = rounded
+                LOW_HP_THRESHOLD = rounded
+                UpdateUnit()
+            end
+        )
+        y = y - 55
 
         ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
             anchorX = -460

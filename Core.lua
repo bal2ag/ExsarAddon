@@ -51,20 +51,34 @@ function ExsarAddon.CreateSlider(parent, label, x, y, minV, maxV, step, getter, 
     local sText = _G[s:GetName() .. "Text"]
     local sLow  = _G[s:GetName() .. "Low"]
     local sHigh = _G[s:GetName() .. "High"]
-    if sText then sText:SetText(label) end
     if sLow  then sLow:SetText(tostring(minV)) end
     if sHigh then sHigh:SetText(tostring(maxV)) end
 
+    local function updateLabel(v)
+        if sText then
+            local display
+            if step >= 1 then
+                display = tostring(math.floor(v + 0.5))
+            else
+                display = string.format("%." .. math.max(0, math.ceil(-math.log10(step))) .. "f", v)
+            end
+            sText:SetText(label .. ": " .. display)
+        end
+    end
+
     s._ignore = true
     s:SetValue(getter())
+    updateLabel(getter())
     s._ignore = false
 
     s:SetScript("OnShow", function(self)
         self._ignore = true
         self:SetValue(getter())
+        updateLabel(getter())
         self._ignore = false
     end)
     s:SetScript("OnValueChanged", function(self, v)
+        updateLabel(v)
         if self._ignore then return end
         setter(v)
     end)
