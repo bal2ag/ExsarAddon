@@ -87,6 +87,114 @@ bg:SetAllPoints()
 bg:SetColorTexture(0.05, 0.05, 0.05, 0.82)
 
 -- =========================================================
+-- Damage border (pulsating red on recent damage)
+-- =========================================================
+
+local DAMAGE_BORDER_W     = 3
+local DAMAGE_GLOW_W       = 8
+local DAMAGE_FADE_TIME    = 3.0
+local DAMAGE_PULSE_FREQ   = 1.5
+local DAMAGE_PULSE_MIN    = 0.35
+local DAMAGE_PULSE_MAX    = 0.90
+
+local dmgGlow   = {}  -- outer soft glow
+local dmgBorder = {}  -- inner bright core
+
+-- Outer glow: extends beyond frame edges
+local function MakeGlowEdge(anchor1, anchor2, isHorizontal, outward)
+    local t = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+    if isHorizontal then
+        t:SetPoint(anchor1, frame, anchor1, -DAMAGE_GLOW_W, outward)
+        t:SetPoint(anchor2, frame, anchor2,  DAMAGE_GLOW_W, outward)
+        t:SetHeight(DAMAGE_GLOW_W)
+    else
+        t:SetPoint(anchor1, frame, anchor1, outward, DAMAGE_GLOW_W)
+        t:SetPoint(anchor2, frame, anchor2, outward, -DAMAGE_GLOW_W)
+        t:SetWidth(DAMAGE_GLOW_W)
+    end
+    t:SetColorTexture(0.9, 0.10, 0.10, 0.35)
+    t:Hide()
+    dmgGlow[#dmgGlow + 1] = t
+end
+MakeGlowEdge("TOPLEFT",    "TOPRIGHT",    true,   DAMAGE_GLOW_W)
+MakeGlowEdge("BOTTOMLEFT", "BOTTOMRIGHT", true,  -DAMAGE_GLOW_W)
+MakeGlowEdge("TOPLEFT",    "BOTTOMLEFT",  false, -DAMAGE_GLOW_W)
+MakeGlowEdge("TOPRIGHT",   "BOTTOMRIGHT", false,  DAMAGE_GLOW_W)
+
+-- Inner core border
+local function MakeBorderEdge(from1, from2, isHorizontal)
+    local t = frame:CreateTexture(nil, "BORDER")
+    t:SetPoint(from1, frame, from1)
+    t:SetPoint(from2, frame, from2)
+    if isHorizontal then
+        t:SetHeight(DAMAGE_BORDER_W)
+    else
+        t:SetWidth(DAMAGE_BORDER_W)
+    end
+    t:SetColorTexture(1.0, 0.20, 0.15, 1)
+    t:Hide()
+    dmgBorder[#dmgBorder + 1] = t
+end
+MakeBorderEdge("TOPLEFT",    "TOPRIGHT",    true)
+MakeBorderEdge("BOTTOMLEFT", "BOTTOMRIGHT", true)
+MakeBorderEdge("TOPLEFT",    "BOTTOMLEFT",  false)
+MakeBorderEdge("TOPRIGHT",   "BOTTOMRIGHT", false)
+
+-- Full-frame red wash overlay (separate frame so it renders above StatusBar children)
+local dmgOverlayFrame = CreateFrame("Frame", nil, frame)
+dmgOverlayFrame:SetAllPoints()
+dmgOverlayFrame:SetFrameLevel(frame:GetFrameLevel() + 10)
+local dmgOverlay = dmgOverlayFrame:CreateTexture(nil, "OVERLAY")
+dmgOverlay:SetAllPoints()
+dmgOverlay:SetColorTexture(0.9, 0.08, 0.08, 1)
+dmgOverlayFrame:Hide()
+
+local dmgExpireTime = 0
+
+local function ShowDamageBorder()
+    dmgExpireTime = GetTime() + DAMAGE_FADE_TIME
+    for _, t in ipairs(dmgGlow)   do t:Show() end
+    for _, t in ipairs(dmgBorder) do t:Show() end
+    dmgOverlayFrame:Show()
+end
+
+local function HideDamageBorder()
+    dmgExpireTime = 0
+    for _, t in ipairs(dmgGlow)   do t:Hide() end
+    for _, t in ipairs(dmgBorder) do t:Hide() end
+    dmgOverlayFrame:Hide()
+end
+
+local dmgPulseFrame = CreateFrame("Frame")
+dmgPulseFrame:SetScript("OnUpdate", function()
+    if dmgExpireTime == 0 then return end
+    if GetTime() >= dmgExpireTime then
+        HideDamageBorder()
+        return
+    end
+    local pulse = DAMAGE_PULSE_MIN + (DAMAGE_PULSE_MAX - DAMAGE_PULSE_MIN) *
+                  (0.5 + 0.5 * math.sin(GetTime() * 2 * math.pi * DAMAGE_PULSE_FREQ))
+    for _, t in ipairs(dmgBorder) do t:SetAlpha(pulse) end
+    for _, t in ipairs(dmgGlow)   do t:SetAlpha(pulse * 0.45) end
+    dmgOverlayFrame:SetAlpha(pulse * 0.25)
+end)
+
+local dmgCombatFrame = CreateFrame("Frame")
+dmgCombatFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+dmgCombatFrame:SetScript("OnEvent", function()
+    local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+    if destGUID ~= UnitGUID(UNIT) then return end
+    if subEvent == "SWING_DAMAGE"
+        or subEvent == "SPELL_DAMAGE"
+        or subEvent == "SPELL_PERIODIC_DAMAGE"
+        or subEvent == "RANGE_DAMAGE"
+        or subEvent == "DAMAGE_SHIELD"
+        or subEvent == "ENVIRONMENTAL_DAMAGE" then
+        ShowDamageBorder()
+    end
+end)
+
+-- =========================================================
 -- Portrait
 -- =========================================================
 
