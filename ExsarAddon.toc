@@ -22,3 +22,4 @@ PlayerInfoWidget.lua
 PetInfoWidget.lua
 AspectTracker.lua
 MeleeRangeIndicator.lua
+GlobalCooldownTracker.lua
