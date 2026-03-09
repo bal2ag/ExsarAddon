@@ -123,18 +123,23 @@ end)
 local spellFrames = {}  -- flat, used by UpdateCooldowns
 local spellGroups = {}  -- grouped, used by ApplyLayout
 
+local spellBtnIndex = 0
 for g, group in ipairs(SPELL_GROUPS) do
     spellGroups[g] = {}
     for _, spellDef in ipairs(group) do
+        spellBtnIndex = spellBtnIndex + 1
         local sf = {
             spellName = spellDef.name,
             spellId   = spellDef.id,
             known     = not spellDef.id,  -- talent-gated spells start hidden
         }
 
-        sf.frame = CreateFrame("Frame", nil, mainFrame)
+        sf.frame = CreateFrame("Button", ADDON_NAME .. "CDSpell" .. spellBtnIndex, mainFrame, "SecureActionButtonTemplate")
         sf.frame:SetSize(ICON_SIZE, ICON_SIZE)
         sf.frame:SetPoint("LEFT", mainFrame, "LEFT", PADDING, 0)  -- repositioned by ApplyLayout
+        sf.frame:RegisterForClicks("AnyUp", "AnyDown")
+        sf.frame:SetAttribute("type", "spell")
+        sf.frame:SetAttribute("spell", spellDef.name)
 
         sf.icon = sf.frame:CreateTexture(nil, "BACKGROUND")
         sf.icon:SetAllPoints()
@@ -154,7 +159,6 @@ for g, group in ipairs(SPELL_GROUPS) do
 
         sf.glow = AddGlow(sf.frame)
 
-        sf.frame:EnableMouse(true)
         sf.frame:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             local id = sf.spellId or select(7, GetSpellInfo(sf.spellName))
@@ -174,12 +178,17 @@ end
 -- =========================================================
 
 -- Reuses the same visual structure as spell frames.
-local function MakeIconFrame()
-    local f = { known = false }
+local trinketBtnIndex = 0
+local function MakeIconFrame(slotId)
+    trinketBtnIndex = trinketBtnIndex + 1
+    local f = { known = false, slotId = slotId }
 
-    f.frame = CreateFrame("Frame", nil, mainFrame)
+    f.frame = CreateFrame("Button", ADDON_NAME .. "CDTrinket" .. trinketBtnIndex, mainFrame, "SecureActionButtonTemplate")
     f.frame:SetSize(ICON_SIZE, ICON_SIZE)
     f.frame:SetPoint("LEFT", mainFrame, "LEFT", PADDING, 0)
+    f.frame:RegisterForClicks("AnyUp", "AnyDown")
+    f.frame:SetAttribute("type", "macro")
+    f.frame:SetAttribute("macrotext", "/use " .. slotId)
 
     f.icon = f.frame:CreateTexture(nil, "BACKGROUND")
     f.icon:SetAllPoints()
@@ -199,7 +208,6 @@ local function MakeIconFrame()
 
     f.glow = AddGlow(f.frame)
 
-    f.frame:EnableMouse(true)
     f.frame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if f.slotId then
@@ -215,11 +223,9 @@ end
 
 -- One frame per trinket slot; shown only when the slot has an on-use effect.
 local trinketFrames = {
-    MakeIconFrame(),  -- slot 13
-    MakeIconFrame(),  -- slot 14
+    MakeIconFrame(TRINKET_SLOT_1),  -- slot 13
+    MakeIconFrame(TRINKET_SLOT_2),  -- slot 14
 }
-trinketFrames[1].slotId = TRINKET_SLOT_1
-trinketFrames[2].slotId = TRINKET_SLOT_2
 
 -- =========================================================
 -- Layout
