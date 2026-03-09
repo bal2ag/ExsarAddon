@@ -22,13 +22,13 @@ local MIN_COOLDOWN = 1.6    -- durations ≤ this are just the GCD, not a real c
 -- The left wing mirrors these by negating all X values.
 -- Feathers fan from the upper-right to the lower-right, forming a crescent arc.
 local FEATHER_DEFS = {
-    { sx = 20,  sy = 15,  ex = 55,  ey = 115 },  -- top feather (sweeps upward)
-    { sx = 22,  sy = 10,  ex = 88,  ey = 88  },
-    { sx = 24,  sy = 6,   ex = 108, ey = 58  },
-    { sx = 25,  sy = 0,   ex = 118, ey = 20  },  -- widest (horizontal span)
-    { sx = 24,  sy = -6,  ex = 112, ey = -22 },
-    { sx = 22,  sy = -10, ex = 95,  ey = -60 },
-    { sx = 20,  sy = -15, ex = 62,  ey = -95 },  -- bottom feather (sweeps downward)
+    { sx = 45,  sy = 15,  ex = 80,  ey = 115 },  -- top feather (sweeps upward)
+    { sx = 47,  sy = 10,  ex = 113, ey = 88  },
+    { sx = 49,  sy = 6,   ex = 133, ey = 58  },
+    { sx = 50,  sy = 0,   ex = 143, ey = 20  },  -- widest (horizontal span)
+    { sx = 49,  sy = -6,  ex = 137, ey = -22 },
+    { sx = 47,  sy = -10, ex = 120, ey = -60 },
+    { sx = 45,  sy = -15, ex = 87,  ey = -95 },  -- bottom feather (sweeps downward)
 }
 
 local CORE_THICKNESS = 8    -- sharp inner line per feather

@@ -1,5 +1,7 @@
 -- MeleeRangeIndicator module
--- Shows two crossed red swords when the player is in melee range of their target.
+-- Shows two crossed gold swords when the player is in melee range of their target.
+-- Also tracks the melee swing timer cooldown with a sweep effect and alpha reduction.
+-- When out of range but swing is on cooldown, shows greyed-out with sweep.
 -- Settings are stored under ExsarAddonDB.meleeRange.
 
 local ADDON_NAME = "ExsarAddon"
@@ -10,13 +12,52 @@ local function mrDB()
 end
 
 -- =========================================================
+-- Raptor Strike spell IDs (fires on next melee swing)
+-- =========================================================
+
+local RAPTOR_STRIKE_IDS = {
+    [2973]  = true,   -- Rank 1
+    [14260] = true,   -- Rank 2
+    [14261] = true,   -- Rank 3
+    [14262] = true,   -- Rank 4
+    [14263] = true,   -- Rank 5
+    [14264] = true,   -- Rank 6
+    [27014] = true,   -- Rank 7
+}
+
+-- =========================================================
 -- Runtime state
 -- =========================================================
 
 local M = {
-    inRange = false,
+    inRange     = false,
     pollElapsed = 0,
+    -- Swing timer state
+    speed       = 0,      -- hasted main-hand attack speed (seconds)
+    lastSwing   = 0,      -- GetTime() when the last melee swing fired
+    swingActive = false,   -- true once we've seen at least one swing this session
 }
+
+local function RefreshSpeed()
+    local speed = select(1, UnitAttackSpeed("player"))
+    if type(speed) == "number" and speed > 0 then
+        M.speed = speed
+    end
+end
+
+-- =========================================================
+-- Color tables: normal (in-range) and greyed (out-of-range)
+-- =========================================================
+
+local SWORD_COLOR_BLADE  = { 1.0,  0.85, 0.10, 1.0 }    -- bright gold blade
+local SWORD_COLOR_EDGE   = { 1.0,  0.65, 0.0,  0.45 }   -- warm glow behind blade
+local SWORD_COLOR_GUARD  = { 0.70, 0.55, 0.25, 1.0 }    -- bronze crossguard
+local SWORD_COLOR_HANDLE = { 0.50, 0.35, 0.15, 1.0 }    -- brown handle
+
+local GREY_COLOR_BLADE   = { 0.45, 0.45, 0.45, 1.0 }
+local GREY_COLOR_EDGE    = { 0.35, 0.35, 0.35, 0.45 }
+local GREY_COLOR_GUARD   = { 0.40, 0.40, 0.40, 1.0 }
+local GREY_COLOR_HANDLE  = { 0.30, 0.30, 0.30, 1.0 }
 
 -- =========================================================
 -- Frame
@@ -38,53 +79,145 @@ end)
 frame:Hide()
 
 -- =========================================================
+-- Background
+-- =========================================================
+-- Dark warm-tinted circle behind the swords for contrast.
+
+local CIRCLE_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
+
+-- Outer ring (slightly larger, lighter) for a subtle border
+local bgRing = frame:CreateTexture(nil, "BACKGROUND")
+bgRing:SetPoint("CENTER")
+bgRing:SetSize(78, 78)
+bgRing:SetColorTexture(0.35, 0.28, 0.10, 0.5)
+pcall(function() bgRing:SetMask(CIRCLE_MASK) end)
+
+-- Inner fill
+local bg = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
+bg:SetPoint("CENTER")
+bg:SetSize(74, 74)
+bg:SetColorTexture(0.12, 0.10, 0.06, 0.75)
+pcall(function() bg:SetMask(CIRCLE_MASK) end)
+
+-- =========================================================
 -- Crossed swords visuals
 -- =========================================================
--- Each sword: blade + crossguard + handle, drawn with CreateLine.
--- Sword 1 goes from top-left to bottom-right.
--- Sword 2 goes from top-right to bottom-left (mirrored).
 
-local SWORD_COLOR_BLADE  = { 1.0,  0.85, 0.10, 1.0 }    -- bright gold blade
-local SWORD_COLOR_EDGE   = { 1.0,  0.65, 0.0,  0.45 }   -- warm glow behind blade
-local SWORD_COLOR_GUARD  = { 0.70, 0.55, 0.25, 1.0 }    -- bronze crossguard
-local SWORD_COLOR_HANDLE = { 0.50, 0.35, 0.15, 1.0 }    -- brown handle
+local allLines = {}  -- track all lines for color swapping
+local glowLines = {} -- extra glow lines shown only when "ready"
 
-local function MakeLine(layer, x1, y1, x2, y2, thickness, color)
+local function MakeLine(layer, x1, y1, x2, y2, thickness, color, colorKey)
     local line = frame:CreateLine(nil, layer)
     line:SetStartPoint("CENTER", frame, x1, y1)
     line:SetEndPoint("CENTER", frame, x2, y2)
     line:SetThickness(thickness)
     line:SetColorTexture(color[1], color[2], color[3], color[4])
+    allLines[#allLines + 1] = { line = line, colorKey = colorKey }
     return line
 end
 
 local function BuildSword(sign)
-    -- sign=1: top-left to bottom-right; sign=-1: mirrored (top-right to bottom-left)
-    -- Blade: from upper-outer to lower-inner
-    local bx1, by1 = -28 * sign,  28   -- tip (top)
-    local bx2, by2 =  28 * sign, -28   -- base (bottom)
+    local bx1, by1 = -28 * sign,  28
+    local bx2, by2 =  28 * sign, -28
 
-    -- Warm glow behind blade
-    MakeLine("ARTWORK", bx1, by1, bx2, by2, 14, SWORD_COLOR_EDGE)
-    -- Blade core
-    MakeLine("OVERLAY", bx1, by1, bx2, by2, 5, SWORD_COLOR_BLADE)
+    -- Wide soft glow behind blade (only visible in ready state)
+    local glow = frame:CreateLine(nil, "BORDER")
+    glow:SetStartPoint("CENTER", frame, bx1, by1)
+    glow:SetEndPoint("CENTER", frame, bx2, by2)
+    glow:SetThickness(24)
+    glow:SetColorTexture(1.0, 0.85, 0.3, 0.25)
+    glow:Hide()
+    glowLines[#glowLines + 1] = glow
 
-    -- Crossguard: perpendicular to blade, near the lower third
-    local gx, gy = 10 * sign, -10  -- center of crossguard
-    local gdx, gdy = 10 * sign, 10  -- perpendicular offset (rotated 90 degrees)
-    MakeLine("OVERLAY", gx - gdx, gy - gdy, gx + gdx, gy + gdy, 5, SWORD_COLOR_GUARD)
+    MakeLine("ARTWORK", bx1, by1, bx2, by2, 14, SWORD_COLOR_EDGE, "edge")
+    MakeLine("OVERLAY", bx1, by1, bx2, by2, 5, SWORD_COLOR_BLADE, "blade")
 
-    -- Handle: short extension below crossguard
+    local gx, gy = 10 * sign, -10
+    local gdx, gdy = 10 * sign, 10
+    MakeLine("OVERLAY", gx - gdx, gy - gdy, gx + gdx, gy + gdy, 5, SWORD_COLOR_GUARD, "guard")
+
     local hx1, hy1 = 14 * sign, -14
     local hx2, hy2 = 22 * sign, -22
-    MakeLine("OVERLAY", hx1, hy1, hx2, hy2, 4, SWORD_COLOR_HANDLE)
+    MakeLine("OVERLAY", hx1, hy1, hx2, hy2, 4, SWORD_COLOR_HANDLE, "handle")
 
-    -- Pommel: small dot at end of handle
-    MakeLine("OVERLAY", hx2 - 1 * sign, hy2 + 1, hx2 + 1 * sign, hy2 - 1, 6, SWORD_COLOR_GUARD)
+    MakeLine("OVERLAY", hx2 - 1 * sign, hy2 + 1, hx2 + 1 * sign, hy2 - 1, 6, SWORD_COLOR_GUARD, "guard")
 end
 
 BuildSword( 1)
 BuildSword(-1)
+
+local function SetGlowVisible(show)
+    for _, gl in ipairs(glowLines) do
+        if show then gl:Show() else gl:Hide() end
+    end
+end
+
+-- =========================================================
+-- Cooldown sweep overlay
+-- =========================================================
+
+local cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+cooldown:SetAllPoints()
+cooldown:SetDrawEdge(false)
+if cooldown.SetHideCountdownNumbers then
+    cooldown:SetHideCountdownNumbers(true)
+end
+
+-- =========================================================
+-- Color management
+-- =========================================================
+
+local COLOR_NORMAL = {
+    blade  = SWORD_COLOR_BLADE,
+    edge   = SWORD_COLOR_EDGE,
+    guard  = SWORD_COLOR_GUARD,
+    handle = SWORD_COLOR_HANDLE,
+}
+local COLOR_GREY = {
+    blade  = GREY_COLOR_BLADE,
+    edge   = GREY_COLOR_EDGE,
+    guard  = GREY_COLOR_GUARD,
+    handle = GREY_COLOR_HANDLE,
+}
+
+local currentColorMode = "normal"
+
+local function SetSwordColors(mode)
+    if mode == currentColorMode then return end
+    currentColorMode = mode
+    local palette = mode == "grey" and COLOR_GREY or COLOR_NORMAL
+    for _, entry in ipairs(allLines) do
+        local c = palette[entry.colorKey]
+        entry.line:SetColorTexture(c[1], c[2], c[3], c[4])
+    end
+end
+
+-- =========================================================
+-- Swing detection (from MeleeSwingTimer)
+-- =========================================================
+
+local function OnSwing()
+    local now = GetTime()
+    if now - M.lastSwing < 0.15 then return end
+    M.lastSwing   = now
+    M.swingActive = true
+end
+
+local combatFrame = CreateFrame("Frame")
+combatFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+combatFrame:SetScript("OnEvent", function()
+    local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId =
+        CombatLogGetCurrentEventInfo()
+    if casterGUID ~= UnitGUID("player") then return end
+
+    if subEvent == "SWING_DAMAGE" or subEvent == "SWING_MISSED" then
+        OnSwing()
+    elseif subEvent == "SPELL_DAMAGE" or subEvent == "SPELL_MISSED" then
+        if RAPTOR_STRIKE_IDS[spellId] then
+            OnSwing()
+        end
+    end
+end)
 
 -- =========================================================
 -- Range check
@@ -95,19 +228,66 @@ local function CheckMeleeRange()
     if not UnitExists("target") or UnitIsDead("target") or not UnitCanAttack("player", "target") then
         return false
     end
-    -- Wing Clip is an instant melee ability that works with IsSpellInRange (unlike
-    -- "next melee" abilities like Raptor Strike which always report in range).
     return IsSpellInRange("Wing Clip", "target") == 1
 end
 
-local function UpdateVisibility()
-    local inRange = CheckMeleeRange()
+-- =========================================================
+-- Swing timer state helpers
+-- =========================================================
+
+local function IsSwingOnCooldown()
+    if not M.swingActive or M.speed <= 0 then return false end
+    local remaining = M.speed - (GetTime() - M.lastSwing)
+    return remaining > 0
+end
+
+-- =========================================================
+-- Update: visibility, colors, cooldown sweep, alpha
+-- =========================================================
+
+local function UpdateState()
+    local inRange     = CheckMeleeRange()
+    local onCooldown  = IsSwingOnCooldown()
     M.inRange = inRange
-    local shouldShow = inRange or not mrDB().locked
-    if shouldShow then
-        frame:Show()
-    else
+
+    local unlocked = not mrDB().locked
+
+    -- Determine visibility
+    -- Show when: in range (any cooldown state), OR out of range but swing on cooldown, OR unlocked
+    local shouldShow = inRange or onCooldown or unlocked
+
+    if not shouldShow then
         frame:Hide()
+        return
+    end
+
+    frame:Show()
+
+    -- Determine color mode, alpha, and glow
+    local ready = inRange and not onCooldown
+    if inRange then
+        SetSwordColors("normal")
+        if onCooldown then
+            frame:SetAlpha(0.5)
+        else
+            frame:SetAlpha(1.0)
+        end
+    elseif onCooldown then
+        -- Out of range, swing on cooldown: greyed out
+        SetSwordColors("grey")
+        frame:SetAlpha(0.5)
+    else
+        -- Unlocked edit mode, not in combat scenario
+        SetSwordColors("normal")
+        frame:SetAlpha(1.0)
+    end
+    SetGlowVisible(ready)
+
+    -- Drive the cooldown sweep
+    if onCooldown and M.speed > 0 then
+        cooldown:SetCooldown(M.lastSwing, M.speed)
+    else
+        cooldown:SetCooldown(0, 0)
     end
 end
 
@@ -120,7 +300,7 @@ pollFrame:SetScript("OnUpdate", function(self, elapsed)
     M.pollElapsed = M.pollElapsed + elapsed
     if M.pollElapsed < 0.1 then return end
     M.pollElapsed = 0
-    UpdateVisibility()
+    UpdateState()
 end)
 
 -- =========================================================
@@ -132,6 +312,9 @@ frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_TARGET_CHANGED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+frame:RegisterEvent("PLAYER_DEAD")
+frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -148,9 +331,25 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             frame:Show()
         end
 
-    elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_TARGET_CHANGED"
-        or event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
-        UpdateVisibility()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        RefreshSpeed()
+        UpdateState()
+
+    elseif event == "PLAYER_DEAD" then
+        M.swingActive = false
+        M.lastSwing   = 0
+        UpdateState()
+
+    elseif event == "UNIT_AURA" then
+        if arg1 == "player" then RefreshSpeed() end
+
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        RefreshSpeed()
+
+    elseif event == "PLAYER_TARGET_CHANGED"
+        or event == "PLAYER_REGEN_ENABLED"
+        or event == "PLAYER_REGEN_DISABLED" then
+        UpdateState()
     end
 end)
 
@@ -176,7 +375,7 @@ ExsarAddon.RegisterModule({
             function(v)
                 mrDB().locked = v
                 frame:EnableMouse(not v)
-                UpdateVisibility()
+                UpdateState()
             end
         )
         y = y - 30
