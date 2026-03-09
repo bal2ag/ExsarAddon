@@ -15,6 +15,8 @@ end
 -- Constants
 -- =========================================================
 
+local GCD_PROBE_SPELL = "Wing Clip"
+
 local AUTO_SHOT_ID   = 75
 -- Spells that reset the auto shot cycle on completion:
 --   Aimed Shot  — server resets the ranged cooldown when the cast lands
@@ -253,11 +255,23 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     end
 
     -- Only call SetColorTexture on zone transitions; it's expensive every frame
-    local zone = remaining <= S.aimWindow and 0 or 1
+    -- Zone 0=red (aim window), 1=blue (safe), 2=grey (GCD active)
+    local gcdStart, gcdDur = GetSpellCooldown(GCD_PROBE_SPELL)
+    local onGCD = gcdStart and gcdStart > 0 and gcdDur and gcdDur > 0
+    local zone
+    if onGCD then
+        zone = 2
+    elseif remaining <= S.aimWindow then
+        zone = 0
+    else
+        zone = 1
+    end
     if zone ~= S.barZone then
         S.barZone = zone
         if zone == 0 then
             bar:SetColorTexture(0.9, 0.15, 0.15, 0.9)       -- red:  stop moving
+        elseif zone == 2 then
+            bar:SetColorTexture(0.45, 0.45, 0.45, 0.75)     -- grey: GCD active
         else
             bar:SetColorTexture(0.15, 0.55, 0.95, 0.85)     -- blue: safe
         end
