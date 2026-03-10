@@ -26,6 +26,7 @@ local TRACKED_ITEMS = {
     { name = "Scroll of Agility V",           id = 27498, buffName = "Agility",                     buffId = 33077 },
     { name = "Adamantite Sharpening Stone",   id = 23529, weaponSlot = "mainhand", buffDuration = 1800 },
     { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261 },
+    { name = "Spicy Hot Talbuk",             id = 33872, buffName = "Well Fed",                    buffId = 43763 },
 }
 
 -- =========================================================
