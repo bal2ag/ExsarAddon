@@ -89,15 +89,15 @@ local CIRCLE_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
 local bgRing = frame:CreateTexture(nil, "BACKGROUND")
 bgRing:SetPoint("CENTER")
 bgRing:SetSize(78, 78)
-bgRing:SetColorTexture(0.35, 0.28, 0.10, 0.5)
-pcall(function() bgRing:SetMask(CIRCLE_MASK) end)
+bgRing:SetTexture(CIRCLE_MASK)
+bgRing:SetVertexColor(0.35, 0.28, 0.10, 0.5)
 
 -- Inner fill
 local bg = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
 bg:SetPoint("CENTER")
 bg:SetSize(74, 74)
-bg:SetColorTexture(0.12, 0.10, 0.06, 0.75)
-pcall(function() bg:SetMask(CIRCLE_MASK) end)
+bg:SetTexture(CIRCLE_MASK)
+bg:SetVertexColor(0.12, 0.10, 0.06, 0.75)
 
 -- =========================================================
 -- Crossed swords visuals
@@ -161,6 +161,13 @@ cooldown:SetAllPoints()
 cooldown:SetDrawEdge(false)
 if cooldown.SetHideCountdownNumbers then
     cooldown:SetHideCountdownNumbers(true)
+end
+-- Make the swipe the visual indicator: a grey circle that empties like a pie
+if cooldown.SetSwipeColor then
+    cooldown:SetSwipeColor(0.4, 0.4, 0.4, 0.85)
+end
+if cooldown.SetSwipeTexture then
+    cooldown:SetSwipeTexture(CIRCLE_MASK)
 end
 
 -- =========================================================
