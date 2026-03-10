@@ -14,7 +14,6 @@ end
 local anchorX, anchorY = 350, 175
 local C_dragging = false
 local C_locked   = false
-local debugLog   = {}
 
 -- =========================================================
 -- Layout constants
@@ -105,23 +104,6 @@ local function CreateEntry(index)
     btn:SetSize(FRAME_W - PAD * 2, ENTRY_H)
     btn:RegisterForClicks("AnyUp", "AnyDown")
     btn:SetAttribute("type", "macro")
-
-    btn:HookScript("PreClick", function(self, button, down)
-        debugLog[#debugLog + 1] = string.format(
-            "PreClick RT%d: button=%s down=%s macro=%s unit_attr=%s token=%s",
-            index, tostring(button), tostring(down),
-            tostring(self:GetAttribute("macrotext")),
-            tostring(self:GetAttribute("unit")),
-            tostring(self.unitToken)
-        )
-    end)
-    btn:HookScript("PostClick", function(self, button, down)
-        debugLog[#debugLog + 1] = string.format(
-            "PostClick RT%d: button=%s down=%s target=%s",
-            index, tostring(button), tostring(down),
-            tostring(UnitName("target"))
-        )
-    end)
 
     -- Hover highlight
     local hoverBg = btn:CreateTexture(nil, "BACKGROUND")
@@ -495,76 +477,6 @@ end)
 -- =========================================================
 -- Slash sub-command
 -- =========================================================
-
-ExsarAddon.AddSlashCommand("rtdebug", function()
-    local lines = {}
-
-    -- Dump button state
-    for i = 1, 8 do
-        local b = entries[i]
-        if b and b:IsVisible() then
-            local t = b:GetAttribute("type")
-            local u = b:GetAttribute("macrotext")
-            local e = b:IsEnabled()
-            local m = b:IsMouseEnabled()
-            local mcFn = b.IsMouseClickEnabled
-            local mc = mcFn and mcFn(b) or "N/A"
-            local w, h = b:GetSize()
-            local p = b:GetParent():GetName()
-            local pm = b:GetParent():IsMouseEnabled()
-            local fl = b:GetFrameLevel()
-            local pfl = b:GetParent():GetFrameLevel()
-            local fs = b:GetFrameStrata()
-            local pfs = b:GetParent():GetFrameStrata()
-            lines[#lines + 1] = string.format(
-                "RT%d: type=%s macro=%s enabled=%s mouse=%s click=%s size=%.0fx%.0f parent=%s pmouse=%s fl=%d pfl=%d strata=%s pstrata=%s token=%s",
-                i, tostring(t), tostring(u), tostring(e), tostring(m), tostring(mc),
-                w, h, tostring(p), tostring(pm), fl, pfl, fs, pfs, tostring(b.unitToken)
-            )
-        end
-    end
-
-    -- Append click log
-    if #debugLog > 0 then
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "--- Click log ---"
-        for _, msg in ipairs(debugLog) do
-            lines[#lines + 1] = msg
-        end
-    else
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "--- No clicks recorded. Try clicking an entry then run /exsar rtdebug again ---"
-    end
-
-    if #lines == 0 then
-        lines[#lines + 1] = "No visible raid target entries."
-    end
-
-    local f = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(700, 400)
-    f:SetPoint("CENTER")
-    f:SetFrameStrata("DIALOG")
-
-    local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-    sf:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -30)
-    sf:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 10)
-
-    local eb = CreateFrame("EditBox", nil, sf)
-    eb:SetMultiLine(true)
-    eb:SetFontObject(ChatFontNormal)
-    eb:SetWidth(640)
-    eb:SetAutoFocus(false)
-    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    sf:SetScrollChild(eb)
-
-    eb:SetText(table.concat(lines, "\n"))
-    eb:HighlightText()
-end)
-
-ExsarAddon.AddSlashCommand("rtclearlog", function()
-    debugLog = {}
-    print(ADDON_NAME .. ": RT click log cleared.")
-end)
 
 ExsarAddon.AddSlashCommand("rtreset", function()
     anchorX = 350
