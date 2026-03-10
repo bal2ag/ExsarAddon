@@ -170,6 +170,19 @@ if cooldown.SetSwipeTexture then
     cooldown:SetSwipeTexture(CIRCLE_MASK)
 end
 
+-- Timer text frame (above the cooldown overlay, ignores parent alpha)
+local timerFrame = CreateFrame("Frame", nil, frame)
+timerFrame:SetAllPoints()
+timerFrame:SetFrameLevel(cooldown:GetFrameLevel() + 5)
+if timerFrame.SetIgnoreParentAlpha then
+    timerFrame:SetIgnoreParentAlpha(true)
+end
+local timerText = timerFrame:CreateFontString(nil, "OVERLAY")
+timerText:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
+timerText:SetPoint("CENTER", frame, "CENTER", 0, 0)
+timerText:SetTextColor(1, 1, 1, 1)
+timerText:SetText("")
+
 -- =========================================================
 -- Color management
 -- =========================================================
@@ -290,11 +303,18 @@ local function UpdateState()
     end
     SetGlowVisible(ready)
 
-    -- Drive the cooldown sweep
+    -- Drive the cooldown sweep and timer text
     if onCooldown and M.speed > 0 then
         cooldown:SetCooldown(M.lastSwing, M.speed)
+        local remaining = M.speed - (GetTime() - M.lastSwing)
+        if remaining > 0 then
+            timerText:SetText(string.format("%.1f", remaining))
+        else
+            timerText:SetText("")
+        end
     else
         cooldown:SetCooldown(0, 0)
+        timerText:SetText("")
     end
 end
 

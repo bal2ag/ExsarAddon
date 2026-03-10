@@ -262,7 +262,14 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     local onGCD = gcdStart and gcdStart > 0 and gcdDur and gcdDur > 0
     local zone
     if onGCD then
-        zone = 2
+        -- Check if GCD remaining is within the spell queue window
+        local gcdRemaining = (gcdStart + gcdDur) - now
+        local sqw = (tonumber(GetCVar("SpellQueueWindow")) or 400) / 1000
+        if gcdRemaining <= sqw then
+            zone = 1  -- blue: spell queue window reached
+        else
+            zone = 2  -- grey: GCD active
+        end
     elseif remaining <= S.aimWindow then
         zone = 0
     else

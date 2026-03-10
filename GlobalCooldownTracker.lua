@@ -70,11 +70,21 @@ end
 -- Make the swipe itself the visual: grey circle that empties like a pie.
 -- No background needed — the swipe IS the indicator.
 if cooldown.SetSwipeColor then
-    cooldown:SetSwipeColor(0.6, 0.6, 0.6, 0.9)
+    cooldown:SetSwipeColor(0.25, 0.25, 0.25, 0.9)
 end
 if cooldown.SetSwipeTexture then
     cooldown:SetSwipeTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
 end
+
+-- Timer text frame (above the cooldown overlay)
+local timerFrame = CreateFrame("Frame", nil, sweepFrame)
+timerFrame:SetAllPoints()
+timerFrame:SetFrameLevel(cooldown:GetFrameLevel() + 5)
+local gcdTimerText = timerFrame:CreateFontString(nil, "OVERLAY")
+gcdTimerText:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+gcdTimerText:SetPoint("CENTER", sweepFrame, "CENTER", 0, 0)
+gcdTimerText:SetTextColor(1, 1, 1, 1)
+gcdTimerText:SetText("")
 
 sweepFrame:Hide()
 
@@ -82,8 +92,38 @@ sweepFrame:Hide()
 -- Runtime state
 -- =========================================================
 
-local lastGCDStart = 0
-local C_locked     = false
+local lastGCDStart    = 0
+local lastGCDDuration = 0
+local C_locked        = false
+local gcdColorState   = 0  -- 0=grey, 1=blue (spell queue)
+
+local GREY_SWIPE = { 0.25, 0.25, 0.25, 0.9 }
+local BLUE_SWIPE = { 0.15, 0.55, 0.95, 0.85 }
+
+sweepFrame:SetScript("OnUpdate", function()
+    if lastGCDStart > 0 and lastGCDDuration > 0 then
+        local remaining = (lastGCDStart + lastGCDDuration) - GetTime()
+        if remaining > 0 then
+            gcdTimerText:SetText(string.format("%.1f", remaining))
+
+            -- Change color during the spell queue window
+            local sqw = (tonumber(GetCVar("SpellQueueWindow")) or 400) / 1000
+            local newColor = remaining <= sqw and 1 or 0
+            if newColor ~= gcdColorState and cooldown.SetSwipeColor then
+                gcdColorState = newColor
+                if newColor == 1 then
+                    cooldown:SetSwipeColor(BLUE_SWIPE[1], BLUE_SWIPE[2], BLUE_SWIPE[3], BLUE_SWIPE[4])
+                else
+                    cooldown:SetSwipeColor(GREY_SWIPE[1], GREY_SWIPE[2], GREY_SWIPE[3], GREY_SWIPE[4])
+                end
+                -- Re-apply cooldown so the new color takes effect
+                cooldown:SetCooldown(lastGCDStart, lastGCDDuration)
+            end
+        else
+            gcdTimerText:SetText("")
+        end
+    end
+end)
 
 local function UpdateGCD()
     local start, duration = GetSpellCooldown(GCD_PROBE_SPELL)
@@ -94,6 +134,7 @@ local function UpdateGCD()
         if start ~= lastGCDStart then
             cooldown:SetCooldown(start, duration)
             lastGCDStart = start
+            lastGCDDuration = duration
         end
         placeholderBg:Hide()
         placeholderText:Hide()
@@ -101,7 +142,13 @@ local function UpdateGCD()
         frame:Show()
     else
         lastGCDStart = 0
+        lastGCDDuration = 0
+        gcdColorState = 0
+        if cooldown.SetSwipeColor then
+            cooldown:SetSwipeColor(GREY_SWIPE[1], GREY_SWIPE[2], GREY_SWIPE[3], GREY_SWIPE[4])
+        end
         cooldown:SetCooldown(0, 0)
+        gcdTimerText:SetText("")
         sweepFrame:Hide()
 
         if not C_locked then
