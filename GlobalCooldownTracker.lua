@@ -67,6 +67,14 @@ cooldown:SetDrawEdge(false)
 if cooldown.SetHideCountdownNumbers then
     cooldown:SetHideCountdownNumbers(true)
 end
+-- Make the swipe itself the visual: grey circle that empties like a pie.
+-- No background needed — the swipe IS the indicator.
+if cooldown.SetSwipeColor then
+    cooldown:SetSwipeColor(0.6, 0.6, 0.6, 0.9)
+end
+if cooldown.SetSwipeTexture then
+    cooldown:SetSwipeTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+end
 
 sweepFrame:Hide()
 
