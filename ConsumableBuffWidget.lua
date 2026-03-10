@@ -217,9 +217,16 @@ local function UpdateBuffs()
         if s.weaponSlot == "mainhand" then
             if hasMainEnchant and mainExpMs and mainExpMs > 0 then
                 local remaining = mainExpMs / 1000
-                local expTime = now + remaining
                 local duration = s.buffDuration or remaining
+                -- Cache start time so SetCooldown receives stable values
+                -- and the sweep animation doesn't reset every poll cycle.
+                if not s.enchantStart then
+                    s.enchantStart = now + remaining - duration
+                end
+                local expTime = s.enchantStart + duration
                 match = { duration = duration, expTime = expTime }
+            else
+                s.enchantStart = nil
             end
         else
             match = activeById[s.buffId]
