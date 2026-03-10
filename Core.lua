@@ -122,6 +122,8 @@ local function BuildOptions()
     if Options._built then return end
     Options._built = true
 
+    table.sort(registeredModules, function(a, b) return a.name < b.name end)
+
     local SIDEBAR_W = 155
 
     -- Sidebar: dark background strip on the left
