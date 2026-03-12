@@ -24,3 +24,4 @@ AspectTracker.lua
 MeleeRangeIndicator.lua
 GlobalCooldownTracker.lua
 RaidTargetWidget.lua
+PetAggressiveAlert.lua
