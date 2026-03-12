@@ -19,6 +19,7 @@ end
 -- matching when buffName is shared across multiple spells (e.g. "Well Fed").
 
 local TRACKED_ITEMS = {
+    { name = "Kibler's Bits",                 id = 33874, buffName = "Kibler's Bits",               buffId = 43771, unit = "pet" },
     { name = "Flask of Relentless Assault",   id = 22854, buffName = "Flask of Relentless Assault", buffId = 28520 },
     { name = "Elixir of Major Agility",       id = 22831, buffName = "Major Agility",               buffId = 28497 },
     { name = "Elixir of Demonslaying",        id = 9224,  buffName = "Elixir of Demonslaying",      buffId = 11406 },
@@ -87,6 +88,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
         itemName    = item.name,
         buffName    = item.buffName,
         buffId      = item.buffId,
+        unit        = item.unit or "player",
         weaponSlot  = item.weaponSlot,
         buffDuration = item.buffDuration,
         count       = -1,
@@ -210,6 +212,17 @@ local function UpdateBuffs()
         end
     end
 
+    local petActiveById = {}
+    if UnitExists("pet") then
+        for i = 1, 40 do
+            local bName, _, _, _, bDuration, bExpTime, _, _, _, bSpellId = UnitBuff("pet", i)
+            if not bName then break end
+            if bSpellId then
+                petActiveById[bSpellId] = { duration = bDuration or 0, expTime = bExpTime or 0 }
+            end
+        end
+    end
+
     -- Weapon enchant info (temporary sharpening/weightstones etc.)
     local hasMainEnchant, mainExpMs = GetWeaponEnchantInfo()
 
@@ -229,6 +242,8 @@ local function UpdateBuffs()
             else
                 s.enchantStart = nil
             end
+        elseif s.unit == "pet" then
+            match = petActiveById[s.buffId]
         else
             match = activeById[s.buffId]
         end
@@ -287,6 +302,7 @@ frame:RegisterEvent("BAG_UPDATE")
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+frame:RegisterEvent("UNIT_PET")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -314,7 +330,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         ScanBags()
 
     elseif event == "UNIT_AURA" then
-        if arg1 == "player" then UpdateBuffs() end
+        if arg1 == "player" or arg1 == "pet" then UpdateBuffs() end
+
+    elseif event == "UNIT_PET" then
+        UpdateBuffs()
 
     elseif event == "UNIT_INVENTORY_CHANGED" then
         UpdateBuffs()
