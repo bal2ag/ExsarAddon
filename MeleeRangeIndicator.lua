@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function mrDB()
-    ExsarAddonDB.meleeRange = ExsarAddonDB.meleeRange or {}
-    return ExsarAddonDB.meleeRange
-end
+local mrDB = ExsarUI.MakeDB("meleeRange")
 
 -- =========================================================
 -- Raptor Strike spell IDs (fires on next melee swing)
@@ -65,17 +62,7 @@ local GREY_COLOR_HANDLE  = { 0.30, 0.30, 0.30, 1.0 }
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "MeleeRangeFrame", UIParent)
 frame:SetSize(80, 80)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    mrDB().x = x
-    mrDB().y = y
-end)
+ExsarUI.SetupMovableFrame(frame, mrDB, { bgAlpha = 0 })
 frame:Hide()
 
 -- =========================================================
@@ -345,16 +332,8 @@ frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = mrDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -150)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        if not db.locked then
+        ExsarUI.RestorePosition(self, mrDB, 0, -150)
+        if not mrDB().locked then
             frame:Show()
         end
 
@@ -387,34 +366,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Melee Range Indicator",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return mrDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                mrDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, mrDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return mrDB().locked and true or false end,
-            function(v)
-                mrDB().locked = v
-                frame:EnableMouse(not v)
-                UpdateState()
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, mrDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -150)
-            mrDB().x = nil
-            mrDB().y = nil
-            print(ADDON_NAME .. ": Melee Range Indicator position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, mrDB, frame, "Melee range", 0, -150)
 
         return y
     end,

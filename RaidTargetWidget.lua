@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function rDB()
-    ExsarAddonDB.raidTargets = ExsarAddonDB.raidTargets or {}
-    return ExsarAddonDB.raidTargets
-end
+local rDB = ExsarUI.MakeDB("raidTargets")
 
 local anchorX, anchorY = 350, 175
 local C_dragging = false
@@ -31,15 +28,7 @@ local RT_ICON_SIZE = 16   -- raid target icon overlay
 -- Helpers
 -- =========================================================
 
-local function HealthColor(pct)
-    if pct > 50 then
-        local f = (pct - 50) / 50
-        return 0.1 + 0.9 * (1 - f), 0.9, 0.1
-    else
-        local f = pct / 50
-        return 0.9, 0.9 * f, 0.1
-    end
-end
+local HealthColor = ExsarLogic.HealthColorGradient
 
 -- =========================================================
 -- Main frame

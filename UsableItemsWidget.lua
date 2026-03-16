@@ -7,10 +7,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function uiDB()
-    ExsarAddonDB.usableItems = ExsarAddonDB.usableItems or {}
-    return ExsarAddonDB.usableItems
-end
+local uiDB = ExsarUI.MakeDB("usableItems")
 
 -- =========================================================
 -- Item definitions
@@ -50,7 +47,7 @@ local function InTempestKeep()
 end
 
 -- Durations at or below this threshold are just the GCD, not a real cooldown.
-local MIN_COOLDOWN = 1.6
+local MIN_COOLDOWN = ExsarLogic.MIN_COOLDOWN_DURATION
 
 -- =========================================================
 -- Layout constants
@@ -69,17 +66,7 @@ local GRID_H = 4 * ICON_SIZE + 3 * ICON_GAP + PADDING * 2
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "UsableItemsFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    uiDB().x = x
-    uiDB().y = y
-end)
+ExsarUI.SetupMovableFrame(frame, uiDB)
 
 
 local placeholderText = frame:CreateFontString(nil, "OVERLAY")
@@ -319,15 +306,7 @@ end
 -- Cooldown updates
 -- =========================================================
 
-local function FormatCooldown(remaining)
-    if remaining >= 60 then
-        return string.format("%dm", math.ceil(remaining / 60))
-    elseif remaining >= 10 then
-        return string.format("%d", math.ceil(remaining))
-    else
-        return string.format("%.1f", remaining)
-    end
-end
+local FormatCooldown = ExsarLogic.FormatCooldown
 
 -- Returns start, duration for a named player debuff if it is currently active.
 local function GetDebuffCooldown(debuffName)
@@ -419,16 +398,8 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = uiDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 150, -160)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, uiDB, 150, -160)
+        C_locked = uiDB().locked and true or false
         ApplyLayout()
         UpdateActiveItems()
         ScanBags()
@@ -484,35 +455,14 @@ end)
 ExsarAddon.RegisterModule({
     name = "Usable Items",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return uiDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                uiDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, uiDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return uiDB().locked and true or false end,
-            function(v)
-                uiDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-                ApplyLayout()
-            end
-        )
-        y = y - 30
-
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 150, -160)
-            uiDB().x = nil
-            uiDB().y = nil
-            print(ADDON_NAME .. ": Usable items widget position reset.")
+        y = ExsarUI.AddLockCheckbox(parent, y, uiDB, frame, function(v)
+            C_locked = v
+            ApplyLayout()
         end)
-        y = y - 30
+
+        y = ExsarUI.AddResetButton(parent, y, uiDB, frame, "Usable items", 150, -160)
 
         return y
     end,

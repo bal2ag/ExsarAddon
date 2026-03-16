@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function tDB()
-    ExsarAddonDB.targetInfo = ExsarAddonDB.targetInfo or {}
-    return ExsarAddonDB.targetInfo
-end
+local tDB = ExsarUI.MakeDB("targetInfo")
 
 -- Desired TOPLEFT offset from UIParent CENTER; updated on drag and reset.
 -- Storing these lets ApplyLayout re-anchor explicitly after every SetSize call,
@@ -72,22 +69,10 @@ local function GetReactionColor(unit)
 end
 
 local function LevelColor(targetLevel)
-    if targetLevel < 0 then return 0.80, 0.30, 0.80, 1 end   -- skull / ??
-    local diff = targetLevel - UnitLevel("player")
-    if     diff >=  5 then return 1.00, 0.10, 0.10, 1
-    elseif diff >=  3 then return 1.00, 0.50, 0.25, 1
-    elseif diff >= -2 then return 1.00, 1.00, 0.00, 1
-    elseif diff >= -4 then return 0.25, 0.75, 0.25, 1
-    else                   return 0.55, 0.55, 0.55, 1
-    end
+    return ExsarLogic.LevelColor(targetLevel, UnitLevel("player"))
 end
 
-local function FormatNumber(n)
-    if n >= 1000 then
-        return string.format("%.1fk", n / 1000)
-    end
-    return tostring(n)
-end
+local FormatNumber = ExsarLogic.FormatNumber
 
 -- =========================================================
 -- Main frame
@@ -316,15 +301,7 @@ end
 -- Update functions
 -- =========================================================
 
-local function HealthColor(pct)
-    if pct > 50 then
-        return 0.20, 0.75, 0.20
-    elseif pct > 20 then
-        return 0.90, 0.90, 0.10
-    else
-        return 0.80, 0.15, 0.15
-    end
-end
+local HealthColor = ExsarLogic.HealthColorThreshold
 
 local function UpdateBars()
     local hp    = UnitHealth("target")

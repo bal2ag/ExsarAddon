@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function mwDB()
-    ExsarAddonDB.mountWidget = ExsarAddonDB.mountWidget or {}
-    return ExsarAddonDB.mountWidget
-end
+local mwDB = ExsarUI.MakeDB("mountWidget")
 
 -- =========================================================
 -- Mount definitions
@@ -37,21 +34,7 @@ local GRID_H = ICON_SIZE + PADDING * 2
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "MountFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    mwDB().x = x
-    mwDB().y = y
-end)
-
-local frameBg = frame:CreateTexture(nil, "BACKGROUND")
-frameBg:SetAllPoints()
-frameBg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, mwDB)
 
 frame:Hide()
 
@@ -188,16 +171,8 @@ frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = mwDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 150, -240)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, mwDB, 150, -240)
+        C_locked = mwDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -238,34 +213,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Mount Widget",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return mwDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                mwDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, mwDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return mwDB().locked and true or false end,
-            function(v)
-                mwDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, mwDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 150, -240)
-            mwDB().x = nil
-            mwDB().y = nil
-            print(ADDON_NAME .. ": Mount widget position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, mwDB, frame, "Mounts", 150, -240)
 
         return y
     end,

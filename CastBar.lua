@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function cbDB()
-    ExsarAddonDB.castBar = ExsarAddonDB.castBar or {}
-    return ExsarAddonDB.castBar
-end
+local cbDB = ExsarUI.MakeDB("castBar")
 
 -- =========================================================
 -- Constants
@@ -102,21 +99,7 @@ end
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "CastBarFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    cbDB().x = x
-    cbDB().y = y
-end)
-
-local bg = frame:CreateTexture(nil, "BACKGROUND")
-bg:SetAllPoints()
-bg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, cbDB)
 
 -- Spell icon (left side)
 local iconTex = frame:CreateTexture(nil, "ARTWORK")
@@ -504,17 +487,9 @@ frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = cbDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -270)
-        end
+        ExsarUI.RestorePosition(self, cbDB, 0, -270)
         ApplySize()
-        frame:SetScale(db.scale or 1.0)
-        frame:EnableMouse(not db.locked)
-        C.locked = db.locked and true or false
+        C.locked = cbDB().locked and true or false
         if not C.locked then ShowPlaceholder() end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -634,15 +609,7 @@ end)
 ExsarAddon.RegisterModule({
     name = "Cast Bar",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return cbDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                cbDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, cbDB, frame)
 
         ExsarAddon.CreateSlider(parent, "Bar Width", 16, y, 100, 400, 1,
             function() return cbDB().width or DEFAULT_WIDTH end,
@@ -654,28 +621,12 @@ ExsarAddon.RegisterModule({
         )
         y = y - 55
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return cbDB().locked and true or false end,
-            function(v)
-                cbDB().locked = v
-                C.locked = v
-                frame:EnableMouse(not v)
-                if not C.casting then
-                    inPlaceholder = false
-                    ShowPlaceholder()
-                end
-            end
-        )
-        y = y - 30
-
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -270)
-            cbDB().x = nil
-            cbDB().y = nil
-            print(ADDON_NAME .. ": Cast bar position reset.")
+        y = ExsarUI.AddLockCheckbox(parent, y, cbDB, frame, function(v)
+            C.locked = v
+            if not C.casting then ShowPlaceholder() end
         end)
-        y = y - 30
+
+        y = ExsarUI.AddResetButton(parent, y, cbDB, frame, "Cast bar", 0, -270)
 
         return y
     end,

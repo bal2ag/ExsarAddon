@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function sDB()
-    ExsarAddonDB.rangedSwingTimer = ExsarAddonDB.rangedSwingTimer or {}
-    return ExsarAddonDB.rangedSwingTimer
-end
+local sDB = ExsarUI.MakeDB("rangedSwingTimer")
 
 -- =========================================================
 -- Constants
@@ -54,21 +51,7 @@ local S = {
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "RangedSwingFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    sDB().x = x
-    sDB().y = y
-end)
-
-local bg = frame:CreateTexture(nil, "BACKGROUND")
-bg:SetAllPoints()
-bg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, sDB)
 
 -- The draining bar. Anchored to center; width shrinks toward center over the cycle.
 local bar = frame:CreateTexture(nil, "ARTWORK")
@@ -335,16 +318,8 @@ frame:RegisterEvent("SPELLS_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = sDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -240)
-        end
+        ExsarUI.RestorePosition(self, sDB, 0, -240)
         ApplySize()
-        frame:SetScale(db.scale or 1.0)
-        frame:EnableMouse(not sDB().locked)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         S.autoShotName   = GetSpellInfo(AUTO_SHOT_ID)   or "Auto Shot"
@@ -457,15 +432,7 @@ end)
 ExsarAddon.RegisterModule({
     name = "Ranged Swing Timer",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return sDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                sDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, sDB, frame)
 
         ExsarAddon.CreateSlider(parent, "Bar Width", 16, y, 100, 400, 1,
             function() return sDB().width or DEFAULT_WIDTH end,
@@ -479,23 +446,9 @@ ExsarAddon.RegisterModule({
         )
         y = y - 55
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return sDB().locked and true or false end,
-            function(v)
-                sDB().locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, sDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -240)
-            sDB().x = nil
-            sDB().y = nil
-            print(ADDON_NAME .. ": Ranged swing timer position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, sDB, frame, "Ranged swing timer", 0, -240)
 
         return y
     end,

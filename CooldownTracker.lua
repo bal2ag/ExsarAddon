@@ -4,10 +4,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function cDB()
-    ExsarAddonDB.cooldownTracker = ExsarAddonDB.cooldownTracker or {}
-    return ExsarAddonDB.cooldownTracker
-end
+local cDB = ExsarUI.MakeDB("cooldownTracker")
 
 -- =========================================================
 -- Spell definitions
@@ -29,8 +26,7 @@ local SPELL_GROUPS = {
     },
 }
 
--- Cooldowns at or below this duration are just the GCD, not a real cooldown
-local MIN_COOLDOWN_DURATION = 1.6
+local MIN_COOLDOWN_DURATION = ExsarLogic.MIN_COOLDOWN_DURATION
 
 -- Glow border: bright highlight when ability is ready
 local GLOW_COLOR = { 1.0, 0.82, 0.25, 0.45 }
@@ -99,22 +95,7 @@ local initWidth = PADDING * 2
 
 local mainFrame = CreateFrame("Frame", ADDON_NAME .. "CooldownFrame", UIParent)
 mainFrame:SetSize(initWidth, ICON_SIZE + PADDING * 2)
-mainFrame:SetMovable(true)
-mainFrame:EnableMouse(true)
-mainFrame:RegisterForDrag("LeftButton")
-mainFrame:SetClampedToScreen(true)
-
-local bg = mainFrame:CreateTexture(nil, "BACKGROUND")
-bg:SetAllPoints()
-bg:SetColorTexture(0, 0, 0, 0.6)
-
-mainFrame:SetScript("OnDragStart", mainFrame.StartMoving)
-mainFrame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    cDB().x = x
-    cDB().y = y
-end)
+ExsarUI.SetupMovableFrame(mainFrame, cDB)
 
 -- =========================================================
 -- Spell icon frames
@@ -338,15 +319,7 @@ end
 -- Cooldown updates
 -- =========================================================
 
-local function FormatCooldown(remaining)
-    if remaining >= 60 then
-        return string.format("%dm", math.ceil(remaining / 60))
-    elseif remaining >= 10 then
-        return string.format("%d", math.ceil(remaining))
-    else
-        return string.format("%.1f", remaining)
-    end
-end
+local FormatCooldown = ExsarLogic.FormatCooldown
 
 local function UpdateCooldowns()
     local now = GetTime()
@@ -435,15 +408,7 @@ mainFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 mainFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = cDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-        end
-        mainFrame:SetScale(db.scale or 1.0)
-        mainFrame:EnableMouse(not db.locked)
+        ExsarUI.RestorePosition(self, cDB, 0, -200)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "SPELLS_CHANGED" then
         -- Spell data available; check known spells, load textures, apply layout.
         -- SPELLS_CHANGED fires on talent changes so Bestial Wrath / Readiness
@@ -492,16 +457,7 @@ end)
 ExsarAddon.RegisterModule({
     name = "Cooldown Tracker",
     BuildConfig = function(parent, y)
-        -- Scale slider
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return cDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                cDB().scale = rounded
-                mainFrame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, cDB, mainFrame)
 
         -- Group spacing slider
         ExsarAddon.CreateSlider(parent, "Group Spacing", 16, y, 0, 40, 1,
@@ -514,25 +470,8 @@ ExsarAddon.RegisterModule({
         )
         y = y - 55
 
-        -- Lock checkbox
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return cDB().locked and true or false end,
-            function(v)
-                cDB().locked = v
-                mainFrame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
-
-        -- Reset position button
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            mainFrame:ClearAllPoints()
-            mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-            cDB().x = nil
-            cDB().y = nil
-            print(ADDON_NAME .. ": Cooldown tracker position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, cDB, mainFrame)
+        y = ExsarUI.AddResetButton(parent, y, cDB, mainFrame, "Cooldown tracker", 0, -200)
 
         return y
     end,

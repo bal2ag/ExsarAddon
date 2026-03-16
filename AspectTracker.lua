@@ -5,10 +5,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function aDB()
-    ExsarAddonDB.aspectTracker = ExsarAddonDB.aspectTracker or {}
-    return ExsarAddonDB.aspectTracker
-end
+local aDB = ExsarUI.MakeDB("aspectTracker")
 
 -- =========================================================
 -- Aspect definitions
@@ -51,21 +48,7 @@ local TAIL_LEN   = 5
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "AspectTrackerFrame", UIParent)
 frame:SetSize(FRAME_W, FRAME_H)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    aDB().x = x
-    aDB().y = y
-end)
-
-local frameBg = frame:CreateTexture(nil, "BACKGROUND")
-frameBg:SetAllPoints()
-frameBg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, aDB)
 
 -- =========================================================
 -- Icon slot
@@ -87,46 +70,13 @@ warnGlow:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT",  6, -6)
 warnGlow:SetColorTexture(1, 0.1, 0.1, 1)
 warnGlow:Hide()
 
-local icon = iconFrame:CreateTexture(nil, "ARTWORK")
-icon:SetAllPoints()
-icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+local icon = ExsarUI.CreateIcon(iconFrame)
 
 -- =========================================================
 -- Marching-ants border
 -- =========================================================
 
-local dashes = {}
-do
-    local perSide = DASH_COUNT / 4
-    local step    = ICON_SIZE / perSide
-    local dashLen = step - 1
-
-    for i = 0, DASH_COUNT - 1 do
-        local side   = math.floor(i / perSide)
-        local pos    = i % perSide
-        local offset = pos * step
-
-        local d = iconFrame:CreateTexture(nil, "OVERLAY")
-        d:SetColorTexture(1, 0.85, 0, 1)
-        d:SetAlpha(0)
-
-        if side == 0 then
-            d:SetSize(dashLen, BORDER_W)
-            d:SetPoint("TOPLEFT",     iconFrame, "TOPLEFT",     offset, 0)
-        elseif side == 1 then
-            d:SetSize(BORDER_W, dashLen)
-            d:SetPoint("TOPRIGHT",    iconFrame, "TOPRIGHT",    0, -offset)
-        elseif side == 2 then
-            d:SetSize(dashLen, BORDER_W)
-            d:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", -offset, 0)
-        else
-            d:SetSize(BORDER_W, dashLen)
-            d:SetPoint("BOTTOMLEFT",  iconFrame, "BOTTOMLEFT",  0, offset)
-        end
-
-        dashes[i + 1] = d
-    end
-end
+local dashes = ExsarUI.BuildDashes(iconFrame, ICON_SIZE, DASH_COUNT, BORDER_W)
 
 -- =========================================================
 -- Red X (shown when no aspect is active)
@@ -239,15 +189,7 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = aDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", -350, 100)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
+        ExsarUI.RestorePosition(self, aDB, -350, 100)
         self:Show()
         UpdateAspect()
 

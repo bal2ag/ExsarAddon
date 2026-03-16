@@ -5,10 +5,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function aDB()
-    ExsarAddonDB.petAggressiveAlert = ExsarAddonDB.petAggressiveAlert or {}
-    return ExsarAddonDB.petAggressiveAlert
-end
+local aDB = ExsarUI.MakeDB("petAggressiveAlert")
 
 -- =========================================================
 -- Constants
@@ -56,17 +53,7 @@ end
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "PetAggressiveAlertFrame", UIParent)
 frame:SetSize(FRAME_W, FRAME_H)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    aDB().x = x
-    aDB().y = y
-end)
+ExsarUI.SetupMovableFrame(frame, aDB, { bgAlpha = 0 })
 frame:Hide()
 
 -- =========================================================
@@ -151,16 +138,8 @@ frame:RegisterEvent("UNIT_PET")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = aDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        if not db.locked then
+        ExsarUI.RestorePosition(self, aDB, 0, 50)
+        if not aDB().locked then
             S.pulseTime = 0.25
             frame:Show()
         end

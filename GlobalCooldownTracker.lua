@@ -5,10 +5,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function gDB()
-    ExsarAddonDB.globalCooldown = ExsarAddonDB.globalCooldown or {}
-    return ExsarAddonDB.globalCooldown
-end
+local gDB = ExsarUI.MakeDB("globalCooldown")
 
 -- =========================================================
 -- Constants
@@ -27,17 +24,7 @@ local PADDING   = 6
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "GCDFrame", UIParent)
 frame:SetSize(ICON_SIZE + PADDING * 2, ICON_SIZE + PADDING * 2)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    gDB().x = x
-    gDB().y = y
-end)
+ExsarUI.SetupMovableFrame(frame, gDB)
 frame:Hide()
 
 -- Placeholder: background + label shown only when unlocked and GCD inactive
@@ -173,16 +160,8 @@ frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = gDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, gDB, 0, -200)
+        C_locked = gDB().locked and true or false
         UpdateGCD()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -212,35 +191,14 @@ end)
 ExsarAddon.RegisterModule({
     name = "Global Cooldown Tracker",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return gDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                gDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, gDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return gDB().locked and true or false end,
-            function(v)
-                gDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-                UpdateGCD()
-            end
-        )
-        y = y - 30
-
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-            gDB().x = nil
-            gDB().y = nil
-            print(ADDON_NAME .. ": GCD tracker position reset.")
+        y = ExsarUI.AddLockCheckbox(parent, y, gDB, frame, function(v)
+            C_locked = v
+            UpdateGCD()
         end)
-        y = y - 30
+
+        y = ExsarUI.AddResetButton(parent, y, gDB, frame, "GCD tracker", 0, -200)
 
         return y
     end,

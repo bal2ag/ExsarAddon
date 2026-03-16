@@ -7,10 +7,7 @@
 local ADDON_NAME = "ExsarAddon"
 local UNIT = "pet"
 
-local function pDB()
-    ExsarAddonDB.petInfo = ExsarAddonDB.petInfo or {}
-    return ExsarAddonDB.petInfo
-end
+local pDB = ExsarUI.MakeDB("petInfo")
 
 local anchorX, anchorY = -460, 175
 local C_dragging = false

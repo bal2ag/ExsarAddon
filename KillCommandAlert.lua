@@ -5,16 +5,13 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function kcDB()
-    ExsarAddonDB.killCommandAlert = ExsarAddonDB.killCommandAlert or {}
-    return ExsarAddonDB.killCommandAlert
-end
+local kcDB = ExsarUI.MakeDB("killCommandAlert")
 
 -- =========================================================
 -- Constants
 -- =========================================================
 
-local MIN_COOLDOWN = 1.6    -- durations ≤ this are just the GCD, not a real cooldown
+local MIN_COOLDOWN = ExsarLogic.MIN_COOLDOWN_DURATION
 
 -- Wing feather definitions for the RIGHT wing.
 -- Each entry: {sx, sy, ex, ey} — start (inner/root) and end (outer tip),
@@ -50,17 +47,7 @@ local K = {
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "KillCmdAuraFrame", UIParent)
 frame:SetSize(300, 300)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    kcDB().x = x
-    kcDB().y = y
-end)
+ExsarUI.SetupMovableFrame(frame, kcDB, { bgAlpha = 0 })
 frame:Hide()
 
 -- =========================================================
@@ -159,16 +146,8 @@ frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = kcDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        if not db.locked then
+        ExsarUI.RestorePosition(self, kcDB, 0, -100)
+        if not kcDB().locked then
             K.pulseTime = 0.25
             frame:Show()
         end
@@ -207,34 +186,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Kill Command Alert",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return kcDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                kcDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, kcDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return kcDB().locked and true or false end,
-            function(v)
-                kcDB().locked = v
-                frame:EnableMouse(not v)
-                UpdateAura()
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, kcDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
-            kcDB().x = nil
-            kcDB().y = nil
-            print(ADDON_NAME .. ": Kill Command alert position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, kcDB, frame, "Kill Command alert", 0, -100)
 
         return y
     end,

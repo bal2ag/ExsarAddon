@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function fdDB()
-    ExsarAddonDB.foodDrink = ExsarAddonDB.foodDrink or {}
-    return ExsarAddonDB.foodDrink
-end
+local fdDB = ExsarUI.MakeDB("foodDrink")
 
 -- =========================================================
 -- Item definitions
@@ -38,21 +35,7 @@ local GRID_H = ICON_SIZE + PADDING * 2
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "FoodDrinkFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    fdDB().x = x
-    fdDB().y = y
-end)
-
-local frameBg = frame:CreateTexture(nil, "BACKGROUND")
-frameBg:SetAllPoints()
-frameBg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, fdDB)
 
 frame:Hide()
 
@@ -168,16 +151,8 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = fdDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 150, -200)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, fdDB, 150, -200)
+        C_locked = fdDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -219,34 +194,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Food & Drink",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return fdDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                fdDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, fdDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return fdDB().locked and true or false end,
-            function(v)
-                fdDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, fdDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 150, -200)
-            fdDB().x = nil
-            fdDB().y = nil
-            print(ADDON_NAME .. ": Food and drink widget position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, fdDB, frame, "Food and drink", 150, -200)
 
         return y
     end,

@@ -7,10 +7,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function cbDB()
-    ExsarAddonDB.consumableBuff = ExsarAddonDB.consumableBuff or {}
-    return ExsarAddonDB.consumableBuff
-end
+local cbDB = ExsarUI.MakeDB("consumableBuff")
 
 -- =========================================================
 -- Item / buff definitions
@@ -48,21 +45,7 @@ local GRID_H = ICON_SIZE + PADDING * 2
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "ConsumableBuffFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    cbDB().x = x
-    cbDB().y = y
-end)
-
-local frameBg = frame:CreateTexture(nil, "BACKGROUND")
-frameBg:SetAllPoints()
-frameBg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, cbDB)
 
 frame:Hide()
 
@@ -254,14 +237,7 @@ local function UpdateBuffs()
             s.sweep:SetCooldown(match.expTime - match.duration, match.duration)
 
             local remaining = math.max(0, match.expTime - now)
-            local newStr
-            if remaining >= 60 then
-                newStr = string.format("%dm", math.ceil(remaining / 60))
-            elseif remaining >= 10 then
-                newStr = string.format("%d", math.ceil(remaining))
-            else
-                newStr = string.format("%.1f", remaining)
-            end
+            local newStr = ExsarLogic.FormatCooldown(remaining)
             if newStr ~= s.lastTimeStr then
                 s.lastTimeStr = newStr
                 s.timeText:SetText(newStr)
@@ -306,16 +282,8 @@ frame:RegisterEvent("UNIT_PET")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = cbDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 200, -160)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, cbDB, 200, -160)
+        C_locked = cbDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -362,34 +330,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Consumable Buffs",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return cbDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                cbDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, cbDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return cbDB().locked and true or false end,
-            function(v)
-                cbDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, cbDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 200, -160)
-            cbDB().x = nil
-            cbDB().y = nil
-            print(ADDON_NAME .. ": Consumable buff widget position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, cbDB, frame, "Consumable buffs", 200, -160)
 
         return y
     end,

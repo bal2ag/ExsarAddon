@@ -5,6 +5,8 @@
 ## Version: 1.0
 ## SavedVariables: ExsarAddonDB
 
+ExsarLogic.lua
+ExsarUI.lua
 Core.lua
 CooldownTracker.lua
 RangedSwingTimer.lua

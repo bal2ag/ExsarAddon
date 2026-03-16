@@ -6,10 +6,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function aeDB()
-    ExsarAddonDB.activeEffects = ExsarAddonDB.activeEffects or {}
-    return ExsarAddonDB.activeEffects
-end
+local aeDB = ExsarUI.MakeDB("activeEffects")
 
 -- =========================================================
 -- Static effect definitions
@@ -55,21 +52,7 @@ local TAIL_LEN   = 5     -- dashes in the bright trailing tail
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "ActiveEffectsFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    aeDB().x = x
-    aeDB().y = y
-end)
-
-local frameBg = frame:CreateTexture(nil, "BACKGROUND")
-frameBg:SetAllPoints()
-frameBg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, aeDB)
 
 local placeholderText = frame:CreateFontString(nil, "OVERLAY")
 placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
@@ -87,40 +70,8 @@ local C_locked = false
 -- Icon slot construction
 -- =========================================================
 
--- Build 16 small dash textures arranged clockwise around the icon perimeter.
--- Order: top (L→R), right (T→B), bottom (R→L), left (B→T).
 local function BuildDashes(iconFrame)
-    local dashes  = {}
-    local perSide = DASH_COUNT / 4
-    local step    = ICON_SIZE / perSide  -- pixels per dash slot
-    local dashLen = step - 1             -- 1 px gap between dashes
-
-    for i = 0, DASH_COUNT - 1 do
-        local side   = math.floor(i / perSide)
-        local pos    = i % perSide
-        local offset = pos * step
-
-        local d = iconFrame:CreateTexture(nil, "OVERLAY")
-        d:SetColorTexture(1, 0.85, 0, 1)
-        d:SetAlpha(0)
-
-        if side == 0 then      -- top, left → right
-            d:SetSize(dashLen, BORDER_W)
-            d:SetPoint("TOPLEFT",     iconFrame, "TOPLEFT",     offset, 0)
-        elseif side == 1 then  -- right, top → bottom
-            d:SetSize(BORDER_W, dashLen)
-            d:SetPoint("TOPRIGHT",    iconFrame, "TOPRIGHT",    0, -offset)
-        elseif side == 2 then  -- bottom, right → left
-            d:SetSize(dashLen, BORDER_W)
-            d:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", -offset, 0)
-        else                   -- left, bottom → top
-            d:SetSize(BORDER_W, dashLen)
-            d:SetPoint("BOTTOMLEFT",  iconFrame, "BOTTOMLEFT",  0, offset)
-        end
-
-        dashes[i + 1] = d
-    end
-    return dashes
+    return ExsarUI.BuildDashes(iconFrame, ICON_SIZE, DASH_COUNT, BORDER_W)
 end
 
 local function MakeSlot()
@@ -135,28 +86,9 @@ local function MakeSlot()
     s.iconFrame = CreateFrame("Frame", nil, frame)
     s.iconFrame:SetSize(ICON_SIZE, ICON_SIZE)
 
-    -- Outer yellow glow (extends ~4 px beyond icon on each side)
-    s.glow = s.iconFrame:CreateTexture(nil, "BACKGROUND")
-    s.glow:SetPoint("TOPLEFT",     s.iconFrame, "TOPLEFT",     -4,  4)
-    s.glow:SetPoint("BOTTOMRIGHT", s.iconFrame, "BOTTOMRIGHT",  4, -4)
-    s.glow:SetColorTexture(1, 0.85, 0, 0.22)
-    s.glow:Hide()
-
-    -- Spell icon
-    s.icon = s.iconFrame:CreateTexture(nil, "ARTWORK")
-    s.icon:SetAllPoints()
-    s.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    -- Reverse cooldown sweep: grey fills the icon as the buff expires
-    s.sweep = CreateFrame("Cooldown", nil, s.iconFrame, "CooldownFrameTemplate")
-    s.sweep:SetAllPoints()
-    s.sweep:SetDrawEdge(false)
-    if s.sweep.SetHideCountdownNumbers then
-        s.sweep:SetHideCountdownNumbers(true)
-    end
-    if s.sweep.SetReverse then
-        s.sweep:SetReverse(true)
-    end
+    s.glow  = ExsarUI.CreateGlow(s.iconFrame)
+    s.icon  = ExsarUI.CreateIcon(s.iconFrame)
+    s.sweep = ExsarUI.CreateSweep(s.iconFrame, { reverse = true })
 
     -- Marching-ants border dashes
     s.dashes = BuildDashes(s.iconFrame)
@@ -321,12 +253,8 @@ local function UpdateBuffs()
                 local newStr
                 if not remaining then
                     newStr = ""
-                elseif remaining >= 60 then
-                    newStr = string.format("%dm", math.ceil(remaining / 60))
-                elseif remaining >= 10 then
-                    newStr = string.format("%d", math.ceil(remaining))
                 else
-                    newStr = string.format("%.1f", remaining)
+                    newStr = ExsarLogic.FormatCooldown(remaining)
                 end
                 if newStr ~= lastTimeStrs[i] then
                     lastTimeStrs[i] = newStr
@@ -353,19 +281,7 @@ end
 -- =========================================================
 
 local function AnimateDashes()
-    local head = (GetTime() * DASH_SPEED * DASH_COUNT) % DASH_COUNT
-    for _, s in ipairs(slots) do
-        if s.active then
-            for j, d in ipairs(s.dashes) do
-                local dist = (head - (j - 1) + DASH_COUNT) % DASH_COUNT
-                if dist < TAIL_LEN then
-                    d:SetAlpha(1.0 - (dist / TAIL_LEN) * 0.85)
-                else
-                    d:SetAlpha(0)
-                end
-            end
-        end
-    end
+    ExsarUI.AnimateDashes(slots, GetTime(), DASH_SPEED, DASH_COUNT, TAIL_LEN)
 end
 
 -- Dedicated always-on frame for smooth dash animation.  The main frame
@@ -398,16 +314,8 @@ frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = aeDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, aeDB, 0, -160)
+        C_locked = aeDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -442,35 +350,14 @@ end)
 ExsarAddon.RegisterModule({
     name = "Active Effects Tracker",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return aeDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                aeDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, aeDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return aeDB().locked and true or false end,
-            function(v)
-                aeDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-                ApplyLayout()
-            end
-        )
-        y = y - 30
-
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
-            aeDB().x = nil
-            aeDB().y = nil
-            print(ADDON_NAME .. ": Active effects tracker position reset.")
+        y = ExsarUI.AddLockCheckbox(parent, y, aeDB, frame, function(v)
+            C_locked = v
+            ApplyLayout()
         end)
-        y = y - 30
+
+        y = ExsarUI.AddResetButton(parent, y, aeDB, frame, "Active effects", 0, -160)
 
         return y
     end,

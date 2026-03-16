@@ -5,10 +5,7 @@
 
 local ADDON_NAME = "ExsarAddon"
 
-local function mpDB()
-    ExsarAddonDB.mendPet = ExsarAddonDB.mendPet or {}
-    return ExsarAddonDB.mendPet
-end
+local mpDB = ExsarUI.MakeDB("mendPet")
 
 local MEND_PET_NAME = "Mend Pet"
 
@@ -29,21 +26,7 @@ local PULSE_MAX  = 0.85
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "MendPetFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint()
-    mpDB().x = x
-    mpDB().y = y
-end)
-
-local frameBg = frame:CreateTexture(nil, "BACKGROUND")
-frameBg:SetAllPoints()
-frameBg:SetColorTexture(0, 0, 0, 0.6)
+ExsarUI.SetupMovableFrame(frame, mpDB)
 
 local placeholderText = frame:CreateFontString(nil, "OVERLAY")
 placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
@@ -138,10 +121,8 @@ local function UpdateMendPet()
                 local newStr
                 if not remaining then
                     newStr = ""
-                elseif remaining >= 10 then
-                    newStr = string.format("%d", math.ceil(remaining))
                 else
-                    newStr = string.format("%.1f", remaining)
+                    newStr = ExsarLogic.FormatShortTimer(remaining)
                 end
                 if newStr ~= lastStr then
                     lastStr = newStr
@@ -218,16 +199,8 @@ frame:RegisterEvent("UNIT_AURA")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = mpDB()
-        if db.x and db.y then
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.x, db.y)
-        else
-            self:SetPoint("CENTER", UIParent, "CENTER", -340, 70)
-        end
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        C_locked = db.locked and true or false
+        ExsarUI.RestorePosition(self, mpDB, -340, 70)
+        C_locked = mpDB().locked and true or false
         UpdateMendPet()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -257,35 +230,14 @@ end)
 ExsarAddon.RegisterModule({
     name = "Mend Pet Tracker",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return mpDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                mpDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, mpDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return mpDB().locked and true or false end,
-            function(v)
-                mpDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-                UpdateMendPet()
-            end
-        )
-        y = y - 30
-
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", -340, 70)
-            mpDB().x = nil
-            mpDB().y = nil
-            print(ADDON_NAME .. ": Mend Pet tracker position reset.")
+        y = ExsarUI.AddLockCheckbox(parent, y, mpDB, frame, function(v)
+            C_locked = v
+            UpdateMendPet()
         end)
-        y = y - 30
+
+        y = ExsarUI.AddResetButton(parent, y, mpDB, frame, "Mend Pet", -340, 70)
 
         return y
     end,
