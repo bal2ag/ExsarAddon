@@ -33,6 +33,9 @@ local TRACKED_ITEMS = {
     { name = "Drums of Battle",            id = 29529, col = 0, row = 2, cdDebuff = "Tinnitus", useCharges = true },
     { name = "Haste Potion",               id = 22838, col = 1, row = 2 },
     { name = "Heavy Netherweave Bandage",  id = 21991, col = 0, row = 3, cdDebuff = "Recently Bandaged" },
+    { name = "Master Healthstone",        id = 22105, col = 1, row = 3, hideWhenEmpty = true, groupFallback = true },
+    { name = "Master Healthstone",        id = 22104, col = 1, row = 3, hideWhenEmpty = true },
+    { name = "Master Healthstone",        id = 22103, col = 1, row = 3, hideWhenEmpty = true },
 }
 
 -- Zones where Bottled Nethergon items are usable (Tempest Keep subzones).
@@ -113,6 +116,8 @@ for i, item in ipairs(TRACKED_ITEMS) do
         useAlternate  = false,
         cdDebuff      = item.cdDebuff,
         useCharges    = item.useCharges,
+        hideWhenEmpty = item.hideWhenEmpty,
+        groupFallback = item.groupFallback,
         col           = item.col,
         row           = item.row,
         count         = -1,   -- -1 forces countText update on first ScanBags
@@ -130,7 +135,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
     -- Both AnyUp and AnyDown required for TBC Classic Anniversary.
     s.iconFrame:RegisterForClicks("AnyUp", "AnyDown")
     s.iconFrame:SetAttribute("type", "item")
-    s.iconFrame:SetAttribute("item", item.name)
+    s.iconFrame:SetAttribute("item", item.hideWhenEmpty and ("item:" .. item.id) or item.name)
     s.iconFrame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetItemByID(s.itemId)
@@ -199,16 +204,54 @@ local function ApplyLayout()
     -- non-secure code during combat.
     if InCombatLockdown() then return end
 
+    -- Check whether any hideWhenEmpty slot in each group has items.
+    -- Key = "col,row", value = true if at least one member is known.
+    local groupHasAny = {}
     for _, s in ipairs(slots) do
-        s.iconFrame:ClearAllPoints()
-        s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT",
-            PADDING + s.col * (ICON_SIZE + ICON_GAP),
-            -(PADDING + s.row * (ICON_SIZE + ICON_GAP)))
-        s.iconFrame:Show()
+        if s.hideWhenEmpty and s.known then
+            groupHasAny[s.col .. "," .. s.row] = true
+        end
+    end
+
+    -- Track dynamic row counters per column for hideWhenEmpty slots that
+    -- share a base row.  Key = "col,row", value = next dynamic row offset.
+    local dynRow = {}
+    local maxRow = 3  -- fixed rows 0-3
+
+    for _, s in ipairs(slots) do
+        if s.hideWhenEmpty and not s.known then
+            -- Show the groupFallback slot when nobody in the group has items.
+            local key = s.col .. "," .. s.row
+            if s.groupFallback and not groupHasAny[key] then
+                -- Show as empty placeholder at the base row.
+                s.iconFrame:ClearAllPoints()
+                s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                    PADDING + s.col * (ICON_SIZE + ICON_GAP),
+                    -(PADDING + s.row * (ICON_SIZE + ICON_GAP)))
+                s.iconFrame:Show()
+            else
+                s.iconFrame:Hide()
+            end
+        else
+            local row = s.row
+            if s.hideWhenEmpty then
+                local key = s.col .. "," .. s.row
+                local nextRow = dynRow[key] or s.row
+                row = nextRow
+                dynRow[key] = nextRow + 1
+            end
+            if row > maxRow then maxRow = row end
+            s.iconFrame:ClearAllPoints()
+            s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                PADDING + s.col * (ICON_SIZE + ICON_GAP),
+                -(PADDING + row * (ICON_SIZE + ICON_GAP)))
+            s.iconFrame:Show()
+        end
     end
 
     placeholderText:Hide()
-    frame:SetSize(GRID_W, GRID_H)
+    local rows = maxRow + 1
+    frame:SetSize(GRID_W, rows * ICON_SIZE + (rows - 1) * ICON_GAP + PADDING * 2)
     frame:Show()
 end
 
@@ -244,9 +287,15 @@ end
 -- =========================================================
 
 local function ScanBags()
+    local needLayout = false
     for _, s in ipairs(slots) do
         local count = GetItemCount(s.itemId, false, s.useCharges and true or false)
+        local wasKnown = s.known
         s.known = count > 0
+
+        if s.hideWhenEmpty and (wasKnown ~= s.known) then
+            needLayout = true
+        end
 
         if count ~= s.count then
             s.count = count
@@ -263,6 +312,7 @@ local function ScanBags()
             if tex then s.icon:SetTexture(tex) end
         end
     end
+    if needLayout then ApplyLayout() end
 end
 
 -- =========================================================
