@@ -38,8 +38,6 @@ ExsarUI.SetupMovableFrame(frame, mwDB)
 
 frame:Hide()
 
-local C_locked = false
-
 -- =========================================================
 -- Slot construction
 -- =========================================================
@@ -78,21 +76,15 @@ for i, mount in ipairs(TRACKED_MOUNTS) do
     end)
     s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Glow: extends 4 px beyond icon; slotBg (opaque, created after) covers
+    -- Active Glow: extends 4 px beyond icon; slotBg (opaque, created after) covers
     -- the center so only the outer ring shows as yellow.
-    s.glow = s.iconFrame:CreateTexture(nil, "BACKGROUND")
-    s.glow:SetPoint("TOPLEFT",     s.iconFrame, "TOPLEFT",     -4,  4)
-    s.glow:SetPoint("BOTTOMRIGHT", s.iconFrame, "BOTTOMRIGHT",  4, -4)
-    s.glow:SetColorTexture(1, 0.85, 0, 0.70)
-    s.glow:Hide()
+    s.glow = ExsarUI.CreateGlow(s.iconFrame, 1, 0.85, 0, 0.70)
 
     local slotBg = s.iconFrame:CreateTexture(nil, "BACKGROUND")
     slotBg:SetAllPoints()
     slotBg:SetColorTexture(0, 0, 0, 1.0)
 
-    s.icon = s.iconFrame:CreateTexture(nil, "ARTWORK")
-    s.icon:SetAllPoints()
-    s.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    s.icon = ExsarUI.CreateIcon(s.iconFrame)
 
     local iconTex = select(10, GetItemInfo(mount.id))
     if iconTex then s.icon:SetTexture(iconTex) end
@@ -172,7 +164,6 @@ frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, mwDB, 150, -240)
-        C_locked = mwDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then

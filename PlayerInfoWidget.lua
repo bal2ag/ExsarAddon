@@ -9,8 +9,7 @@ local UNIT = "player"
 
 local pDB = ExsarUI.MakeDB("playerInfo")
 
-local anchorX, anchorY = -460, 280
-local C_dragging = false
+local DEFAULT_X, DEFAULT_Y = -460, 280
 local C_enabled = true
 
 -- =========================================================
@@ -30,58 +29,17 @@ local BARS_Y         = -(PAD + PORT_SIZE + 5)
 local AURAS_Y        = BARS_Y - BAR_H - 3 - BAR_H - 5
 local PRE_AURA_H     = PAD + PORT_SIZE + 5 + BAR_H + 3 + BAR_H
 
-local POWER_COLORS = {
-    [0] = {0.00, 0.44, 0.87},
-    [1] = {0.78, 0.25, 0.25},
-    [2] = {1.00, 0.54, 0.00},
-    [3] = {1.00, 0.82, 0.00},
-    [4] = {0.25, 0.75, 0.25},
-}
-
-local function FormatNumber(n)
-    if n >= 1000 then return string.format("%.1fk", n / 1000) end
-    return tostring(n)
-end
+local POWER_COLORS = ExsarUI.POWER_COLORS
+local FormatNumber = ExsarLogic.FormatNumber
 
 -- =========================================================
 -- Main frame
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "PlayerInfoFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-
-local function ReAnchor()
-    if C_dragging then return end
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", UIParent, "CENTER", anchorX, anchorY)
-end
-
-frame:SetScript("OnDragStart", function(self)
-    C_dragging = true
-    self:StartMoving()
-end)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    C_dragging = false
-    local left = self:GetLeft()
-    local top  = self:GetTop()
-    if left and top then
-        local s = self:GetScale()
-        anchorX = left - UIParent:GetWidth()  / (2 * s)
-        anchorY = top  - UIParent:GetHeight() / (2 * s)
-        ReAnchor()
-        pDB().x = anchorX
-        pDB().y = anchorY
-    end
-end)
+local tlState = ExsarUI.SetupTopleftFrame(frame, pDB, DEFAULT_X, DEFAULT_Y)
+local ReAnchor = tlState.ReAnchor
 frame:Hide()
-
-local bg = frame:CreateTexture(nil, "BACKGROUND")
-bg:SetAllPoints()
-bg:SetColorTexture(0.05, 0.05, 0.05, 0.82)
 
 -- =========================================================
 -- Damage border (pulsating red on recent damage)
@@ -271,46 +229,13 @@ powerText:SetPoint("CENTER", powerBar, "CENTER", 0, 0)
 powerText:SetTextColor(1, 1, 1, 1)
 
 -- =========================================================
--- Aura icon factory
+-- Aura icons
 -- =========================================================
-
-local function CreateAuraIcon(isDebuff)
-    local f = CreateFrame("Frame", nil, frame)
-    f:SetSize(ICON_SIZE, ICON_SIZE)
-    local ring = f:CreateTexture(nil, "BACKGROUND")
-    ring:SetPoint("TOPLEFT",     f, "TOPLEFT",     -1,  1)
-    ring:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT",  1, -1)
-    if isDebuff then
-        ring:SetColorTexture(0.80, 0.12, 0.12, 1.0)
-    else
-        ring:SetColorTexture(0.45, 0.45, 0.45, 0.85)
-    end
-    local fill = f:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints()
-    fill:SetColorTexture(0, 0, 0, 1)
-    local icon = f:CreateTexture(nil, "ARTWORK")
-    icon:SetAllPoints()
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    f.icon = icon
-    local cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
-    cd:SetAllPoints()
-    cd:SetDrawEdge(false)
-    cd:EnableMouse(false)
-    if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(true) end
-    f.cooldown = cd
-    local stackText = f:CreateFontString(nil, "OVERLAY")
-    stackText:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-    stackText:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 1, 1)
-    stackText:SetTextColor(1, 1, 0.8, 1)
-    f.stackText = stackText
-    f:Hide()
-    return f
-end
 
 local debuffIcons = {}
 local buffIcons   = {}
-for i = 1, MAX_DEBUFFS do debuffIcons[i] = CreateAuraIcon(true)  end
-for i = 1, MAX_BUFFS   do buffIcons[i]   = CreateAuraIcon(false) end
+for i = 1, MAX_DEBUFFS do debuffIcons[i] = ExsarUI.CreateAuraIcon(frame, ICON_SIZE, true)  end
+for i = 1, MAX_BUFFS   do buffIcons[i]   = ExsarUI.CreateAuraIcon(frame, ICON_SIZE, false) end
 
 -- =========================================================
 -- Layout / resize
@@ -635,14 +560,9 @@ frame:RegisterEvent("PLAYER_LEVEL_UP")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = pDB()
-        anchorX   = db.x or -460
-        anchorY   = db.y or  280
-        C_enabled = db.enabled ~= false
-        LOW_HP_THRESHOLD = db.lowHpThreshold or 30
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
-        ReAnchor()
+        ExsarUI.RestoreTopleftPosition(self, pDB, tlState)
+        C_enabled = pDB().enabled ~= false
+        LOW_HP_THRESHOLD = pDB().lowHpThreshold or 30
         if C_enabled then
             UpdateUnit()
             UpdateAuras()
@@ -674,8 +594,8 @@ end)
 -- =========================================================
 
 ExsarAddon.AddSlashCommand("playerinforeset", function()
-    anchorX = -460
-    anchorY =  280
+    tlState.x = DEFAULT_X
+    tlState.y = DEFAULT_Y
     ReAnchor()
     pDB().x = nil
     pDB().y = nil
@@ -706,24 +626,9 @@ ExsarAddon.RegisterModule({
         )
         y = y - 30
 
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return pDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                pDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, pDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return pDB().locked and true or false end,
-            function(v)
-                pDB().locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, pDB, frame)
 
         ExsarAddon.CreateSlider(parent, "Low HP Alert (%)", 16, y, 5, 100, 1,
             function() return pDB().lowHpThreshold or 30 end,
@@ -736,15 +641,7 @@ ExsarAddon.RegisterModule({
         )
         y = y - 55
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            anchorX = -460
-            anchorY =  280
-            ReAnchor()
-            pDB().x = nil
-            pDB().y = nil
-            print(ADDON_NAME .. ": Player info widget position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddTopleftResetButton(parent, y, pDB, tlState, "Player info", DEFAULT_X, DEFAULT_Y)
 
         return y
     end,

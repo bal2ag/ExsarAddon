@@ -64,11 +64,7 @@ slotBg:SetAllPoints()
 slotBg:SetColorTexture(0, 0, 0, 1.0)
 
 -- Red warning glow (extends beyond icon, pulsed when Pack is active in combat)
-local warnGlow = iconFrame:CreateTexture(nil, "BORDER")
-warnGlow:SetPoint("TOPLEFT",     iconFrame, "TOPLEFT",     -6,  6)
-warnGlow:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT",  6, -6)
-warnGlow:SetColorTexture(1, 0.1, 0.1, 1)
-warnGlow:Hide()
+local warnGlow = ExsarUI.CreateGlow(iconFrame, 1, 0.1, 0.1, 1, 6, "BORDER")
 
 local icon = ExsarUI.CreateIcon(iconFrame)
 
@@ -78,21 +74,8 @@ local icon = ExsarUI.CreateIcon(iconFrame)
 
 local dashes = ExsarUI.BuildDashes(iconFrame, ICON_SIZE, DASH_COUNT, BORDER_W)
 
--- =========================================================
 -- Red X (shown when no aspect is active)
--- =========================================================
-
-local xLine1 = iconFrame:CreateLine(nil, "OVERLAY")
-xLine1:SetColorTexture(0.9, 0.15, 0.15, 1)
-xLine1:SetThickness(3)
-xLine1:SetStartPoint("TOPLEFT",     iconFrame, 4, -4)
-xLine1:SetEndPoint("BOTTOMRIGHT",   iconFrame, -4, 4)
-
-local xLine2 = iconFrame:CreateLine(nil, "OVERLAY")
-xLine2:SetColorTexture(0.9, 0.15, 0.15, 1)
-xLine2:SetThickness(3)
-xLine2:SetStartPoint("TOPRIGHT",    iconFrame, -4, -4)
-xLine2:SetEndPoint("BOTTOMLEFT",    iconFrame, 4, 4)
+local xLine1, xLine2 = ExsarUI.CreateRedX(iconFrame)
 
 -- =========================================================
 -- State
@@ -155,23 +138,22 @@ local animTicker = CreateFrame("Frame")
 animTicker:Show()
 animTicker:SetScript("OnUpdate", function()
     if not C_aspectActive then return end
+    local now = GetTime()
     local packWarning = C_inCombat and C_activeSpellId == PACK_BUFF_ID
-    local head = (GetTime() * DASH_SPEED * DASH_COUNT) % DASH_COUNT
+    local head = ExsarLogic.MarchingAntHead(now, DASH_SPEED, DASH_COUNT)
     local dr, dg, db = packWarning and 1 or 1,
                        packWarning and 0.1 or 0.85,
                        packWarning and 0.1 or 0
     for j, d in ipairs(dashes) do
-        local dist = (head - (j - 1) + DASH_COUNT) % DASH_COUNT
-        if dist < TAIL_LEN then
+        local alpha = ExsarLogic.MarchingAntAlpha(j - 1, head, DASH_COUNT, TAIL_LEN)
+        if alpha > 0 then
             d:SetColorTexture(dr, dg, db, 1)
-            d:SetAlpha(1.0 - (dist / TAIL_LEN) * 0.85)
-        else
-            d:SetAlpha(0)
         end
+        d:SetAlpha(alpha)
     end
     if packWarning then
         warnGlow:Show()
-        warnGlow:SetAlpha(0.55 + math.sin(GetTime() * 4) * 0.25)
+        warnGlow:SetAlpha(ExsarLogic.PulseAlpha(now, 0.64, 0.30, 0.80))
     else
         warnGlow:Hide()
     end
@@ -227,33 +209,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Aspect Tracker",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return aDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                aDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, aDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return aDB().locked and true or false end,
-            function(v)
-                aDB().locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, aDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", -350, 100)
-            aDB().x = nil
-            aDB().y = nil
-            print(ADDON_NAME .. ": Aspect tracker position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, aDB, frame, "Aspect tracker", -350, 100)
 
         return y
     end,

@@ -126,12 +126,7 @@ timeText:SetTextColor(1, 1, 1, 0.9)
 
 -- Placeholder label: shown when the widget is unlocked but no cast is active,
 -- so the bar can be positioned even when it would normally be invisible.
-local placeholderText = frame:CreateFontString(nil, "OVERLAY")
-placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-placeholderText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-placeholderText:SetTextColor(0.55, 0.55, 0.55, 0.9)
-placeholderText:SetText("Cast Bar")
-placeholderText:Hide()
+local placeholderText = ExsarUI.CreatePlaceholder(frame, "Cast Bar")
 
 frame:Hide()
 

@@ -8,8 +8,7 @@ local ADDON_NAME = "ExsarAddon"
 
 local rDB = ExsarUI.MakeDB("raidTargets")
 
-local anchorX, anchorY = 350, 175
-local C_dragging = false
+local DEFAULT_X, DEFAULT_Y = 350, 175
 local C_locked   = false
 
 -- =========================================================
@@ -36,48 +35,12 @@ local HealthColor = ExsarLogic.HealthColorGradient
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "RaidTargetFrame", UIParent)
 frame:SetSize(FRAME_W, 50)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
+local tlState = ExsarUI.SetupTopleftFrame(frame, rDB, DEFAULT_X, DEFAULT_Y)
+local ReAnchor = tlState.ReAnchor
 frame:Hide()
 
-local function ReAnchor()
-    if C_dragging then return end
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", UIParent, "CENTER", anchorX, anchorY)
-end
-
-frame:SetScript("OnDragStart", function(self)
-    C_dragging = true
-    self:StartMoving()
-end)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    C_dragging = false
-    local left = self:GetLeft()
-    local top  = self:GetTop()
-    if left and top then
-        local s = self:GetScale()
-        anchorX = left - UIParent:GetWidth()  / (2 * s)
-        anchorY = top  - UIParent:GetHeight() / (2 * s)
-        ReAnchor()
-        rDB().x = anchorX
-        rDB().y = anchorY
-    end
-end)
-
-local bg = frame:CreateTexture(nil, "BACKGROUND")
-bg:SetAllPoints()
-bg:SetColorTexture(0.05, 0.05, 0.05, 0.82)
-
 -- Placeholder shown when unlocked and no marked targets exist
-local placeholderText = frame:CreateFontString(nil, "OVERLAY")
-placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-placeholderText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-placeholderText:SetTextColor(0.55, 0.55, 0.55, 0.9)
-placeholderText:SetText("Raid Targets")
-placeholderText:Hide()
+local placeholderText = ExsarUI.CreatePlaceholder(frame, "Raid Targets")
 
 local PLACEHOLDER_H = 30
 
@@ -445,13 +408,8 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = rDB()
-        anchorX = db.x or 350
-        anchorY = db.y or 175
-        self:SetScale(db.scale or 1.0)
-        C_locked = db.locked and true or false
-        self:EnableMouse(not C_locked)
-        ReAnchor()
+        ExsarUI.RestoreTopleftPosition(self, rDB, tlState)
+        C_locked = rDB().locked and true or false
         pollFrame:Show()
         UpdateDisplay()
 
@@ -468,8 +426,8 @@ end)
 -- =========================================================
 
 ExsarAddon.AddSlashCommand("rtreset", function()
-    anchorX = 350
-    anchorY = 175
+    tlState.x = DEFAULT_X
+    tlState.y = DEFAULT_Y
     ReAnchor()
     rDB().x = nil
     rDB().y = nil
@@ -483,36 +441,14 @@ end)
 ExsarAddon.RegisterModule({
     name = "Raid Target Widget",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return rDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                rDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, rDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return C_locked end,
-            function(v)
-                rDB().locked = v
-                C_locked = v
-                frame:EnableMouse(not v)
-                UpdateDisplay()
-            end
-        )
-        y = y - 30
-
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            anchorX = 350
-            anchorY = 175
-            ReAnchor()
-            rDB().x = nil
-            rDB().y = nil
-            print(ADDON_NAME .. ": Raid target widget position reset.")
+        y = ExsarUI.AddLockCheckbox(parent, y, rDB, frame, function(v)
+            C_locked = v
+            UpdateDisplay()
         end)
-        y = y - 30
+
+        y = ExsarUI.AddTopleftResetButton(parent, y, rDB, tlState, "Raid target", DEFAULT_X, DEFAULT_Y)
 
         return y
     end,

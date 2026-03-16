@@ -28,12 +28,7 @@ local PULSE_MAX  = 0.85
 local frame = CreateFrame("Frame", ADDON_NAME .. "MendPetFrame", UIParent)
 ExsarUI.SetupMovableFrame(frame, mpDB)
 
-local placeholderText = frame:CreateFontString(nil, "OVERLAY")
-placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-placeholderText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-placeholderText:SetTextColor(0.55, 0.55, 0.55, 0.9)
-placeholderText:SetText("Mend Pet")
-placeholderText:Hide()
+local placeholderText = ExsarUI.CreatePlaceholder(frame, "Mend Pet")
 
 frame:Hide()
 
@@ -47,25 +42,13 @@ local iconFrame = CreateFrame("Frame", nil, frame)
 iconFrame:SetSize(ICON_SIZE, ICON_SIZE)
 iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -PADDING)
 
-local glow = iconFrame:CreateTexture(nil, "BACKGROUND")
-glow:SetPoint("TOPLEFT",     iconFrame, "TOPLEFT",     -3,  3)
-glow:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT",  3, -3)
-glow:SetColorTexture(0.3, 1.0, 0.4, 1.0)
+local glow = ExsarUI.CreateGlow(iconFrame, 0.3, 1.0, 0.4, 1.0, 3)
+glow:Show()
 glow:SetAlpha(0)
 
-local icon = iconFrame:CreateTexture(nil, "ARTWORK")
-icon:SetAllPoints()
-icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+local icon = ExsarUI.CreateIcon(iconFrame)
 
-local sweep = CreateFrame("Cooldown", nil, iconFrame, "CooldownFrameTemplate")
-sweep:SetAllPoints()
-sweep:SetDrawEdge(false)
-if sweep.SetHideCountdownNumbers then
-    sweep:SetHideCountdownNumbers(true)
-end
-if sweep.SetReverse then
-    sweep:SetReverse(true)
-end
+local sweep = ExsarUI.CreateSweep(iconFrame, { reverse = true })
 
 local timeText = iconFrame:CreateFontString(nil, "OVERLAY")
 timeText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
@@ -171,9 +154,7 @@ animTicker:SetScript("OnUpdate", function()
         glow:SetAlpha(0)
         return
     end
-    local pulse = PULSE_MIN + (PULSE_MAX - PULSE_MIN) *
-                  (0.5 + 0.5 * math.sin(GetTime() * 2 * math.pi * PULSE_FREQ))
-    glow:SetAlpha(pulse)
+    glow:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), PULSE_FREQ, PULSE_MIN, PULSE_MAX))
 end)
 
 -- =========================================================

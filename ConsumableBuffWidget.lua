@@ -49,8 +49,6 @@ ExsarUI.SetupMovableFrame(frame, cbDB)
 
 frame:Hide()
 
-local C_locked = false
-
 -- =========================================================
 -- Slot construction
 -- =========================================================
@@ -110,30 +108,16 @@ for i, item in ipairs(TRACKED_ITEMS) do
     slotBg:SetColorTexture(0, 0, 0, 1.0)
 
     -- Item icon
-    s.icon = s.iconFrame:CreateTexture(nil, "ARTWORK")
-    s.icon:SetAllPoints()
-    s.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    s.icon = ExsarUI.CreateIcon(s.iconFrame)
 
     local iconTex = select(10, GetItemInfo(item.id))
     if iconTex then s.icon:SetTexture(iconTex) end
 
     -- Reverse cooldown sweep: grey fills the icon as the buff expires.
-    s.sweep = CreateFrame("Cooldown", nil, s.iconFrame, "CooldownFrameTemplate")
-    s.sweep:SetAllPoints()
-    s.sweep:SetDrawEdge(false)
-    if s.sweep.SetHideCountdownNumbers then
-        s.sweep:SetHideCountdownNumbers(true)
-    end
-    if s.sweep.SetReverse then
-        s.sweep:SetReverse(true)
-    end
+    s.sweep = ExsarUI.CreateSweep(s.iconFrame, { reverse = true })
 
     -- Countdown timer text (center of icon; only shown when buff is active)
-    s.timeText = s.iconFrame:CreateFontString(nil, "OVERLAY")
-    s.timeText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-    s.timeText:SetPoint("CENTER", s.iconFrame, "CENTER", 0, 0)
-    s.timeText:SetTextColor(1, 1, 1, 1)
-    s.timeText:SetText("")
+    s.timeText = ExsarUI.CreateCountdownText(s.iconFrame)
 
     -- Stack count (bottom-right corner)
     s.countText = s.iconFrame:CreateFontString(nil, "OVERLAY")
@@ -283,7 +267,6 @@ frame:RegisterEvent("UNIT_PET")
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, cbDB, 200, -160)
-        C_locked = cbDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then

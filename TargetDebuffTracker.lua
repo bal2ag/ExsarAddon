@@ -41,12 +41,7 @@ local TAIL_LEN   = 5     -- dashes in the bright trailing tail
 local frame = CreateFrame("Frame", ADDON_NAME .. "TargetDebuffFrame", UIParent)
 ExsarUI.SetupMovableFrame(frame, tDB)
 
-local placeholderText = frame:CreateFontString(nil, "OVERLAY")
-placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-placeholderText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-placeholderText:SetTextColor(0.55, 0.55, 0.55, 0.9)
-placeholderText:SetText("Debuffs")
-placeholderText:Hide()
+local placeholderText = ExsarUI.CreatePlaceholder(frame, "Debuffs")
 
 frame:Hide()
 

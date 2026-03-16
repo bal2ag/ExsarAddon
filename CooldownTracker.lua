@@ -122,21 +122,11 @@ for g, group in ipairs(SPELL_GROUPS) do
         sf.frame:SetAttribute("type", "spell")
         sf.frame:SetAttribute("spell", spellDef.name)
 
-        sf.icon = sf.frame:CreateTexture(nil, "BACKGROUND")
-        sf.icon:SetAllPoints()
-        sf.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- trim the default icon border
+        sf.icon = ExsarUI.CreateIcon(sf.frame, "BACKGROUND")
 
-        sf.cooldown = CreateFrame("Cooldown", nil, sf.frame, "CooldownFrameTemplate")
-        sf.cooldown:SetAllPoints()
-        sf.cooldown:SetDrawEdge(false)
-        if sf.cooldown.SetHideCountdownNumbers then
-            sf.cooldown:SetHideCountdownNumbers(true)
-        end
+        sf.cooldown = ExsarUI.CreateSweep(sf.frame)
 
-        sf.text = sf.frame:CreateFontString(nil, "OVERLAY")
-        sf.text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-        sf.text:SetPoint("CENTER", sf.frame, "CENTER", 0, 0)
-        sf.text:SetText("")
+        sf.text = ExsarUI.CreateCountdownText(sf.frame)
 
         sf.glow = AddGlow(sf.frame)
 
@@ -171,21 +161,11 @@ local function MakeIconFrame(slotId)
     f.frame:SetAttribute("type", "macro")
     f.frame:SetAttribute("macrotext", "/use " .. slotId)
 
-    f.icon = f.frame:CreateTexture(nil, "BACKGROUND")
-    f.icon:SetAllPoints()
-    f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    f.icon = ExsarUI.CreateIcon(f.frame, "BACKGROUND")
 
-    f.cooldown = CreateFrame("Cooldown", nil, f.frame, "CooldownFrameTemplate")
-    f.cooldown:SetAllPoints()
-    f.cooldown:SetDrawEdge(false)
-    if f.cooldown.SetHideCountdownNumbers then
-        f.cooldown:SetHideCountdownNumbers(true)
-    end
+    f.cooldown = ExsarUI.CreateSweep(f.frame)
 
-    f.text = f.frame:CreateFontString(nil, "OVERLAY")
-    f.text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-    f.text:SetPoint("CENTER", f.frame, "CENTER", 0, 0)
-    f.text:SetText("")
+    f.text = ExsarUI.CreateCountdownText(f.frame)
 
     f.glow = AddGlow(f.frame)
 

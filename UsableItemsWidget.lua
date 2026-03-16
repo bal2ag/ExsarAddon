@@ -69,12 +69,7 @@ local frame = CreateFrame("Frame", ADDON_NAME .. "UsableItemsFrame", UIParent)
 ExsarUI.SetupMovableFrame(frame, uiDB)
 
 
-local placeholderText = frame:CreateFontString(nil, "OVERLAY")
-placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-placeholderText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-placeholderText:SetTextColor(0.55, 0.55, 0.55, 0.9)
-placeholderText:SetText("Items")
-placeholderText:Hide()
+local placeholderText = ExsarUI.CreatePlaceholder(frame, "Items")
 
 frame:Hide()
 
@@ -130,14 +125,10 @@ for i, item in ipairs(TRACKED_ITEMS) do
     end)
     s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Ready border: golden ring around the icon.
+    -- Active Glow (1px border ring): golden ring around the icon.
     -- Created first so slotBg (same layer, created after) covers the center,
     -- leaving only the outer 1px ring visible.
-    s.border = s.iconFrame:CreateTexture(nil, "BACKGROUND")
-    s.border:SetPoint("TOPLEFT",     s.iconFrame, "TOPLEFT",     -1,  1)
-    s.border:SetPoint("BOTTOMRIGHT", s.iconFrame, "BOTTOMRIGHT",  1, -1)
-    s.border:SetColorTexture(1, 0.82, 0.25, 0.85)
-    s.border:Hide()
+    s.border = ExsarUI.CreateGlow(s.iconFrame, 1, 0.82, 0.25, 0.85, 1)
 
     -- Slot background: fully opaque so it covers the border's center area,
     -- leaving only the outer 1px ring of the border visible.
@@ -146,9 +137,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
     slotBg:SetColorTexture(0, 0, 0, 1.0)
 
     -- Item icon
-    s.icon = s.iconFrame:CreateTexture(nil, "ARTWORK")
-    s.icon:SetAllPoints()
-    s.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    s.icon = ExsarUI.CreateIcon(s.iconFrame)
 
     -- Attempt to pre-load icon; may return nil if item data not yet cached —
     -- retried in ScanBags once the item is confirmed to be in the player's bags.
@@ -156,13 +145,8 @@ for i, item in ipairs(TRACKED_ITEMS) do
     if iconTex then s.icon:SetTexture(iconTex) end
 
     -- Cooldown sweep
-    s.cooldown = CreateFrame("Cooldown", nil, s.iconFrame, "CooldownFrameTemplate")
-    s.cooldown:SetAllPoints()
-    s.cooldown:SetDrawEdge(false)
+    s.cooldown = ExsarUI.CreateSweep(s.iconFrame)
     s.cooldown:EnableMouse(false)
-    if s.cooldown.SetHideCountdownNumbers then
-        s.cooldown:SetHideCountdownNumbers(true)
-    end
 
     -- Stack count (bottom-right corner; hidden when count is 1)
     s.countText = s.iconFrame:CreateFontString(nil, "OVERLAY")
@@ -172,11 +156,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
     s.countText:SetText("")
 
     -- Cooldown timer (center of icon)
-    s.timeText = s.iconFrame:CreateFontString(nil, "OVERLAY")
-    s.timeText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-    s.timeText:SetPoint("CENTER", s.iconFrame, "CENTER", 0, 0)
-    s.timeText:SetTextColor(1, 1, 1, 1)
-    s.timeText:SetText("")
+    s.timeText = ExsarUI.CreateCountdownText(s.iconFrame)
 
     s.iconFrame:Hide()
     slots[#slots + 1] = s

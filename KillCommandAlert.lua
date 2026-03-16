@@ -114,9 +114,7 @@ end
 
 frame:SetScript("OnUpdate", function(self, elapsed)
     K.pulseTime = K.pulseTime + elapsed
-    -- Sine wave at ~0.8 Hz; alpha oscillates between 0.65 and 1.0
-    local pulse = 0.825 + 0.175 * math.sin(K.pulseTime * 2 * math.pi * 0.8)
-    frame:SetAlpha(pulse)
+    frame:SetAlpha(ExsarLogic.PulseAlpha(K.pulseTime, 0.8, 0.65, 1.0))
 end)
 
 -- =========================================================

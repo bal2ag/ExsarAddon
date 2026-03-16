@@ -25,6 +25,8 @@ Then reload the UI in-game with `/reload`. There is no build step.
 | File | Purpose |
 |---|---|
 | `ExsarAddon.toc` | Addon metadata, interface version, SavedVariables declaration |
+| `ExsarLogic.lua` | Pure Lua logic helpers (no WoW API dependency); testable outside the client. Timer formatting, health colors, cooldown state, grid math, anchor offset calc, etc. |
+| `ExsarUI.lua` | Shared WoW UI construction helpers. `MakeDB`, `SetupMovableFrame`, `SetupTopleftFrame`, `RestorePosition`, `CreateIcon`, `CreateSweep`, `CreateAuraIcon`, `CreateGlow`, `BuildDashes`, `AnimateDashes`, config panel helpers (`AddScaleSlider`, `AddLockCheckbox`, `AddResetButton`), `POWER_COLORS` |
 | `Core.lua` | `ExsarAddon` namespace, module registration API, shared config widget helpers, config panel, slash command dispatch, DB init |
 | `CooldownTracker.lua` | Cooldown tracker feature module |
 | `RangedSwingTimer.lua` | Ranged auto shot cycle tracker |
@@ -35,10 +37,25 @@ Then reload the UI in-game with `/reload`. There is no build step.
 | `TargetDebuffTracker.lua` | Single-column vertical widget showing tracked debuffs (Hunter's Mark, Serpent Sting) currently active on the player's target; marching-ants border, reverse sweep, countdown timer |
 
 **Adding a new feature module:**
-1. Create a new `.lua` file and add it to `ExsarAddon.toc`
+1. Create a new `.lua` file and add it to `ExsarAddon.toc` (after `ExsarUI.lua` and `Core.lua`)
 2. Call `ExsarAddon.RegisterModule({ name = "...", BuildConfig = function(parent, y) ... return y end })`
 3. Call `ExsarAddon.AddSlashCommand(cmd, fn)` for any slash sub-commands
-4. Store settings under `ExsarAddonDB.<moduleName>` (use a lazy-init helper like `cDB()` in CooldownTracker.lua)
+4. Store settings under `ExsarAddonDB.<moduleName>` via `ExsarUI.MakeDB("moduleName")`
+
+**Code reuse principle:** Always prefer using shared helpers from `ExsarLogic.lua` and `ExsarUI.lua` over writing bespoke code. When building a new widget, check the shared libraries first — most common patterns are already available. If you write new logic that could be reused by other modules, extract it into the appropriate shared library: pure logic goes in `ExsarLogic.lua` (testable without WoW API), UI construction goes in `ExsarUI.lua`. Never duplicate code across module files. Refer to UI effects by their standard names (see below) and always use the shared implementation.
+
+**Standard UI effects** (defined in `ExsarUI.lua` and `ExsarLogic.lua`):
+
+| Effect | Description | API |
+|---|---|---|
+| **Active Glow** | Solid colored rectangle extending beyond an icon edge, used to indicate active/ready state. Gold by default; also used as a 1px border ring (size=1) or red warning glow. | `ExsarUI.CreateGlow(frame, r, g, b, a, size, layer)` |
+| **Marching Ants** | Animated gold dashed border rotating around an icon perimeter. A bright trailing tail fades behind the head. Standard params: 16 dashes, speed 1.5, tail length 5. | `ExsarUI.BuildDashes(iconFrame, iconSize, dashCount, borderW)` + `ExsarUI.AnimateDashes(slots, now, speed, dashCount, tailLen)` (or `ExsarLogic.MarchingAntHead` / `MarchingAntAlpha` for custom per-dash logic) |
+| **Cooldown Sweep** | WoW's built-in circular pie-chart timer overlay. Normal mode fills as cooldown elapses; reverse mode empties as a buff expires. | `ExsarUI.CreateSweep(frame, { reverse = bool })` |
+| **Red X** | Two diagonal red lines forming an X across an icon, indicating an inactive or missing state. | `ExsarUI.CreateRedX(frame, inset, thickness)` |
+| **Pulse** | Sine-wave alpha oscillation (breathing effect). Used for alert/ready indicators. Params: frequency (Hz), min/max alpha. | `ExsarLogic.PulseAlpha(time, frequency, minAlpha, maxAlpha)` |
+| **Dimmed** | Desaturated + reduced alpha for unavailable/out-of-stock items. Standard: `SetDesaturated(true)` + `SetAlpha(0.35)`. In-combat dimming: `SetAlpha(0.5)`, no desaturation. | Inline pattern (icon:SetDesaturated / icon:SetAlpha) |
+
+When adding a new widget that needs a highlight, border, alert, or status indicator, use one of these standard effects rather than creating a bespoke visual.
 
 **Core API available to modules:**
 - `ExsarAddon.RegisterModule(module)` — registers the module; `module.BuildConfig(parent, y)` must return the final y position after placing widgets

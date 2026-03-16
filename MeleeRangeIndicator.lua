@@ -143,12 +143,7 @@ end
 -- Cooldown sweep overlay
 -- =========================================================
 
-local cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
-cooldown:SetAllPoints()
-cooldown:SetDrawEdge(false)
-if cooldown.SetHideCountdownNumbers then
-    cooldown:SetHideCountdownNumbers(true)
-end
+local cooldown = ExsarUI.CreateSweep(frame)
 -- Make the swipe the visual indicator: a grey circle that empties like a pie
 if cooldown.SetSwipeColor then
     cooldown:SetSwipeColor(0.4, 0.4, 0.4, 0.85)

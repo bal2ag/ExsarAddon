@@ -39,7 +39,6 @@ ExsarUI.SetupMovableFrame(frame, fdDB)
 
 frame:Hide()
 
-local C_locked = false
 local C_inCombat = false
 
 -- =========================================================
@@ -77,9 +76,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
     slotBg:SetAllPoints()
     slotBg:SetColorTexture(0, 0, 0, 1.0)
 
-    s.icon = s.iconFrame:CreateTexture(nil, "ARTWORK")
-    s.icon:SetAllPoints()
-    s.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    s.icon = ExsarUI.CreateIcon(s.iconFrame)
 
     -- Pre-load icon if item data is already cached.
     local iconTex = select(10, GetItemInfo(item.id))
@@ -152,7 +149,6 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, fdDB, 150, -200)
-        C_locked = fdDB().locked and true or false
         ApplyLayout()
 
     elseif event == "PLAYER_ENTERING_WORLD" then

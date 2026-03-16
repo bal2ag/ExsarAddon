@@ -33,12 +33,7 @@ placeholderBg:SetAllPoints()
 placeholderBg:SetColorTexture(0, 0, 0, 0.6)
 placeholderBg:Hide()
 
-local placeholderText = frame:CreateFontString(nil, "OVERLAY")
-placeholderText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-placeholderText:SetPoint("CENTER", frame, "CENTER", 0, 0)
-placeholderText:SetTextColor(0.55, 0.55, 0.55, 0.9)
-placeholderText:SetText("GCD")
-placeholderText:Hide()
+local placeholderText = ExsarUI.CreatePlaceholder(frame, "GCD")
 
 -- =========================================================
 -- Sweep area (just the cooldown sweep, no background)
@@ -48,12 +43,7 @@ local sweepFrame = CreateFrame("Frame", nil, frame)
 sweepFrame:SetSize(ICON_SIZE, ICON_SIZE)
 sweepFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -PADDING)
 
-local cooldown = CreateFrame("Cooldown", nil, sweepFrame, "CooldownFrameTemplate")
-cooldown:SetAllPoints()
-cooldown:SetDrawEdge(false)
-if cooldown.SetHideCountdownNumbers then
-    cooldown:SetHideCountdownNumbers(true)
-end
+local cooldown = ExsarUI.CreateSweep(sweepFrame)
 -- Make the swipe itself the visual: grey circle that empties like a pie.
 -- No background needed — the swipe IS the indicator.
 if cooldown.SetSwipeColor then

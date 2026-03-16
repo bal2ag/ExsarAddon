@@ -109,9 +109,7 @@ end
 
 frame:SetScript("OnUpdate", function(self, elapsed)
     S.pulseTime = S.pulseTime + elapsed
-    local alpha = (PULSE_LO + PULSE_HI) / 2
-        + (PULSE_HI - PULSE_LO) / 2 * math.sin(S.pulseTime * 2 * math.pi * PULSE_HZ)
-    frame:SetAlpha(alpha)
+    frame:SetAlpha(ExsarLogic.PulseAlpha(S.pulseTime, PULSE_HZ, PULSE_LO, PULSE_HI))
 end)
 
 -- =========================================================

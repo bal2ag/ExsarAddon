@@ -8,12 +8,7 @@ local ADDON_NAME = "ExsarAddon"
 
 local tDB = ExsarUI.MakeDB("targetInfo")
 
--- Desired TOPLEFT offset from UIParent CENTER; updated on drag and reset.
--- Storing these lets ApplyLayout re-anchor explicitly after every SetSize call,
--- preventing WoW's internal anchor-to-CENTER conversion (done by StopMovingOrSizing)
--- from causing the top-left corner to drift when the frame height changes.
-local anchorX, anchorY = -280, 175
-local C_dragging = false
+local DEFAULT_X, DEFAULT_Y = -280, 175
 
 -- =========================================================
 -- Layout constants
@@ -46,13 +41,7 @@ local PRE_AURA_H = PAD + PORT_SIZE + 5 + BAR_H + 3 + BAR_H
 -- Power type colours
 -- =========================================================
 
-local POWER_COLORS = {
-    [0] = {0.00, 0.44, 0.87},   -- mana
-    [1] = {0.78, 0.25, 0.25},   -- rage
-    [2] = {1.00, 0.54, 0.00},   -- focus (hunter pets)
-    [3] = {1.00, 0.82, 0.00},   -- energy
-    [4] = {0.25, 0.75, 0.25},   -- happiness (hunter pet in TBC)
-}
+local POWER_COLORS = ExsarUI.POWER_COLORS
 
 -- =========================================================
 -- Helpers
@@ -79,42 +68,9 @@ local FormatNumber = ExsarLogic.FormatNumber
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "TargetInfoFrame", UIParent)
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetClampedToScreen(true)
-
--- Re-anchor at TOPLEFT using stored offsets.  Called after every SetSize so
--- the top-left corner stays fixed regardless of WoW's internal anchor changes.
-local function ReAnchor()
-    if C_dragging then return end  -- don't interrupt an active drag
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", UIParent, "CENTER", anchorX, anchorY)
-end
-
-frame:SetScript("OnDragStart", function(self)
-    C_dragging = true
-    self:StartMoving()
-end)
-frame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    C_dragging = false
-    local left = self:GetLeft()
-    local top  = self:GetTop()
-    if left and top then
-        local s = self:GetScale()
-        anchorX = left - UIParent:GetWidth()  / (2 * s)
-        anchorY = top  - UIParent:GetHeight() / (2 * s)
-        ReAnchor()
-        tDB().x = anchorX
-        tDB().y = anchorY
-    end
-end)
+local tlState = ExsarUI.SetupTopleftFrame(frame, tDB, DEFAULT_X, DEFAULT_Y)
+local ReAnchor = tlState.ReAnchor
 frame:Hide()
-
-local bg = frame:CreateTexture(nil, "BACKGROUND")
-bg:SetAllPoints()
-bg:SetColorTexture(0.05, 0.05, 0.05, 0.82)
 
 -- =========================================================
 -- Portrait
@@ -193,56 +149,11 @@ powerText:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
 powerText:SetPoint("CENTER", powerBar, "CENTER", 0, 0)
 powerText:SetTextColor(1, 1, 1, 1)
 
--- =========================================================
--- Aura icon factory
--- =========================================================
-
-local function CreateAuraIcon(isDebuff)
-    local f = CreateFrame("Frame", nil, frame)
-    f:SetSize(ICON_SIZE, ICON_SIZE)
-
-    -- 1px colour ring (created first at BACKGROUND so it shows behind the icon)
-    local ring = f:CreateTexture(nil, "BACKGROUND")
-    ring:SetPoint("TOPLEFT",     f, "TOPLEFT",     -1,  1)
-    ring:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT",  1, -1)
-    if isDebuff then
-        ring:SetColorTexture(0.80, 0.12, 0.12, 1.0)
-    else
-        ring:SetColorTexture(0.45, 0.45, 0.45, 0.85)
-    end
-
-    -- Opaque black fill covers ring center, leaving only the outer pixel visible
-    local fill = f:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints()
-    fill:SetColorTexture(0, 0, 0, 1)
-
-    local icon = f:CreateTexture(nil, "ARTWORK")
-    icon:SetAllPoints()
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    f.icon = icon
-
-    local cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
-    cd:SetAllPoints()
-    cd:SetDrawEdge(false)
-    cd:EnableMouse(false)
-    if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(true) end
-    f.cooldown = cd
-
-    local stackText = f:CreateFontString(nil, "OVERLAY")
-    stackText:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-    stackText:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 1, 1)
-    stackText:SetTextColor(1, 1, 0.8, 1)
-    f.stackText = stackText
-
-    f:Hide()
-    return f
-end
-
 local debuffIcons = {}
 local buffIcons   = {}
 
-for i = 1, MAX_DEBUFFS do debuffIcons[i] = CreateAuraIcon(true)  end
-for i = 1, MAX_BUFFS   do buffIcons[i]   = CreateAuraIcon(false) end
+for i = 1, MAX_DEBUFFS do debuffIcons[i] = ExsarUI.CreateAuraIcon(frame, ICON_SIZE, true)  end
+for i = 1, MAX_BUFFS   do buffIcons[i]   = ExsarUI.CreateAuraIcon(frame, ICON_SIZE, false) end
 
 -- =========================================================
 -- Layout / resize
@@ -457,12 +368,7 @@ frame:RegisterEvent("UNIT_PORTRAIT_UPDATE")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        local db = tDB()
-        anchorX = db.x or -280
-        anchorY = db.y or  175
-        ReAnchor()
-        self:SetScale(db.scale or 1.0)
-        self:EnableMouse(not db.locked)
+        ExsarUI.RestoreTopleftPosition(self, tDB, tlState)
         if UnitExists("target") then
             UpdateTarget()
             UpdateAuras()
@@ -506,8 +412,8 @@ end)
 -- =========================================================
 
 ExsarAddon.AddSlashCommand("targetinforeset", function()
-    anchorX = -280
-    anchorY =  175
+    tlState.x = DEFAULT_X
+    tlState.y = DEFAULT_Y
     ReAnchor()
     tDB().x = nil
     tDB().y = nil
@@ -521,34 +427,11 @@ end)
 ExsarAddon.RegisterModule({
     name = "Target Info",
     BuildConfig = function(parent, y)
-        ExsarAddon.CreateSlider(parent, "Widget Scale", 16, y, 0.5, 3.0, 0.05,
-            function() return tDB().scale or 1.0 end,
-            function(v)
-                local rounded = math.floor(v * 20 + 0.5) / 20
-                tDB().scale = rounded
-                frame:SetScale(rounded)
-            end
-        )
-        y = y - 55
+        y = ExsarUI.AddScaleSlider(parent, y, tDB, frame)
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return tDB().locked and true or false end,
-            function(v)
-                tDB().locked = v
-                frame:EnableMouse(not v)
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, tDB, frame)
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            anchorX = -280
-            anchorY =  175
-            ReAnchor()
-            tDB().x = nil
-            tDB().y = nil
-            print(ADDON_NAME .. ": Target info widget position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddTopleftResetButton(parent, y, tDB, tlState, "Target info", DEFAULT_X, DEFAULT_Y)
 
         return y
     end,
