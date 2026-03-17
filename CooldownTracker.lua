@@ -29,8 +29,13 @@ local SPELL_GROUPS = {
 local MIN_COOLDOWN_DURATION = ExsarLogic.MIN_COOLDOWN_DURATION
 
 -- Glow border: bright highlight when ability is ready
-local GLOW_COLOR = { 1.0, 0.82, 0.25, 0.45 }
-local GLOW_SIZE  = 3  -- pixels outward from icon edge
+local GLOW_COLOR = { 1.0, 0.82, 0.25, 0.85 }
+local GLOW_SIZE  = 4  -- pixels outward from icon edge
+
+-- Glow pulse: alpha oscillation to draw the eye
+local GLOW_PULSE_HZ  = 1.2
+local GLOW_PULSE_MIN = 0.45
+local GLOW_PULSE_MAX = 1.0
 
 local function AddGlow(parentFrame)
     local glow = {}
@@ -67,14 +72,17 @@ local function AddGlow(parentFrame)
     return glow
 end
 
-local function SetGlowShown(glow, show)
-    for _, tex in ipairs(glow) do
-        if show then tex:Show() else tex:Hide() end
+local function SetGlowActive(entry, active)
+    entry.glowActive = active
+    if active then
+        for _, tex in ipairs(entry.glow) do tex:Show() end
+    else
+        for _, tex in ipairs(entry.glow) do tex:Hide() end
     end
 end
 
 local ICON_SIZE = 29
-local ICON_GAP  = 4
+local ICON_GAP  = 4 + GLOW_SIZE * 2  -- extra space so glow borders don't overlap neighbors
 local GROUP_GAP = 14  -- default extra space between groups
 local PADDING   = 6
 
@@ -315,20 +323,20 @@ local function UpdateCooldowns()
                 sf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 sf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
-                SetGlowShown(sf.glow, false)
+                SetGlowActive(sf, false)
             elseif onGCD then
                 sf.icon:SetDesaturated(false)
                 sf.icon:SetAlpha(1.0)
                 sf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 sf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
-                SetGlowShown(sf.glow, false)
+                SetGlowActive(sf, false)
             else
                 sf.icon:SetDesaturated(false)
                 sf.icon:SetAlpha(1.0)
                 sf.cooldown:SetCooldown(0, 0)
                 sf.text:SetText("")
-                SetGlowShown(sf.glow, InCombatLockdown())
+                SetGlowActive(sf, InCombatLockdown())
             end
         end
     end
@@ -347,21 +355,38 @@ local function UpdateTrinketCooldowns()
                 tf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 tf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
-                SetGlowShown(tf.glow, false)
+                SetGlowActive(tf, false)
             elseif onGCD then
                 tf.icon:SetDesaturated(false)
                 tf.icon:SetAlpha(1.0)
                 tf.cooldown:SetCooldown(start, duration)
                 local remaining = (start + duration) - now
                 tf.text:SetText(remaining > 0 and FormatCooldown(remaining) or "")
-                SetGlowShown(tf.glow, false)
+                SetGlowActive(tf, false)
             else
                 tf.icon:SetDesaturated(false)
                 tf.icon:SetAlpha(1.0)
                 tf.cooldown:SetCooldown(0, 0)
                 tf.text:SetText("")
-                SetGlowShown(tf.glow, InCombatLockdown())
+                SetGlowActive(tf, InCombatLockdown())
             end
+        end
+    end
+end
+
+local PulseAlpha = ExsarLogic.PulseAlpha
+
+local function UpdateGlowPulse()
+    local now = GetTime()
+    local alpha = PulseAlpha(now, GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX)
+    for _, sf in ipairs(spellFrames) do
+        if sf.glowActive then
+            for _, tex in ipairs(sf.glow) do tex:SetAlpha(alpha) end
+        end
+    end
+    for _, tf in ipairs(trinketFrames) do
+        if tf.glowActive then
+            for _, tex in ipairs(tf.glow) do tex:SetAlpha(alpha) end
         end
     end
 end
@@ -374,6 +399,7 @@ mainFrame:SetScript("OnUpdate", function(self, elapsed)
         UpdateCooldowns()
         UpdateTrinketCooldowns()
     end
+    UpdateGlowPulse()
 end)
 
 -- =========================================================
