@@ -17,7 +17,7 @@ Then reload the UI in-game with `/reload`. There is no build step.
 ## Quality Checks
 
 Run these before committing changes:
-- `busted` — runs unit tests (99 tests covering ExsarLogic and MakeDB)
+- `busted` — runs unit tests (155 tests covering ExsarLogic and MakeDB)
 - `luacheck .` — static analysis; should report 0 warnings / 0 errors
 - `luac -p *.lua` — syntax check (redundant with luacheck but faster)
 
@@ -44,6 +44,20 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `ActiveEffectsTracker.lua` | Icons with marching-ants border and countdown for active buffs (Quick Shots, Haste Potion, Bloodlust, Heroism, Rapid Fire, The Beast Within, Drums of Battle) plus trinket on-use buffs |
 | `UsableItemsWidget.lua` | Mini action bar showing consumables in bags (Super Healing Potion 22829, Super Mana Potion 22832, Haste Potion 22838, Drums of Battle 29529); click to use; Drums cooldown driven by Tinnitus debuff |
 | `TargetDebuffTracker.lua` | Single-column vertical widget showing tracked debuffs (Hunter's Mark, Serpent Sting) currently active on the player's target; marching-ants border, reverse sweep, countdown timer |
+| `MendPetTracker.lua` | Mend Pet HoT tracker |
+| `FoodAndDrinkWidget.lua` | Food/drink icons, dims in combat |
+| `ConsumableBuffWidget.lua` | Always-visible consumable buff icons with bag counts, marching-ants + reverse sweep when buff active; supports ranked item fallback (e.g. Scroll of Agility V→I) and weapon enchant tracking |
+| `MountWidget.lua` | Mount-related widget |
+| `TargetInfoWidget.lua` | Target portrait/health/auras, hides when no target |
+| `PlayerInfoWidget.lua` | Player portrait/health/auras, always visible (toggleable); low-HP burst warning with optional sound alert |
+| `PetInfoWidget.lua` | Pet portrait/health/auras, shows only when pet exists; low-HP burst warning and damage border with optional sound alerts |
+| `AspectTracker.lua` | Aspect of the Pack warning — pulses red glow + red marching-ants when Pack is active in combat |
+| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating gold glow ring when swing is ready in range; optional range-change sound effects |
+| `GlobalCooldownTracker.lua` | Global cooldown tracker |
+| `RaidTargetWidget.lua` | Compact info for all units marked with raid target icons; click to target; scans nameplates + party/raid targets |
+| `PetAggressiveAlert.lua` | Pulsing red skull + text when pet is on aggressive mode |
+| `PetHappinessTracker.lua` | Granular happiness gauge estimating exact happiness points (0–1050); reverse sweep + timer showing time until tier drop; optional sound alert on happiness drop |
+| `AggroAlert.lua` | Pulsating red text alert when enemy mobs are targeting the player; scans nameplates + party/raid target-of-target; configurable for solo/party/raid contexts; plays raid warning sound on aggro gain |
 
 **Adding a new feature module:**
 1. Create a new `.lua` file and add it to `ExsarAddon.toc` (after `ExsarUI.lua` and `Core.lua`)
@@ -67,6 +81,16 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | **Dimmed** | Desaturated + reduced alpha for unavailable/out-of-stock items. Standard: `SetDesaturated(true)` + `SetAlpha(0.35)`. In-combat dimming: `SetAlpha(0.5)`, no desaturation. | Inline pattern (icon:SetDesaturated / icon:SetAlpha) |
 
 When adding a new widget that needs a highlight, border, alert, or status indicator, use one of these standard effects rather than creating a bespoke visual.
+
+**Sound effects pattern:**
+Several modules play `PlaySound(soundKitID, "Master")` on state transitions (e.g. aggro gained, low HP threshold crossed, melee range entered/left). Standard pattern:
+- Track the previous state to detect edges (e.g. `wasActive` → `isActive`)
+- Use a cooldown timer (`GetTime() - lastSoundTime >= COOLDOWN`) to prevent spam
+- Gate behind a per-module DB flag (e.g. `db.lowHpSound ~= false`) with a config checkbox
+- Defaults to enabled (`~= false` check, so `nil` counts as enabled)
+
+**Ranked item fallback** (`ConsumableBuffWidget`):
+Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-first) automatically show the highest rank with bag stock, falling back to the highest rank (greyed out) when none are available. Uses `ExsarLogic.SelectBestRank(ranks, getCount)` for the selection logic. Buff detection checks all rank buff IDs. Secure button `item` attribute is updated out of combat when the active rank changes.
 
 **Core API available to modules:**
 - `ExsarAddon.RegisterModule(module)` — registers the module; `module.BuildConfig(parent, y)` must return the final y position after placing widgets
@@ -107,6 +131,22 @@ When adding a new widget that needs a highlight, border, alert, or status indica
 - `SPELL_UPDATE_USABLE` + `SPELL_UPDATE_COOLDOWN` + `UNIT_PET` events drive `UpdateAura()` for fast response; a 0.5s `pollFrame` catches missed transitions
 - `frame:SetAlpha()` in OnUpdate pulses the entire frame at ~0.8 Hz (65%–100% alpha), avoiding per-line iteration
 
+**`AggroAlert.lua` structure:**
+- Pulsating red text with thick outline (`FRIZQT__ 18pt, OUTLINE, THICKOUTLINE`) + red glow border (4-edge textures)
+- Aggro scanning combines three strategies, deduplicated by GUID: (1) player target + pet target, (2) party/raid members' targets (`party1target`..`party4target`, `raid1target`..`raid40target`, boss frames), (3) nameplate units tracked via `NAME_PLATE_UNIT_ADDED`/`REMOVED`
+- Each candidate unit checked with `UnitIsEnemy` + `not UnitIsDead` + `UnitIsUnit(unit.."target", "player")`
+- Group context gating via `ExsarLogic.AggroAlertEnabled` — configurable checkboxes for solo/party/raid
+- Sound plays on aggro gain edge (not active → active) with 3s cooldown
+- Placeholder text shown when unlocked; glow border shown in both active and unlocked states
+
+**`MeleeRangeIndicator.lua` structure:**
+- Crossed-swords icon with circular mask background; gold/grey color modes for in-range/out-of-range
+- Range check via `IsSpellInRange("Wing Clip", "target")` polled at 0.1s; only shown in combat
+- Swing timer from combat log `SWING_DAMAGE`/`SWING_MISSED` + Raptor Strike spell IDs
+- Three visual states: ready (full alpha + gold swords + glow ring + blade glow), on-cooldown (half alpha + sweep), out-of-range (grey + half alpha + sweep)
+- Pulsating gold glow ring (3.0 Hz) behind the icon in ready state only
+- Optional enter/leave range sound effects (SoundKit 154 / 698)
+
 ## Key WoW API Used
 
 - `GetSpellInfo(spellName)` — returns name, rank, icon texture path for the highest-learned rank
@@ -118,6 +158,10 @@ When adding a new widget that needs a highlight, border, alert, or status indica
 - `CombatLogGetCurrentEventInfo()` — unpacks combat log event data; required on TBC Classic Anniversary (modern client); replaces the old variadic-args approach
 - `texture:SetMask(path)` — clips a texture to the shape of a mask image; used for circular glow discs; wrapped in `pcall` for safety
 - `UnitExists("pet")` — true when the player has an active pet
+- `PlaySound(soundKitID [, channel])` — plays a built-in sound; use `"Master"` channel for alerts that must be heard regardless of SFX volume
+- `IsInRaid()` / `IsInGroup()` — group context detection; solo = not `IsInGroup()`
+- `UnitIsUnit(unit1, unit2)` — true if both unit tokens refer to the same entity
+- `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, ...`; `mainExpMs` is milliseconds remaining
 
 ## Lua Version Note
 
@@ -148,3 +192,12 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 - `ExsarAddonDB.activeEffects` — position (x, y), scale, locked
 - `ExsarAddonDB.usableItems` — position (x, y), scale, locked
 - `ExsarAddonDB.targetDebuffs` — position (x, y), scale, locked
+- `ExsarAddonDB.consumableBuff` — position (x, y), scale, locked
+- `ExsarAddonDB.targetInfo` — position (x, y), scale, locked
+- `ExsarAddonDB.playerInfo` — position (x, y), scale, locked, enabled, lowHpThreshold, lowHpSound
+- `ExsarAddonDB.petInfo` — position (x, y), scale, locked, enabled, lowHpThreshold, lowHpSound, dmgSound
+- `ExsarAddonDB.meleeRange` — position (x, y), scale, locked, rangeSound
+- `ExsarAddonDB.raidTargets` — position (x, y), scale, locked
+- `ExsarAddonDB.petAggressiveAlert` — position (x, y), scale, locked, disabled
+- `ExsarAddonDB.petHappiness` — position (x, y), scale, locked, savedEstimate, savedTier, savedAnchored, happinessSound
+- `ExsarAddonDB.aggroAlert` — position (x, y), scale, locked, disabled, enableSolo, enableParty, enableRaid
