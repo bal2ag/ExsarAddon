@@ -21,7 +21,15 @@ local TRACKED_ITEMS = {
     { name = "Elixir of Major Agility",       id = 22831, buffName = "Major Agility",               buffId = 28497 },
     { name = "Elixir of Demonslaying",        id = 9224,  buffName = "Elixir of Demonslaying",      buffId = 11406 },
     { name = "Elixir of Major Mageblood",     id = 22840, buffName = "Greater Mana Regeneration",   buffId = 28509 },
-    { name = "Scroll of Agility V",           id = 27498, buffName = "Agility",                     buffId = 33077 },
+    { name = "Scroll of Agility V",           id = 27498, buffName = "Agility",                     buffId = 33077,
+      ranks = {
+          { name = "Scroll of Agility V",  id = 27498, buffId = 33077 },
+          { name = "Scroll of Agility IV", id = 10309, buffId = 12174 },
+          { name = "Scroll of Agility III",id = 4425,  buffId = 8117  },
+          { name = "Scroll of Agility II", id = 1477,  buffId = 8116  },
+          { name = "Scroll of Agility I",  id = 3012,  buffId = 8115  },
+      },
+    },
     { name = "Adamantite Sharpening Stone",   id = 23529, weaponSlot = "mainhand", buffDuration = 1800 },
     { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261 },
     { name = "Spicy Hot Talbuk",             id = 33872, buffName = "Well Fed",                    buffId = 43763 },
@@ -58,6 +66,11 @@ frame:Hide()
 if C_Item and C_Item.RequestLoadItemDataByID then
     for _, item in ipairs(TRACKED_ITEMS) do
         C_Item.RequestLoadItemDataByID(item.id)
+        if item.ranks then
+            for _, rank in ipairs(item.ranks) do
+                C_Item.RequestLoadItemDataByID(rank.id)
+            end
+        end
     end
 end
 
@@ -72,6 +85,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
         unit        = item.unit or "player",
         weaponSlot  = item.weaponSlot,
         buffDuration = item.buffDuration,
+        ranks       = item.ranks,
         count       = -1,
         known       = false,
         buffActive  = false,
@@ -143,14 +157,52 @@ end
 -- Bag scanning
 -- =========================================================
 
+-- Switch a ranked slot to a different rank (update icon, item attribute, etc.)
+local function SwitchRank(s, rank)
+    if s.itemId == rank.id then return end
+    s.itemId   = rank.id
+    s.itemName = rank.name
+    s.buffId   = rank.buffId
+    local tex = select(10, GetItemInfo(rank.id))
+    if tex then s.icon:SetTexture(tex) end
+    if not InCombatLockdown() then
+        s.iconFrame:SetAttribute("item", rank.name)
+    end
+end
+
 local function ScanBags()
     for _, s in ipairs(slots) do
-        local count = GetItemCount(s.itemId)
-        s.known = count > 0
+        -- For ranked items, find the highest rank with stock, or fall back to highest rank
+        if s.ranks then
+            local totalCount = 0
+            local bestRank
+            for _, rank in ipairs(s.ranks) do
+                local rc = GetItemCount(rank.id)
+                totalCount = totalCount + rc
+                if rc > 0 and not bestRank then
+                    bestRank = rank
+                end
+            end
+            if not bestRank then
+                bestRank = s.ranks[1]  -- highest rank as fallback
+            end
+            SwitchRank(s, bestRank)
 
-        if count ~= s.count then
-            s.count = count
-            s.countText:SetText(count == 0 and "0" or tostring(count))
+            local count = GetItemCount(s.itemId)
+            s.known = count > 0
+
+            if count ~= s.count then
+                s.count = count
+                s.countText:SetText(count == 0 and "0" or tostring(count))
+            end
+        else
+            local count = GetItemCount(s.itemId)
+            s.known = count > 0
+
+            if count ~= s.count then
+                s.count = count
+                s.countText:SetText(count == 0 and "0" or tostring(count))
+            end
         end
 
         if not s.icon:GetTexture() then
@@ -211,6 +263,12 @@ local function UpdateBuffs()
             end
         elseif s.unit == "pet" then
             match = petActiveById[s.buffId]
+        elseif s.ranks then
+            -- Check all rank buff IDs (any rank of the scroll counts)
+            for _, rank in ipairs(s.ranks) do
+                match = activeById[rank.buffId]
+                if match then break end
+            end
         else
             match = activeById[s.buffId]
         end
