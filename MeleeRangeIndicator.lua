@@ -72,6 +72,26 @@ frame:Hide()
 
 local CIRCLE_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
 
+-- Ready-state pulsating glow ring (behind everything)
+local GLOW_PULSE_HZ  = 3.0
+local GLOW_PULSE_MIN = 0.35
+local GLOW_PULSE_MAX = 0.85
+
+local glowRing = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
+glowRing:SetPoint("CENTER")
+glowRing:SetSize(92, 92)
+glowRing:SetTexture(CIRCLE_MASK)
+glowRing:SetVertexColor(1.0, 0.78, 0.15, 0.7)
+glowRing:Hide()
+
+local glowRingActive = false
+
+local glowPulseFrame = CreateFrame("Frame")
+glowPulseFrame:SetScript("OnUpdate", function()
+    if not glowRingActive then return end
+    glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX))
+end)
+
 -- Outer ring (slightly larger, lighter) for a subtle border
 local bgRing = frame:CreateTexture(nil, "BACKGROUND")
 bgRing:SetPoint("CENTER")
@@ -284,6 +304,15 @@ local function UpdateState()
         frame:SetAlpha(1.0)
     end
     SetGlowVisible(ready)
+
+    -- Pulsating border glow ring in ready state
+    if ready then
+        glowRingActive = true
+        glowRing:Show()
+    else
+        glowRingActive = false
+        glowRing:Hide()
+    end
 
     -- Drive the cooldown sweep and timer text
     if onCooldown and M.speed > 0 then
