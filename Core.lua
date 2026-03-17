@@ -254,7 +254,7 @@ local function DebugTargetFrameRegions()
     local function ScanRegions(parent, prefix)
         for i, r in ipairs({parent:GetRegions()}) do
             if r:GetObjectType() == "Texture" then
-                local s1,s2,s3,s4,s5,s6,s7,s8 = r:GetTexCoord()
+                local s1,s2,_,_,_,_,s7,s8 = r:GetTexCoord()
                 local w, h = r:GetSize()
                 local px, py
                 local numPoints = r.GetNumPoints and r:GetNumPoints() or 0

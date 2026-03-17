@@ -121,7 +121,7 @@ end)
 -- Safety-net poll (catches pet death / missed cooldown events)
 -- =========================================================
 
-local pollFrame = ExsarUI.CreatePoller(nil, 0.5, UpdateAura)
+ExsarUI.CreatePoller(nil, 0.5, UpdateAura)
 
 -- =========================================================
 -- Events

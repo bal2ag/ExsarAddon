@@ -226,7 +226,7 @@ end
 local combatFrame = CreateFrame("Frame")
 combatFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 combatFrame:SetScript("OnEvent", function(self, event)
-    local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId, spellName =
+    local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId =
         CombatLogGetCurrentEventInfo()
     if casterGUID ~= UnitGUID("player") then return end
     if subEvent == "SPELL_CAST_START" then
@@ -480,7 +480,7 @@ frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
-frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
+frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, cbDB, 0, -270)
         ApplySize()

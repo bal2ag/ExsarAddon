@@ -15,11 +15,7 @@ local DEFAULT_X, DEFAULT_Y = -280, 175
 -- =========================================================
 
 local IL        = ExsarUI.INFO_LAYOUT
-local FRAME_W   = IL.FRAME_W
-local PAD       = IL.PAD
-local PORT_SIZE = IL.PORT_SIZE
 local BAR_H     = IL.BAR_H
-local ICON_SIZE = IL.ICON_SIZE
 local BARS_Y    = IL.BARS_Y
 
 -- =========================================================
@@ -59,7 +55,7 @@ frame:Hide()
 -- Portrait, text, bars
 -- =========================================================
 
-local portrait = ExsarUI.CreateInfoPortrait(frame)
+local portrait, portRing = ExsarUI.CreateInfoPortrait(frame)
 local nameText, levelText, typeText = ExsarUI.CreateInfoText(frame)
 local healthBar, healthText = ExsarUI.CreateInfoBar(frame, BARS_Y)
 local powerBar,  powerText  = ExsarUI.CreateInfoBar(frame, BARS_Y - BAR_H - 3)

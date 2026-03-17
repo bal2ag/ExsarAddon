@@ -234,8 +234,6 @@ end
 -- Display update
 -- =========================================================
 
-local activeCount = 0
-
 local function UpdateDisplay()
     local found = ScanMarkedUnits()
 
@@ -289,7 +287,7 @@ local function UpdateDisplay()
 
             -- Name (colored by reaction)
             local name = UnitName(unit) or "?"
-            local r, g, b = 0.9, 0.9, 0.9
+            local r, g, b
             if UnitIsEnemy("player", unit) then
                 r, g, b = 0.90, 0.20, 0.20
             elseif UnitIsFriend("player", unit) then
@@ -335,8 +333,6 @@ local function UpdateDisplay()
         end
     end
 
-    activeCount = count
-
     -- Resize and show/hide frame
     if count > 0 then
         placeholderText:Hide()
@@ -362,24 +358,6 @@ end
 -- =========================================================
 -- Health-only fast update (no rescan)
 -- =========================================================
-
-local function UpdateHealth()
-    for i = 1, activeCount do
-        local entry = entries[i]
-        local unit = entry.unitToken
-        if unit and UnitExists(unit) then
-            local hp    = UnitHealth(unit)
-            local hpMax = UnitHealthMax(unit)
-            if hpMax > 0 then
-                entry.healthBar:SetMinMaxValues(0, hpMax)
-                entry.healthBar:SetValue(hp)
-                local pct = math.floor(hp / hpMax * 100 + 0.5)
-                entry.healthText:SetText(pct .. "%")
-                entry.healthBar:SetStatusBarColor(HealthColor(pct))
-            end
-        end
-    end
-end
 
 -- =========================================================
 -- Polling

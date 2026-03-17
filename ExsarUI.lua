@@ -296,7 +296,7 @@ end
 
 --- Create the standard portrait (ring + texture) for an info widget.
 -- @param frame  the info widget frame
--- @return portrait texture (call SetPortraitTexture on it)
+-- @return portrait texture, portRing texture
 function ExsarUI.CreateInfoPortrait(frame)
     local portRing = frame:CreateTexture(nil, "BACKGROUND")
     portRing:SetPoint("TOPLEFT", frame, "TOPLEFT", IL.PAD - 1, -(IL.PAD - 1))
@@ -307,7 +307,7 @@ function ExsarUI.CreateInfoPortrait(frame)
     portrait:SetPoint("TOPLEFT", frame, "TOPLEFT", IL.PAD, -IL.PAD)
     portrait:SetSize(IL.PORT_SIZE, IL.PORT_SIZE)
 
-    return portrait
+    return portrait, portRing
 end
 
 --- Create the standard name, level, and type text for an info widget.

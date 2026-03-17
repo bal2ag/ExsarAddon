@@ -14,6 +14,15 @@ World of Warcraft/_classic_/Interface/AddOns/ExsarAddon/
 ```
 Then reload the UI in-game with `/reload`. There is no build step.
 
+## Quality Checks
+
+Run these before committing changes:
+- `busted` — runs unit tests (99 tests covering ExsarLogic and MakeDB)
+- `luacheck .` — static analysis; should report 0 warnings / 0 errors
+- `luac -p *.lua` — syntax check (redundant with luacheck but faster)
+
+The `.luacheckrc` config declares all WoW API globals, addon cross-file globals, and test file exceptions. When adding new WoW API calls, add them to the `read_globals` list in `.luacheckrc`.
+
 ## In-Game Commands
 
 - `/exsar config` — open the configuration panel (also available via Interface → AddOns)
@@ -43,6 +52,8 @@ Then reload the UI in-game with `/reload`. There is no build step.
 4. Store settings under `ExsarAddonDB.<moduleName>` via `ExsarUI.MakeDB("moduleName")`
 
 **Code reuse principle:** Always prefer using shared helpers from `ExsarLogic.lua` and `ExsarUI.lua` over writing bespoke code. When building a new widget, check the shared libraries first — most common patterns are already available. If you write new logic that could be reused by other modules, extract it into the appropriate shared library: pure logic goes in `ExsarLogic.lua` (testable without WoW API), UI construction goes in `ExsarUI.lua`. Never duplicate code across module files. Refer to UI effects by their standard names (see below) and always use the shared implementation.
+
+**Testability principle:** Design new code to be unit-testable wherever possible. Extract logic into pure functions in `ExsarLogic.lua` so it can be tested with `busted` without WoW API mocks. When writing ExsarUI helpers, accept dependencies as parameters (tables with callable fields) rather than hardcoding WoW API calls, so they can be tested with lightweight stubs. Every new function added to `ExsarLogic.lua` should have corresponding tests in `tests/test_logic.lua`. New ExsarUI helpers should have contract tests in `tests/test_makedb.lua` (or a new test file) using stub tables. Run `busted` and `luacheck .` before considering any change complete.
 
 **Standard UI effects** (defined in `ExsarUI.lua` and `ExsarLogic.lua`):
 

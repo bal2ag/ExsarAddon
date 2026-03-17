@@ -17,11 +17,7 @@ local C_enabled = true
 -- =========================================================
 
 local IL        = ExsarUI.INFO_LAYOUT
-local FRAME_W   = IL.FRAME_W
-local PAD       = IL.PAD
-local PORT_SIZE = IL.PORT_SIZE
 local BAR_H     = IL.BAR_H
-local ICON_SIZE = IL.ICON_SIZE
 local BARS_Y    = IL.BARS_Y
 
 local POWER_COLORS = ExsarUI.POWER_COLORS
@@ -39,7 +35,7 @@ frame:Hide()
 -- Damage border (pulsating red on recent damage)
 -- =========================================================
 
-local ShowDamageBorder, HideDamageBorder = ExsarUI.CreateDamageBorder(frame, UNIT)
+ExsarUI.CreateDamageBorder(frame, UNIT)
 
 -- =========================================================
 -- Portrait, text, bars

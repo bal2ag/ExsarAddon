@@ -316,7 +316,7 @@ frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("SPELLS_CHANGED")
 
-frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
+frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, sDB, 0, -240)
         ApplySize()
@@ -342,7 +342,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5)
     elseif event == "UNIT_SPELLCAST_START" then
         if arg1 == "player" then
             -- Capture the cast end time for clip detection.
-            local _, _, _, startMS, endMS = UnitCastingInfo("player")
+            local _, _, _, _, endMS = UnitCastingInfo("player")
             if type(endMS) == "number" and endMS > 0 then
                 S.castEnd = endMS / 1000
             end

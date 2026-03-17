@@ -116,7 +116,7 @@ end)
 -- Safety-net poll (catches missed events)
 -- =========================================================
 
-local pollFrame = ExsarUI.CreatePoller(nil, 0.5, UpdateVisibility)
+ExsarUI.CreatePoller(nil, 0.5, UpdateVisibility)
 
 -- =========================================================
 -- Events

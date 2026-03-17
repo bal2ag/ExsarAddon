@@ -57,9 +57,8 @@ local ICON_SIZE = 29
 local ICON_GAP  = 4
 local PADDING   = 6
 
--- Fixed grid dimensions (2 cols × 4 rows, though row 3 only has col 0)
+-- Fixed grid width (2 cols)
 local GRID_W = 2 * ICON_SIZE + ICON_GAP + PADDING * 2
-local GRID_H = 4 * ICON_SIZE + 3 * ICON_GAP + PADDING * 2
 
 -- =========================================================
 -- Main frame
@@ -72,8 +71,6 @@ ExsarUI.SetupMovableFrame(frame, uiDB)
 local placeholderText = ExsarUI.CreatePlaceholder(frame, "Items")
 
 frame:Hide()
-
-local C_locked = false
 
 -- =========================================================
 -- Slot construction
@@ -372,7 +369,6 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, uiDB, 150, -160)
-        C_locked = uiDB().locked and true or false
         ApplyLayout()
         UpdateActiveItems()
         ScanBags()
@@ -424,8 +420,7 @@ ExsarAddon.RegisterModule({
     BuildConfig = function(parent, y)
         y = ExsarUI.AddScaleSlider(parent, y, uiDB, frame)
 
-        y = ExsarUI.AddLockCheckbox(parent, y, uiDB, frame, function(v)
-            C_locked = v
+        y = ExsarUI.AddLockCheckbox(parent, y, uiDB, frame, function()
             ApplyLayout()
         end)
 
