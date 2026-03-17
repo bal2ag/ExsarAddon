@@ -23,11 +23,19 @@ local PORT_SIZE    = 28
 local BAR_H        = 6
 local RT_ICON_SIZE = 16   -- raid target icon overlay
 
+-- Target glow: highlights the entry matching the player's current target
+local GLOW_COLOR    = { 1.0, 0.82, 0.25, 0.85 }
+local GLOW_SIZE     = 3
+local GLOW_PULSE_HZ  = 1.2
+local GLOW_PULSE_MIN = 0.45
+local GLOW_PULSE_MAX = 1.0
+
 -- =========================================================
 -- Helpers
 -- =========================================================
 
-local HealthColor = ExsarLogic.HealthColorGradient
+local HealthColor  = ExsarLogic.HealthColorGradient
+local PulseAlpha   = ExsarLogic.PulseAlpha
 
 -- =========================================================
 -- Main frame
@@ -130,6 +138,37 @@ local function CreateEntry(index)
     healthText:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
     healthText:SetPoint("CENTER", healthBar, "CENTER", 0, 0)
 
+    -- Target glow (4 edge textures forming a border)
+    local glow = {}
+    local gr, gg, gb, ga = unpack(GLOW_COLOR)
+    -- top
+    glow[1] = btn:CreateTexture(nil, "BACKGROUND")
+    glow[1]:SetColorTexture(gr, gg, gb, ga)
+    glow[1]:SetPoint("TOPLEFT", btn, "TOPLEFT", -GLOW_SIZE, GLOW_SIZE)
+    glow[1]:SetPoint("TOPRIGHT", btn, "TOPRIGHT", GLOW_SIZE, GLOW_SIZE)
+    glow[1]:SetHeight(GLOW_SIZE)
+    -- bottom
+    glow[2] = btn:CreateTexture(nil, "BACKGROUND")
+    glow[2]:SetColorTexture(gr, gg, gb, ga)
+    glow[2]:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", -GLOW_SIZE, -GLOW_SIZE)
+    glow[2]:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", GLOW_SIZE, -GLOW_SIZE)
+    glow[2]:SetHeight(GLOW_SIZE)
+    -- left
+    glow[3] = btn:CreateTexture(nil, "BACKGROUND")
+    glow[3]:SetColorTexture(gr, gg, gb, ga)
+    glow[3]:SetPoint("TOPLEFT", btn, "TOPLEFT", -GLOW_SIZE, GLOW_SIZE)
+    glow[3]:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", -GLOW_SIZE, -GLOW_SIZE)
+    glow[3]:SetWidth(GLOW_SIZE)
+    -- right
+    glow[4] = btn:CreateTexture(nil, "BACKGROUND")
+    glow[4]:SetColorTexture(gr, gg, gb, ga)
+    glow[4]:SetPoint("TOPRIGHT", btn, "TOPRIGHT", GLOW_SIZE, GLOW_SIZE)
+    glow[4]:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", GLOW_SIZE, -GLOW_SIZE)
+    glow[4]:SetWidth(GLOW_SIZE)
+    for _, tex in ipairs(glow) do tex:Hide() end
+
+    btn.glow       = glow
+    btn.glowActive = false
     btn.portrait   = portrait
     btn.raidIcon   = raidIcon
     btn.nameText   = nameText
@@ -154,6 +193,7 @@ local function ScanMarkedUnits()
 
     local function Check(unit)
         if not UnitExists(unit) then return end
+        if not UnitCanAttack("player", unit) then return end
         local idx = GetRaidTargetIndex(unit)
         if not idx then return end
         local guid = UnitGUID(unit)
@@ -231,6 +271,32 @@ local function FindAssistToken(guid)
 end
 
 -- =========================================================
+-- Glow helpers
+-- =========================================================
+
+local function SetGlowActive(entry, active)
+    entry.glowActive = active
+    if active then
+        for _, tex in ipairs(entry.glow) do tex:Show() end
+    else
+        for _, tex in ipairs(entry.glow) do tex:Hide() end
+    end
+end
+
+-- Per-frame animation for smooth glow pulsing
+local glowAnimFrame = CreateFrame("Frame")
+glowAnimFrame:SetScript("OnUpdate", function()
+    local now = GetTime()
+    local alpha = PulseAlpha(now, GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX)
+    for i = 1, 8 do
+        local entry = entries[i]
+        if entry.glowActive then
+            for _, tex in ipairs(entry.glow) do tex:SetAlpha(alpha) end
+        end
+    end
+end)
+
+-- =========================================================
 -- Display update
 -- =========================================================
 
@@ -246,6 +312,7 @@ local function UpdateDisplay()
 
     local count = #sorted
     local inCombat = InCombatLockdown()
+    local targetGUID = UnitExists("target") and UnitGUID("target") or nil
 
     for i = 1, 8 do
         local entry = entries[i]
@@ -317,6 +384,10 @@ local function UpdateDisplay()
                 entry.healthText:SetText("")
             end
 
+            -- Target glow: highlight if this is the player's current target
+            local isTarget = targetGUID and info.guid == targetGUID
+            SetGlowActive(entry, isTarget)
+
             -- Position within frame
             entry:ClearAllPoints()
             entry:SetPoint("TOPLEFT", frame, "TOPLEFT",
@@ -327,6 +398,7 @@ local function UpdateDisplay()
             end
         else
             entry.unitToken = nil
+            SetGlowActive(entry, false)
             if not inCombat then
                 entry:Hide()
             end
