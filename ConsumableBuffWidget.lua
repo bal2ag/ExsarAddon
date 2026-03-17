@@ -249,13 +249,23 @@ local function UpdateBuffs()
             if hasMainEnchant and mainExpMs and mainExpMs > 0 then
                 local remaining = mainExpMs / 1000
                 local duration = s.buffDuration or remaining
-                -- Cache start time so SetCooldown receives stable values
-                -- and the sweep animation doesn't reset every poll cycle.
-                if not s.enchantStart then
-                    s.enchantStart = now + remaining - duration
+                -- Only treat this as our enchant if remaining fits within
+                -- the expected duration (with a small tolerance for tick drift).
+                -- A fishing lure (10 min) or other enchant will have remaining
+                -- outside the expected window and be ignored.
+                if remaining <= duration + 5 then
+                    -- Recompute start from live remaining each tick.
+                    -- This avoids drift and stale-cache bugs when the enchant
+                    -- is replaced or reapplied.
+                    local startTime = now + remaining - duration
+                    local expTime   = now + remaining
+                    match = { duration = duration, expTime = expTime }
+                    -- Only update sweep when start changes significantly,
+                    -- to avoid animation resets on every poll tick.
+                    if not s.enchantStart or math.abs(startTime - s.enchantStart) > 2 then
+                        s.enchantStart = startTime
+                    end
                 end
-                local expTime = s.enchantStart + duration
-                match = { duration = duration, expTime = expTime }
             else
                 s.enchantStart = nil
             end
@@ -275,7 +285,9 @@ local function UpdateBuffs()
         if match and match.duration > 0 then
             s.buffActive = true
             s.glow:Show()
-            s.sweep:SetCooldown(match.expTime - match.duration, match.duration)
+            -- For weapon enchants, use the cached start for stable sweep animation
+            local sweepStart = s.enchantStart or (match.expTime - match.duration)
+            s.sweep:SetCooldown(sweepStart, match.duration)
 
             local remaining = math.max(0, match.expTime - now)
             local newStr = ExsarLogic.FormatCooldown(remaining)
