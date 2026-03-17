@@ -52,6 +52,7 @@ read_globals = {
     "GetItemSpell",
     "GetNetStats",
     "GetPetActionInfo",
+    "GetPetHappiness",
     "GetRaidTargetIndex",
     "GetRealZoneText",
     "GetSpellCooldown",
