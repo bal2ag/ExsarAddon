@@ -31,11 +31,36 @@ local tlState = ExsarUI.SetupTopleftFrame(frame, pDB, DEFAULT_X, DEFAULT_Y)
 local ReAnchor = tlState.ReAnchor
 frame:Hide()
 
+local SOUND_COOLDOWN = 5
+
 -- =========================================================
 -- Damage border (pulsating red on recent damage)
 -- =========================================================
 
 ExsarUI.CreateDamageBorder(frame, UNIT)
+
+-- Pet damage sound effect (separate CLEU listener)
+local C_dmgSoundTime = 0
+local DMG_SOUND_ID   = 4041       -- CatDeath
+local dmgSoundFrame = CreateFrame("Frame")
+dmgSoundFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+dmgSoundFrame:SetScript("OnEvent", function()
+    if pDB().dmgSound == false then return end
+    local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+    if destGUID ~= UnitGUID(UNIT) then return end
+    if subEvent == "SWING_DAMAGE"
+        or subEvent == "SPELL_DAMAGE"
+        or subEvent == "SPELL_PERIODIC_DAMAGE"
+        or subEvent == "RANGE_DAMAGE"
+        or subEvent == "DAMAGE_SHIELD"
+        or subEvent == "ENVIRONMENTAL_DAMAGE" then
+        local now = GetTime()
+        if now - C_dmgSoundTime >= SOUND_COOLDOWN then
+            PlaySound(DMG_SOUND_ID, "Master")
+            C_dmgSoundTime = now
+        end
+    end
+end)
 
 -- =========================================================
 -- Portrait, text, bars
@@ -69,7 +94,30 @@ end
 -- =========================================================
 
 local LOW_HP_THRESHOLD = 30  -- default, overridden from DB on load
-local ShowLowHpWarning, HideLowHpWarning = ExsarUI.CreateLowHpWarning(frame)
+local RealShowLowHp, RealHideLowHp = ExsarUI.CreateLowHpWarning(frame)
+
+local C_lowHpActive = false
+local C_lowHpSoundTime = 0
+local LOW_HP_SOUND_ID = 5495       -- BoatDockWarning
+
+local function ShowLowHpWarning()
+    RealShowLowHp()
+    if not C_lowHpActive then
+        C_lowHpActive = true
+        if pDB().lowHpSound ~= false then
+            local now = GetTime()
+            if now - C_lowHpSoundTime >= SOUND_COOLDOWN then
+                PlaySound(LOW_HP_SOUND_ID, "Master")
+                C_lowHpSoundTime = now
+            end
+        end
+    end
+end
+
+local function HideLowHpWarning()
+    RealHideLowHp()
+    C_lowHpActive = false
+end
 
 -- =========================================================
 -- Update functions
@@ -213,6 +261,18 @@ ExsarAddon.RegisterModule({
             end
         )
         y = y - 55
+
+        ExsarAddon.CreateCheckbox(parent, "Low HP alert sound", 16, y,
+            function() return pDB().lowHpSound ~= false end,
+            function(v) pDB().lowHpSound = v end
+        )
+        y = y - 30
+
+        ExsarAddon.CreateCheckbox(parent, "Pet damage alert sound", 16, y,
+            function() return pDB().dmgSound ~= false end,
+            function(v) pDB().dmgSound = v end
+        )
+        y = y - 30
 
         y = ExsarUI.AddTopleftResetButton(parent, y, pDB, tlState, "Pet info", DEFAULT_X, DEFAULT_Y)
 

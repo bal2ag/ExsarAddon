@@ -49,13 +49,17 @@ local TIER_BELOW_LABELS = {
 -- State
 -- =========================================================
 
+local HAPPINESS_SOUND_ID = 7256    -- NsabbeyBell
+local SOUND_COOLDOWN     = 5
+
 local S = {
-    estimate     = 0,       -- current estimated happiness points
-    tier         = 0,       -- current API tier (1/2/3)
-    lastUpdate   = GetTime(), -- GetTime() of last decay tick
-    petActive    = false,   -- whether pet is currently out
-    initialized  = false,   -- true after ADDON_LOADED has fired
-    anchored     = false,   -- true once we know the exact value
+    estimate           = 0,       -- current estimated happiness points
+    tier               = 0,       -- current API tier (1/2/3)
+    lastUpdate         = GetTime(), -- GetTime() of last decay tick
+    petActive          = false,   -- whether pet is currently out
+    initialized        = false,   -- true after ADDON_LOADED has fired
+    anchored           = false,   -- true once we know the exact value
+    lastHappSoundTime  = 0,       -- GetTime() of last happiness sound
 }
 
 -- =========================================================
@@ -215,6 +219,14 @@ local function CorrectToTier()
     S.tier = happiness
 
     if happiness ~= oldTier then
+        -- Play sound when happiness drops to content or unhappy
+        if happiness <= 2 and oldTier > 0 and hDB().happinessSound ~= false then
+            local now = GetTime()
+            if now - S.lastHappSoundTime >= SOUND_COOLDOWN then
+                PlaySound(HAPPINESS_SOUND_ID, "Master")
+                S.lastHappSoundTime = now
+            end
+        end
         -- Tier changed — we know the exact value at the boundary
         if happiness > oldTier then
             S.estimate = TIER_MIN[happiness]
@@ -480,6 +492,12 @@ ExsarAddon.RegisterModule({
         y = ExsarUI.AddLockCheckbox(parent, y, hDB, frame, function()
             UpdateVisuals()
         end)
+
+        ExsarAddon.CreateCheckbox(parent, "Happiness drop alert sound", 16, y,
+            function() return hDB().happinessSound ~= false end,
+            function(v) hDB().happinessSound = v end
+        )
+        y = y - 30
 
         y = ExsarUI.AddResetButton(parent, y, hDB, frame, "Pet Happiness", 0, 100)
 

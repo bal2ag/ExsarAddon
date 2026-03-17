@@ -69,7 +69,31 @@ end
 -- =========================================================
 
 local LOW_HP_THRESHOLD = 30  -- default, overridden from DB on load
-local ShowLowHpWarning, HideLowHpWarning = ExsarUI.CreateLowHpWarning(frame)
+local RealShowLowHp, RealHideLowHp = ExsarUI.CreateLowHpWarning(frame)
+
+local C_lowHpActive = false
+local C_lowHpSoundTime = 0
+local LOW_HP_SOUND_ID  = 8333     -- PVPWarningHorde
+local SOUND_COOLDOWN   = 5
+
+local function ShowLowHpWarning()
+    RealShowLowHp()
+    if not C_lowHpActive then
+        C_lowHpActive = true
+        if pDB().lowHpSound ~= false then
+            local now = GetTime()
+            if now - C_lowHpSoundTime >= SOUND_COOLDOWN then
+                PlaySound(LOW_HP_SOUND_ID, "Master")
+                C_lowHpSoundTime = now
+            end
+        end
+    end
+end
+
+local function HideLowHpWarning()
+    RealHideLowHp()
+    C_lowHpActive = false
+end
 
 -- =========================================================
 -- Update functions
@@ -215,6 +239,12 @@ ExsarAddon.RegisterModule({
             end
         )
         y = y - 55
+
+        ExsarAddon.CreateCheckbox(parent, "Low HP alert sound", 16, y,
+            function() return pDB().lowHpSound ~= false end,
+            function(v) pDB().lowHpSound = v end
+        )
+        y = y - 30
 
         y = ExsarUI.AddTopleftResetButton(parent, y, pDB, tlState, "Player info", DEFAULT_X, DEFAULT_Y)
 
