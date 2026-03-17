@@ -280,6 +280,23 @@ function ExsarLogic.AggroAlertEnabled(context, enableSolo, enableParty, enableRa
     return false
 end
 
+--- Select the best rank from a ranked item list given a count-lookup function.
+-- Ranks are ordered highest-first. Returns the first rank with count > 0,
+-- or the first rank (highest) as a fallback when nothing is in stock.
+-- @param ranks  array of { id, name, buffId, ... } ordered highest-first
+-- @param getCount  function(id) → number (bag count for that item ID)
+-- @return rank entry (table from the ranks array)
+function ExsarLogic.SelectBestRank(ranks, getCount)
+    local best
+    for _, rank in ipairs(ranks) do
+        local count = getCount(rank.id)
+        if count > 0 and not best then
+            best = rank
+        end
+    end
+    return best or ranks[1]
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

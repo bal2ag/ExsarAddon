@@ -17,6 +17,15 @@ local cbDB = ExsarUI.MakeDB("consumableBuff")
 
 local TRACKED_ITEMS = {
     { name = "Kibler's Bits",                 id = 33874, buffName = "Kibler's Bits",               buffId = 43771, unit = "pet" },
+    { name = "Scroll of Strength V",          id = 27503, buffName = "Strength",                    buffId = 33082, unit = "pet",
+      ranks = {
+          { name = "Scroll of Strength V",  id = 27503, buffId = 33082 },
+          { name = "Scroll of Strength IV", id = 10310, buffId = 12179 },
+          { name = "Scroll of Strength III",id = 4426,  buffId = 8120  },
+          { name = "Scroll of Strength II", id = 2289,  buffId = 8119  },
+          { name = "Scroll of Strength I",  id = 954,   buffId = 8118  },
+      },
+    },
     { name = "Flask of Relentless Assault",   id = 22854, buffName = "Flask of Relentless Assault", buffId = 28520 },
     { name = "Elixir of Major Agility",       id = 22831, buffName = "Major Agility",               buffId = 28497 },
     { name = "Elixir of Demonslaying",        id = 9224,  buffName = "Elixir of Demonslaying",      buffId = 11406 },
@@ -174,18 +183,7 @@ local function ScanBags()
     for _, s in ipairs(slots) do
         -- For ranked items, find the highest rank with stock, or fall back to highest rank
         if s.ranks then
-            local totalCount = 0
-            local bestRank
-            for _, rank in ipairs(s.ranks) do
-                local rc = GetItemCount(rank.id)
-                totalCount = totalCount + rc
-                if rc > 0 and not bestRank then
-                    bestRank = rank
-                end
-            end
-            if not bestRank then
-                bestRank = s.ranks[1]  -- highest rank as fallback
-            end
+            local bestRank = ExsarLogic.SelectBestRank(s.ranks, GetItemCount)
             SwitchRank(s, bestRank)
 
             local count = GetItemCount(s.itemId)
@@ -261,14 +259,15 @@ local function UpdateBuffs()
             else
                 s.enchantStart = nil
             end
-        elseif s.unit == "pet" then
-            match = petActiveById[s.buffId]
         elseif s.ranks then
             -- Check all rank buff IDs (any rank of the scroll counts)
+            local buffTable = s.unit == "pet" and petActiveById or activeById
             for _, rank in ipairs(s.ranks) do
-                match = activeById[rank.buffId]
+                match = buffTable[rank.buffId]
                 if match then break end
             end
+        elseif s.unit == "pet" then
+            match = petActiveById[s.buffId]
         else
             match = activeById[s.buffId]
         end

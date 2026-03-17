@@ -843,3 +843,65 @@ describe("AggroAlertEnabled", function()
         assert.is_true(Logic.AggroAlertEnabled("raid", true, true, true))
     end)
 end)
+
+-- =========================================================
+-- SelectBestRank
+-- =========================================================
+
+describe("SelectBestRank", function()
+    local ranks = {
+        { id = 5, name = "Rank V",   buffId = 55 },
+        { id = 4, name = "Rank IV",  buffId = 44 },
+        { id = 3, name = "Rank III", buffId = 33 },
+        { id = 2, name = "Rank II",  buffId = 22 },
+        { id = 1, name = "Rank I",   buffId = 11 },
+    }
+
+    it("returns highest rank when all have stock", function()
+        local result = Logic.SelectBestRank(ranks, function() return 5 end)
+        assert.are.equal(5, result.id)
+    end)
+
+    it("returns highest rank with stock when top rank is empty", function()
+        local counts = { [5] = 0, [4] = 0, [3] = 3, [2] = 1, [1] = 2 }
+        local result = Logic.SelectBestRank(ranks, function(id) return counts[id] or 0 end)
+        assert.are.equal(3, result.id)
+    end)
+
+    it("returns lowest rank when only lowest has stock", function()
+        local counts = { [5] = 0, [4] = 0, [3] = 0, [2] = 0, [1] = 1 }
+        local result = Logic.SelectBestRank(ranks, function(id) return counts[id] or 0 end)
+        assert.are.equal(1, result.id)
+    end)
+
+    it("falls back to highest rank when nothing in stock", function()
+        local result = Logic.SelectBestRank(ranks, function() return 0 end)
+        assert.are.equal(5, result.id)
+    end)
+
+    it("returns the full rank entry table", function()
+        local counts = { [5] = 0, [4] = 2, [3] = 0, [2] = 0, [1] = 0 }
+        local result = Logic.SelectBestRank(ranks, function(id) return counts[id] or 0 end)
+        assert.are.equal(4, result.id)
+        assert.are.equal("Rank IV", result.name)
+        assert.are.equal(44, result.buffId)
+    end)
+
+    it("skips zero-count ranks even if later ranks have stock", function()
+        local counts = { [5] = 0, [4] = 3, [3] = 0, [2] = 5, [1] = 0 }
+        local result = Logic.SelectBestRank(ranks, function(id) return counts[id] or 0 end)
+        assert.are.equal(4, result.id)
+    end)
+
+    it("works with a single rank", function()
+        local single = { { id = 10, name = "Only", buffId = 99 } }
+        local result = Logic.SelectBestRank(single, function() return 0 end)
+        assert.are.equal(10, result.id)
+    end)
+
+    it("works with a single rank that has stock", function()
+        local single = { { id = 10, name = "Only", buffId = 99 } }
+        local result = Logic.SelectBestRank(single, function() return 3 end)
+        assert.are.equal(10, result.id)
+    end)
+end)
