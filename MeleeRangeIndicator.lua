@@ -267,10 +267,21 @@ end
 -- Update: visibility, colors, cooldown sweep, alpha
 -- =========================================================
 
+local ENTER_RANGE_SOUND = 154   -- Sword1H_WeaponMetalCritical
+local LEAVE_RANGE_SOUND = 698  -- SHEATHINGMETALWEAPONSHEATHE
+
 local function UpdateState()
     local inRange     = CheckMeleeRange()
     local onCooldown  = IsSwingOnCooldown()
+    local wasInRange  = M.inRange
     M.inRange = inRange
+
+    -- Range transition sounds
+    if inRange and not wasInRange and mrDB().rangeSound ~= false then
+        PlaySound(ENTER_RANGE_SOUND, "Master")
+    elseif not inRange and wasInRange and mrDB().rangeSound ~= false then
+        PlaySound(LEAVE_RANGE_SOUND, "Master")
+    end
 
     local unlocked = not mrDB().locked
 
@@ -393,6 +404,12 @@ ExsarAddon.RegisterModule({
         y = ExsarUI.AddScaleSlider(parent, y, mrDB, frame)
 
         y = ExsarUI.AddLockCheckbox(parent, y, mrDB, frame)
+
+        ExsarAddon.CreateCheckbox(parent, "Range change sound effects", 16, y,
+            function() return mrDB().rangeSound ~= false end,
+            function(v) mrDB().rangeSound = v end
+        )
+        y = y - 30
 
         y = ExsarUI.AddResetButton(parent, y, mrDB, frame, "Melee range", 0, -150)
 
