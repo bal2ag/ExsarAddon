@@ -242,14 +242,7 @@ end
 -- OnUpdate: buff timer text (every 0.1 s)
 -- =========================================================
 
-local scanElapsed = 0
-frame:SetScript("OnUpdate", function(self, elapsed)
-    scanElapsed = scanElapsed + elapsed
-    if scanElapsed >= 0.1 then
-        scanElapsed = 0
-        UpdateBuffs()
-    end
-end)
+ExsarUI.CreatePoller(frame, 0.1, UpdateBuffs)
 
 -- =========================================================
 -- Events
@@ -298,13 +291,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("consumablebuffreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 200, -160)
-    cbDB().x = nil
-    cbDB().y = nil
-    print(ADDON_NAME .. ": Consumable buff widget position reset.")
-end)
+ExsarUI.AddSlashReset("consumablebuffreset", frame, cbDB, "Consumable buff widget", 200, -160)
 
 -- =========================================================
 -- Register with Core

@@ -417,13 +417,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("rangedswingreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -240)
-    sDB().x = nil
-    sDB().y = nil
-    print(ADDON_NAME .. ": Ranged swing timer position reset.")
-end)
+ExsarUI.AddSlashReset("rangedswingreset", frame, sDB, "Ranged swing timer", 0, -240)
 
 -- =========================================================
 -- Register with Core

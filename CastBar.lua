@@ -589,13 +589,7 @@ end
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("castbarreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -270)
-    cbDB().x = nil
-    cbDB().y = nil
-    print(ADDON_NAME .. ": Cast bar position reset.")
-end)
+ExsarUI.AddSlashReset("castbarreset", frame, cbDB, "Cast bar", 0, -270)
 
 -- =========================================================
 -- Register with Core

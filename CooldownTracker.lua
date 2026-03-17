@@ -422,13 +422,7 @@ ExsarAddon.AddSlashCommand("unlock", function()
     print(ADDON_NAME .. ": Cooldown tracker unlocked.")
 end)
 
-ExsarAddon.AddSlashCommand("reset", function()
-    mainFrame:ClearAllPoints()
-    mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-    cDB().x = nil
-    cDB().y = nil
-    print(ADDON_NAME .. ": Cooldown tracker position reset.")
-end)
+ExsarUI.AddSlashReset("reset", mainFrame, cDB, "Cooldown tracker", 0, -200)
 
 -- =========================================================
 -- Register with Core

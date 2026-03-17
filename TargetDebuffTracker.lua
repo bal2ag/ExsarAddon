@@ -231,14 +231,7 @@ animTicker:SetScript("OnUpdate", function() AnimateDashes() end)
 -- OnUpdate: debuff state + timer text (every 0.1 s)
 -- =========================================================
 
-local scanElapsed = 0
-frame:SetScript("OnUpdate", function(self, elapsed)
-    scanElapsed = scanElapsed + elapsed
-    if scanElapsed >= 0.1 then
-        scanElapsed = 0
-        UpdateDebuffs()
-    end
-end)
+ExsarUI.CreatePoller(frame, 0.1, UpdateDebuffs)
 
 -- =========================================================
 -- Events
@@ -270,13 +263,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("debuffsreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", -300, 100)
-    tDB().x = nil
-    tDB().y = nil
-    print(ADDON_NAME .. ": Target debuff tracker position reset.")
-end)
+ExsarUI.AddSlashReset("debuffsreset", frame, tDB, "Target debuff tracker", -300, 100)
 
 -- =========================================================
 -- Register with Core

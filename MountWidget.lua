@@ -189,13 +189,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("mountreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 150, -240)
-    mwDB().x = nil
-    mwDB().y = nil
-    print(ADDON_NAME .. ": Mount widget position reset.")
-end)
+ExsarUI.AddSlashReset("mountreset", frame, mwDB, "Mount widget", 150, -240)
 
 -- =========================================================
 -- Register with Core

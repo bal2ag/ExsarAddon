@@ -116,14 +116,7 @@ end)
 -- Safety-net poll (catches missed events)
 -- =========================================================
 
-local pollFrame   = CreateFrame("Frame")
-local pollElapsed = 0
-pollFrame:SetScript("OnUpdate", function(self, elapsed)
-    pollElapsed = pollElapsed + elapsed
-    if pollElapsed < 0.5 then return end
-    pollElapsed = 0
-    UpdateVisibility()
-end)
+local pollFrame = ExsarUI.CreatePoller(nil, 0.5, UpdateVisibility)
 
 -- =========================================================
 -- Events
@@ -157,13 +150,7 @@ end)
 -- Slash sub-command
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("aggressivereset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
-    aDB().x = nil
-    aDB().y = nil
-    print(ADDON_NAME .. ": Pet Aggressive alert position reset.")
-end)
+ExsarUI.AddSlashReset("aggressivereset", frame, aDB, "Pet Aggressive alert", 0, 50)
 
 -- =========================================================
 -- Register with Core
@@ -201,14 +188,7 @@ ExsarAddon.RegisterModule({
         )
         y = y - 30
 
-        ExsarAddon.CreateButton(parent, "Reset Position", 16, y, function()
-            frame:ClearAllPoints()
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
-            aDB().x = nil
-            aDB().y = nil
-            print(ADDON_NAME .. ": Pet Aggressive alert position reset.")
-        end)
-        y = y - 30
+        y = ExsarUI.AddResetButton(parent, y, aDB, frame, "Pet Aggressive alert", 0, 50)
 
         return y
     end,

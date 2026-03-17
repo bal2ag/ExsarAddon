@@ -175,13 +175,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("foodreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 150, -200)
-    fdDB().x = nil
-    fdDB().y = nil
-    print(ADDON_NAME .. ": Food and drink widget position reset.")
-end)
+ExsarUI.AddSlashReset("foodreset", frame, fdDB, "Food and drink widget", 150, -200)
 
 -- =========================================================
 -- Register with Core

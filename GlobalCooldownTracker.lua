@@ -166,13 +166,7 @@ end)
 -- Slash sub-command
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("gcdreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-    gDB().x = nil
-    gDB().y = nil
-    print(ADDON_NAME .. ": GCD tracker position reset.")
-end)
+ExsarUI.AddSlashReset("gcdreset", frame, gDB, "GCD tracker", 0, -200)
 
 -- =========================================================
 -- Register with Core

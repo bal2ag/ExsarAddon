@@ -289,14 +289,7 @@ animTicker:SetScript("OnUpdate", function() AnimateDashes() end)
 -- OnUpdate: buff state + timer text (every 0.1 s)
 -- =========================================================
 
-local scanElapsed = 0
-frame:SetScript("OnUpdate", function(self, elapsed)
-    scanElapsed = scanElapsed + elapsed
-    if scanElapsed >= 0.1 then
-        scanElapsed = 0
-        UpdateBuffs()
-    end
-end)
+ExsarUI.CreatePoller(frame, 0.1, UpdateBuffs)
 
 -- =========================================================
 -- Events
@@ -330,13 +323,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("effectsreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
-    aeDB().x = nil
-    aeDB().y = nil
-    print(ADDON_NAME .. ": Active effects tracker position reset.")
-end)
+ExsarUI.AddSlashReset("effectsreset", frame, aeDB, "Active effects tracker", 0, -160)
 
 -- =========================================================
 -- Register with Core

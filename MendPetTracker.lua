@@ -161,14 +161,7 @@ end)
 -- OnUpdate: timer text (every 0.1 s)
 -- =========================================================
 
-local scanElapsed = 0
-frame:SetScript("OnUpdate", function(self, elapsed)
-    scanElapsed = scanElapsed + elapsed
-    if scanElapsed >= 0.1 then
-        scanElapsed = 0
-        UpdateMendPet()
-    end
-end)
+ExsarUI.CreatePoller(frame, 0.1, UpdateMendPet)
 
 -- =========================================================
 -- Events
@@ -196,13 +189,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("mendpetreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", -340, 70)
-    mpDB().x = nil
-    mpDB().y = nil
-    print(ADDON_NAME .. ": Mend Pet tracker position reset.")
-end)
+ExsarUI.AddSlashReset("mendpetreset", frame, mpDB, "Mend Pet tracker", -340, 70)
 
 -- =========================================================
 -- Register with Core

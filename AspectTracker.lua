@@ -194,13 +194,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("aspectreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", -350, 100)
-    aDB().x = nil
-    aDB().y = nil
-    print(ADDON_NAME .. ": Aspect tracker position reset.")
-end)
+ExsarUI.AddSlashReset("aspectreset", frame, aDB, "Aspect tracker", -350, 100)
 
 -- =========================================================
 -- Register with Core

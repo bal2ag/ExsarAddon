@@ -354,14 +354,7 @@ end
 -- OnUpdate: cooldown timers (every 0.1 s)
 -- =========================================================
 
-local scanElapsed = 0
-frame:SetScript("OnUpdate", function(self, elapsed)
-    scanElapsed = scanElapsed + elapsed
-    if scanElapsed >= 0.1 then
-        scanElapsed = 0
-        UpdateCooldowns()
-    end
-end)
+ExsarUI.CreatePoller(frame, 0.1, UpdateCooldowns)
 
 -- =========================================================
 -- Events
@@ -420,13 +413,7 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("itemsreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 150, -160)
-    uiDB().x = nil
-    uiDB().y = nil
-    print(ADDON_NAME .. ": Usable items widget position reset.")
-end)
+ExsarUI.AddSlashReset("itemsreset", frame, uiDB, "Usable items widget", 150, -160)
 
 -- =========================================================
 -- Register with Core

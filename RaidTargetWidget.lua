@@ -385,17 +385,7 @@ end
 -- Polling
 -- =========================================================
 
-local pollFrame = CreateFrame("Frame")
-local scanElapsed = 0
-local SCAN_INTERVAL = 0.3
-
-pollFrame:SetScript("OnUpdate", function(self, elapsed)
-    scanElapsed = scanElapsed + elapsed
-    if scanElapsed >= SCAN_INTERVAL then
-        scanElapsed = 0
-        UpdateDisplay()
-    end
-end)
+local pollFrame = ExsarUI.CreatePoller(nil, 0.3, UpdateDisplay)
 pollFrame:Hide()
 
 -- =========================================================

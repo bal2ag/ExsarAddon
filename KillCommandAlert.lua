@@ -121,14 +121,7 @@ end)
 -- Safety-net poll (catches pet death / missed cooldown events)
 -- =========================================================
 
-local pollFrame   = CreateFrame("Frame")
-local pollElapsed = 0
-pollFrame:SetScript("OnUpdate", function(self, elapsed)
-    pollElapsed = pollElapsed + elapsed
-    if pollElapsed < 0.5 then return end
-    pollElapsed = 0
-    UpdateAura()
-end)
+local pollFrame = ExsarUI.CreatePoller(nil, 0.5, UpdateAura)
 
 -- =========================================================
 -- Events
@@ -169,13 +162,7 @@ end)
 -- Slash sub-command
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("killcmdreset", function()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -100)
-    kcDB().x = nil
-    kcDB().y = nil
-    print(ADDON_NAME .. ": Kill Command alert position reset.")
-end)
+ExsarUI.AddSlashReset("killcmdreset", frame, kcDB, "Kill Command alert", 0, -100)
 
 -- =========================================================
 -- Register with Core
