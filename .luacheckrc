@@ -62,6 +62,7 @@ read_globals = {
     "GetWeaponEnchantInfo",
     "InCombatLockdown",
     "IsSpellInRange",
+    "PlaySound",
     "IsUsableSpell",
     "SetPortraitTexture",
     "UnitAffectingCombat",
@@ -87,7 +88,10 @@ read_globals = {
     "UnitPowerMax",
     "UnitPowerType",
     "UnitRangedDamage",
+    "UnitIsUnit",
     "UnitTokenFromNamePlate",
+    "IsInRaid",
+    "IsInGroup",
 }
 
 -- Exclude test files and spec helpers from WoW-specific checks

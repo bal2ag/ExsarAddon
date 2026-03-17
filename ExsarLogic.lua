@@ -267,6 +267,19 @@ function ExsarLogic.RoundScale(v)
     return math.floor(v * 20 + 0.5) / 20
 end
 
+--- Check whether an aggro alert should display for the current group context.
+-- @param context string: "solo", "party", or "raid"
+-- @param enableSolo boolean
+-- @param enableParty boolean
+-- @param enableRaid boolean
+-- @return boolean
+function ExsarLogic.AggroAlertEnabled(context, enableSolo, enableParty, enableRaid)
+    if context == "solo" then return enableSolo and true or false end
+    if context == "party" then return enableParty and true or false end
+    if context == "raid" then return enableRaid and true or false end
+    return false
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

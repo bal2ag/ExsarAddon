@@ -799,3 +799,47 @@ describe("RoundScale", function()
         assert.is_true(approx(1.45, Logic.RoundScale(1.425)))
     end)
 end)
+
+-- =========================================================
+-- AggroAlertEnabled
+-- =========================================================
+
+describe("AggroAlertEnabled", function()
+    it("returns true for solo when solo enabled", function()
+        assert.is_true(Logic.AggroAlertEnabled("solo", true, false, false))
+    end)
+
+    it("returns false for solo when solo disabled", function()
+        assert.is_false(Logic.AggroAlertEnabled("solo", false, true, true))
+    end)
+
+    it("returns true for party when party enabled", function()
+        assert.is_true(Logic.AggroAlertEnabled("party", false, true, false))
+    end)
+
+    it("returns false for party when party disabled", function()
+        assert.is_false(Logic.AggroAlertEnabled("party", true, false, true))
+    end)
+
+    it("returns true for raid when raid enabled", function()
+        assert.is_true(Logic.AggroAlertEnabled("raid", false, false, true))
+    end)
+
+    it("returns false for raid when raid disabled", function()
+        assert.is_false(Logic.AggroAlertEnabled("raid", true, true, false))
+    end)
+
+    it("returns false for unknown context", function()
+        assert.is_false(Logic.AggroAlertEnabled("battleground", true, true, true))
+    end)
+
+    it("treats nil as false", function()
+        assert.is_false(Logic.AggroAlertEnabled("solo", nil, true, true))
+    end)
+
+    it("all enabled returns true for all contexts", function()
+        assert.is_true(Logic.AggroAlertEnabled("solo", true, true, true))
+        assert.is_true(Logic.AggroAlertEnabled("party", true, true, true))
+        assert.is_true(Logic.AggroAlertEnabled("raid", true, true, true))
+    end)
+end)

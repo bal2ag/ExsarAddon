@@ -28,3 +28,4 @@ GlobalCooldownTracker.lua
 RaidTargetWidget.lua
 PetAggressiveAlert.lua
 PetHappinessTracker.lua
+AggroAlert.lua
