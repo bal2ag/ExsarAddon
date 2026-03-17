@@ -29,12 +29,8 @@ local TIER_MAX = { [1] = 349, [2] = 699, [3] = 1050 }
 -- Layout constants
 -- =========================================================
 
-local ICON_SIZE = 28
-local BAR_W     = 150
-local BAR_H     = 14
-local FRAME_W   = ICON_SIZE + BAR_W + 14  -- icon + gap + bar + padding
-local FRAME_H   = 36
-local PAD       = 4
+local ICON_SIZE = 36
+local FRAME_SIZE = ICON_SIZE + 4
 
 -- Happiness icon texture (3 icons packed horizontally)
 local HAPPINESS_TEXTURE = "Interface\\PetPaperDollFrame\\UI-PetHappiness"
@@ -42,18 +38,6 @@ local HAPPINESS_COORDS = {
     [1] = { 0.375, 0.5625, 0, 0.359375 },  -- Unhappy
     [2] = { 0.1875, 0.375, 0, 0.359375 },   -- Content
     [3] = { 0, 0.1875, 0, 0.359375 },        -- Happy
-}
-
-local TIER_COLORS = {
-    [1] = { 0.90, 0.20, 0.20 },  -- red
-    [2] = { 0.95, 0.85, 0.15 },  -- yellow
-    [3] = { 0.30, 0.85, 0.30 },  -- green
-}
-
-local TIER_LABELS = {
-    [1] = "Unhappy",
-    [2] = "Content",
-    [3] = "Happy",
 }
 
 local TIER_BELOW_LABELS = {
@@ -79,45 +63,78 @@ local S = {
 -- =========================================================
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "PetHappinessFrame", UIParent)
-frame:SetSize(FRAME_W, FRAME_H)
-ExsarUI.SetupMovableFrame(frame, hDB, { bgAlpha = 0.4 })
+frame:SetSize(FRAME_SIZE, FRAME_SIZE)
+ExsarUI.SetupMovableFrame(frame, hDB, { bgAlpha = 0 })
 frame:Hide()
 
 -- =========================================================
 -- Visuals
 -- =========================================================
 
+-- Icon container (for sweep to overlay on)
+local iconFrame = CreateFrame("Frame", nil, frame)
+iconFrame:SetSize(ICON_SIZE, ICON_SIZE)
+iconFrame:SetPoint("CENTER", frame, "CENTER", 0, 0)
+
 -- Happiness icon
-local icon = frame:CreateTexture(nil, "ARTWORK")
-icon:SetSize(ICON_SIZE, ICON_SIZE)
-icon:SetPoint("LEFT", frame, "LEFT", PAD, 0)
+local icon = iconFrame:CreateTexture(nil, "ARTWORK")
+icon:SetAllPoints()
 icon:SetTexture(HAPPINESS_TEXTURE)
 
--- Bar background
-local barBg = frame:CreateTexture(nil, "ARTWORK")
-barBg:SetHeight(BAR_H)
-barBg:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-barBg:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
-barBg:SetColorTexture(0.12, 0.12, 0.12, 0.9)
+-- Red pulsing glow (4 edges) for content/unhappy warning
+local GLOW_SIZE = 3
+local GLOW_PULSE_HZ  = 1.2
+local GLOW_PULSE_MIN = 0.45
+local GLOW_PULSE_MAX = 1.0
+local PulseAlpha = ExsarLogic.PulseAlpha
 
--- Status bar (shows percentage within current tier)
-local bar = CreateFrame("StatusBar", nil, frame)
-bar:SetHeight(BAR_H)
-bar:SetPoint("TOPLEFT", barBg, "TOPLEFT", 0, 0)
-bar:SetPoint("BOTTOMRIGHT", barBg, "BOTTOMRIGHT", 0, 0)
-bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-bar:SetMinMaxValues(0, 100)
+local glow = {}
+local function MakeGlowEdge(p1, r1, p2, r2, isHoriz)
+    local tex = iconFrame:CreateTexture(nil, "BACKGROUND")
+    tex:SetColorTexture(0.90, 0.15, 0.15, 0.85)
+    tex:SetPoint(p1, iconFrame, r1)
+    tex:SetPoint(p2, iconFrame, r2)
+    if isHoriz then tex:SetHeight(GLOW_SIZE) else tex:SetWidth(GLOW_SIZE) end
+    tex:Hide()
+    return tex
+end
+glow[1] = MakeGlowEdge("TOPLEFT", "TOPLEFT", "TOPRIGHT", "TOPRIGHT", true)
+glow[1]:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", -GLOW_SIZE, GLOW_SIZE)
+glow[1]:SetPoint("TOPRIGHT", iconFrame, "TOPRIGHT", GLOW_SIZE, GLOW_SIZE)
+glow[2] = MakeGlowEdge("BOTTOMLEFT", "BOTTOMLEFT", "BOTTOMRIGHT", "BOTTOMRIGHT", true)
+glow[2]:SetPoint("BOTTOMLEFT", iconFrame, "BOTTOMLEFT", -GLOW_SIZE, -GLOW_SIZE)
+glow[2]:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", GLOW_SIZE, -GLOW_SIZE)
+glow[3] = MakeGlowEdge("TOPLEFT", "TOPLEFT", "BOTTOMLEFT", "BOTTOMLEFT", false)
+glow[3]:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", -GLOW_SIZE, GLOW_SIZE)
+glow[3]:SetPoint("BOTTOMLEFT", iconFrame, "BOTTOMLEFT", -GLOW_SIZE, -GLOW_SIZE)
+glow[4] = MakeGlowEdge("TOPRIGHT", "TOPRIGHT", "BOTTOMRIGHT", "BOTTOMRIGHT", false)
+glow[4]:SetPoint("TOPRIGHT", iconFrame, "TOPRIGHT", GLOW_SIZE, GLOW_SIZE)
+glow[4]:SetPoint("BOTTOMRIGHT", iconFrame, "BOTTOMRIGHT", GLOW_SIZE, -GLOW_SIZE)
 
--- Percentage/label text
-local text = bar:CreateFontString(nil, "OVERLAY")
-text:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
-text:SetPoint("CENTER", bar, "CENTER", 0, 0)
+local glowActive = false
 
--- Tier label below bar
-local tierLabel = frame:CreateFontString(nil, "OVERLAY")
-tierLabel:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-tierLabel:SetPoint("TOP", barBg, "BOTTOM", 0, -1)
-tierLabel:SetJustifyH("CENTER")
+-- Reverse sweep: starts clear (100%) and fills with grey as it drains to 0%
+local sweep = ExsarUI.CreateSweep(iconFrame, { reverse = true })
+
+-- Glow pulse animation
+local glowPulseFrame = CreateFrame("Frame")
+glowPulseFrame:SetScript("OnUpdate", function()
+    if not glowActive then return end
+    local alpha = PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX)
+    for _, tex in ipairs(glow) do tex:SetAlpha(alpha) end
+end)
+
+-- Timer text (above the sweep)
+local textFrame = CreateFrame("Frame", nil, iconFrame)
+textFrame:SetAllPoints()
+textFrame:SetFrameLevel(sweep:GetFrameLevel() + 5)
+local text = textFrame:CreateFontString(nil, "OVERLAY")
+text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+text:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
+
+-- Sweep state: track the last cooldown we set to avoid re-applying unnecessarily
+local lastSweepStart = 0
+local lastSweepDuration = 0
 
 -- =========================================================
 -- Estimate management
@@ -139,6 +156,7 @@ local function ClampEstimate()
 end
 
 local function SaveEstimate()
+    if S.tier == 0 then return end  -- don't overwrite good data with uninitialized state
     local db = hDB()
     db.savedEstimate = S.estimate
     db.savedTier = S.tier
@@ -221,14 +239,15 @@ end
 
 local function UpdateVisuals()
     if not S.petActive then
+        glowActive = false
+        for _, tex in ipairs(glow) do tex:Hide() end
         if not hDB().locked then
             -- Placeholder when unlocked
             icon:SetTexCoord(unpack(HAPPINESS_COORDS[3]))
-            bar:SetValue(75)
-            bar:SetStatusBarColor(0.4, 0.4, 0.4)
-            text:SetText("Pet Happiness")
-            text:SetTextColor(0.6, 0.6, 0.6)
-            tierLabel:SetText("")
+            icon:SetDesaturated(true)
+            icon:SetAlpha(0.5)
+            sweep:Clear()
+            text:SetText("")
             frame:Show()
         else
             frame:Hide()
@@ -238,38 +257,54 @@ local function UpdateVisuals()
 
     local tier = S.tier
     if tier == 0 then
+        glowActive = false
+        for _, tex in ipairs(glow) do tex:Hide() end
         frame:Hide()
         return
     end
 
     -- Icon
     icon:SetTexCoord(unpack(HAPPINESS_COORDS[tier]))
+    icon:SetDesaturated(false)
+    icon:SetAlpha(1)
 
-    -- Bar value: percentage within the current tier (0-100%)
-    local tierMin = TIER_MIN[tier]
-    local tierPct = math.floor((S.estimate - tierMin) / TIER_SIZE * 100 + 0.5)
-    if tierPct < 0 then tierPct = 0 end
-    if tierPct > 100 then tierPct = 100 end
-    bar:SetValue(tierPct)
-    local clr = TIER_COLORS[tier]
-    bar:SetStatusBarColor(clr[1], clr[2], clr[3])
+    -- Red pulsing glow for content or unhappy
+    if tier <= 2 then
+        glowActive = true
+        for _, tex in ipairs(glow) do tex:Show() end
+    else
+        glowActive = false
+        for _, tex in ipairs(glow) do tex:Hide() end
+    end
 
-    text:SetText(tierPct .. "%")
-    text:SetTextColor(1, 1, 1)
-
-    -- Tier label with estimated time to next tier down
+    -- Sweep + timer
     local belowLabel = TIER_BELOW_LABELS[tier]
     if belowLabel then
         local ptsAboveTier = S.estimate - TIER_MIN[tier]
         local secsToDown = ptsAboveTier / DECAY_PER_MIN * 60
         if secsToDown < 0 then secsToDown = 0 end
+
+        -- Reverse sweep: grey overlay fills as time runs out.
+        -- Total duration = time for full tier to decay.
+        -- Start = now - (time already elapsed in this tier).
+        local fullTierSecs = TIER_SIZE / DECAY_PER_MIN * 60
+        local sweepStart = GetTime() - (fullTierSecs - secsToDown)
+
+        -- Only re-apply if start/duration changed significantly (avoids flicker)
+        if math.abs(sweepStart - lastSweepStart) > 2 or lastSweepDuration ~= fullTierSecs then
+            sweep:SetCooldown(sweepStart, fullTierSecs)
+            lastSweepStart = sweepStart
+            lastSweepDuration = fullTierSecs
+        end
+
         local approx = S.anchored and "" or "~"
-        tierLabel:SetText(TIER_LABELS[tier] .. " (" .. belowLabel .. " in " .. approx .. FormatTime(secsToDown) .. ")")
+        text:SetText(approx .. FormatTime(secsToDown))
     else
-        -- Unhappy — no lower tier
-        tierLabel:SetText(TIER_LABELS[tier])
+        -- Unhappy — no lower tier, fully grey
+        sweep:Clear()
+        text:SetText("")
     end
-    tierLabel:SetTextColor(clr[1], clr[2], clr[3])
+    text:SetTextColor(1, 1, 1)
 
     frame:Show()
 end
@@ -384,9 +419,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         DoInit(self)
-        -- Re-seed on zone transitions
+        -- Refresh pet state (but don't re-seed — DoInit already loaded from DB)
         S.petActive = UnitExists("pet")
-        if S.petActive then
+        if S.petActive and S.tier == 0 then
             SeedEstimate()
         end
         S.lastUpdate = GetTime()
