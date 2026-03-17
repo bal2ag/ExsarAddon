@@ -71,6 +71,10 @@ describe("FormatShortTimer", function()
     it("handles boundary at exactly 10", function()
         assert.are.equal("10", Logic.FormatShortTimer(10))
     end)
+
+    it("handles very large values (no minute tier)", function()
+        assert.are.equal("300", Logic.FormatShortTimer(300))
+    end)
 end)
 
 -- =========================================================
@@ -336,6 +340,14 @@ describe("CooldownRemaining", function()
     it("returns full duration at start", function()
         assert.are.equal(10, Logic.CooldownRemaining(100, 10, 100))
     end)
+
+    it("returns partial time mid-cooldown", function()
+        assert.is_true(approx(3.5, Logic.CooldownRemaining(100, 10, 106.5)))
+    end)
+
+    it("handles start=nil duration=non-nil", function()
+        assert.are.equal(0, Logic.CooldownRemaining(nil, 10, 100))
+    end)
 end)
 
 -- =========================================================
@@ -424,6 +436,13 @@ describe("CalcFlatStripSize", function()
         assert.are.equal(41, w)  -- 6 + 29 + 6
         assert.are.equal(41, h)
     end)
+
+    it("handles large count", function()
+        local w, h = Logic.CalcFlatStripSize(10, 29, 4, 6)
+        -- 6 + 10*29 + 9*4 + 6 = 6 + 290 + 36 + 6 = 338
+        assert.are.equal(338, w)
+        assert.are.equal(41, h)  -- height is always iconSize + 2*padding
+    end)
 end)
 
 -- =========================================================
@@ -442,6 +461,19 @@ describe("CalcVerticalStripSize", function()
         local w, h = Logic.CalcVerticalStripSize(0, 29, 4, 6)
         assert.are.equal(41, w)
         assert.are.equal(12, h)
+    end)
+
+    it("handles single icon", function()
+        local w, h = Logic.CalcVerticalStripSize(1, 29, 4, 6)
+        assert.are.equal(41, w)  -- 29 + 6*2
+        assert.are.equal(41, h)  -- 6 + 29 + 6
+    end)
+
+    it("is transpose of CalcFlatStripSize", function()
+        local fw, fh = Logic.CalcFlatStripSize(4, 29, 4, 6)
+        local vw, vh = Logic.CalcVerticalStripSize(4, 29, 4, 6)
+        assert.are.equal(fw, vh)  -- flat width == vertical height
+        assert.are.equal(fh, vw)  -- flat height == vertical width
     end)
 end)
 
@@ -534,6 +566,22 @@ describe("IconsPerRow", function()
         -- 2 icons: 6 + 29 + 4 + 29 + 6 = 74
         assert.are.equal(2, Logic.IconsPerRow(74, 6, 29, 4))
     end)
+
+    it("one pixel short of fitting another icon", function()
+        -- 74 fits 2 icons exactly; 73 should still be 2
+        -- available = 73 - 12 + 4 = 65, each icon = 33, floor(65/33) = 1
+        assert.are.equal(1, Logic.IconsPerRow(73, 6, 29, 4))
+    end)
+
+    it("handles zero gap", function()
+        -- frameWidth=100, padding=5, iconSize=30, iconGap=0
+        -- available = 100 - 10 + 0 = 90, each = 30, floor(90/30) = 3
+        assert.are.equal(3, Logic.IconsPerRow(100, 5, 30, 0))
+    end)
+
+    it("handles large icons in small frame", function()
+        assert.are.equal(1, Logic.IconsPerRow(50, 10, 100, 5))
+    end)
 end)
 
 -- =========================================================
@@ -554,6 +602,18 @@ describe("GridRowCount", function()
 
     it("handles exact multiple", function()
         assert.are.equal(2, Logic.GridRowCount(10, 5))
+    end)
+
+    it("handles single item", function()
+        assert.are.equal(1, Logic.GridRowCount(1, 5))
+    end)
+
+    it("handles 1 icon per row", function()
+        assert.are.equal(4, Logic.GridRowCount(4, 1))
+    end)
+
+    it("handles negative count", function()
+        assert.are.equal(0, Logic.GridRowCount(-1, 5))
     end)
 end)
 
@@ -651,6 +711,21 @@ describe("MarchingAntHead", function()
         -- 0.5 * 1.5 * 16 = 12
         assert.is_true(approx(12, head))
     end)
+
+    it("stays within 0 to dashCount", function()
+        for i = 0, 200 do
+            local t = i * 0.1
+            local head = Logic.MarchingAntHead(t, 1.5, 16)
+            assert.is_true(head >= 0)
+            assert.is_true(head < 16)
+        end
+    end)
+
+    it("works with different dash counts", function()
+        local head = Logic.MarchingAntHead(1.0, 1.0, 8)
+        -- 1.0 * 1.0 * 8 = 8, mod 8 = 0
+        assert.is_true(approx(0, head, 0.01))
+    end)
 end)
 
 -- =========================================================
@@ -679,6 +754,22 @@ describe("CalcAnchorOffset", function()
         local ax, ay = Logic.CalcAnchorOffset(960, 540, 1.0, 1920, 1080)
         assert.is_true(approx(0, ax))
         assert.is_true(approx(0, ay))
+    end)
+
+    it("handles top-left corner", function()
+        local ax, ay = Logic.CalcAnchorOffset(0, 1080, 1.0, 1920, 1080)
+        -- anchorX = 0 - 960 = -960
+        -- anchorY = 1080 - 540 = 540
+        assert.is_true(approx(-960, ax))
+        assert.is_true(approx(540, ay))
+    end)
+
+    it("handles fractional scale", function()
+        local ax, ay = Logic.CalcAnchorOffset(200, 800, 0.5, 1920, 1080)
+        -- anchorX = 200 - 1920/(2*0.5) = 200 - 1920 = -1720
+        -- anchorY = 800 - 1080/(2*0.5) = 800 - 1080 = -280
+        assert.is_true(approx(-1720, ax))
+        assert.is_true(approx(-280, ay))
     end)
 end)
 
