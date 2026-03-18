@@ -64,6 +64,30 @@ local function CreateEntry(index)
     btn:SetSize(FRAME_W - PAD * 2, ENTRY_H)
     btn:RegisterForClicks("AnyUp", "AnyDown")
     btn:SetAttribute("type", "macro")
+    btn:SetAttribute("macrotext", "/targetexact nil")
+
+    -- PreClick: dynamically pick the best targeting strategy at click time.
+    -- Tier 1: type=target with a stable unit token (exact, handles same-name mobs)
+    -- Tier 2: type=macro with /targetexact Name (closest mob with that name)
+    btn:SetScript("PreClick", function(self)
+        local stable = self.stableToken
+        local uname  = self.targetName
+        -- Reset to macro type first so attrs are never out of sync
+        self:SetAttribute("type", "macro")
+        self:SetAttribute("unit", nil)
+        if stable and UnitExists(stable) then
+            self:SetAttribute("type", "target")
+            self:SetAttribute("unit", stable)
+        elseif uname then
+            self:SetAttribute("macrotext", "/targetexact " .. uname)
+        else
+            self:SetAttribute("macrotext", "/targetexact nil")
+        end
+    end)
+
+    -- Targeting data (updated by UpdateDisplay, read by PreClick)
+    btn.stableToken = nil
+    btn.targetName  = nil
 
     -- Hover highlight
     local hoverBg = btn:CreateTexture(nil, "BACKGROUND")
@@ -188,8 +212,19 @@ end
 -- Unit scanning
 -- =========================================================
 
+-- "Stable" tokens are unit IDs that won't change between scan and click.
+-- Nameplate tokens and *target tokens are excluded because they can shift
+-- at any moment (nameplate recycled, player retargets).
+local function IsStableToken(unit)
+    if unit == "target" or unit == "focus" then return true end
+    -- "party1", "raid5", "boss2" etc. are stable; "party1target" is not
+    if unit:match("target$") then return false end
+    if unit:match("^nameplate") then return false end
+    return true
+end
+
 local function ScanMarkedUnits()
-    local found = {}      -- guid -> {unit, index, guid}
+    local found = {}      -- guid -> {unit, index, guid, stableToken, name}
     local byIndex = {}    -- index -> guid (one entry per raid icon)
 
     local function Check(unit)
@@ -199,37 +234,58 @@ local function ScanMarkedUnits()
         if not idx then return end
         local guid = UnitGUID(unit)
         if not guid then return end
-        -- Deduplicate: one entry per GUID, one GUID per icon index
-        if found[guid] then return end
-        if byIndex[idx] then return end
-        found[guid] = { unit = unit, index = idx, guid = guid }
-        byIndex[idx] = guid
+
+        -- Deduplicate: one GUID per icon index
+        if byIndex[idx] and byIndex[idx] ~= guid then return end
+
+        if not found[guid] then
+            byIndex[idx] = guid
+            found[guid] = {
+                unit  = unit,
+                index = idx,
+                guid  = guid,
+                stableToken = IsStableToken(unit) and unit or nil,
+                name  = UnitName(unit),
+            }
+        else
+            -- Already found this GUID; upgrade stableToken if we find one
+            local info = found[guid]
+            if not info.stableToken and IsStableToken(unit) then
+                info.stableToken = unit
+            end
+            if not info.name then
+                info.name = UnitName(unit)
+            end
+        end
     end
 
-    -- Player's target and focus
+    -- Player's target and focus (stable, highest priority)
     Check("target")
     Check("focus")
 
-    -- Party members + their targets + their pets
+    -- Party/raid members (stable tokens)
     for i = 1, 4 do
         Check("party" .. i)
+    end
+    for i = 1, 40 do
+        Check("raid" .. i)
+    end
+
+    -- Party/raid member targets (not stable, but useful for discovery)
+    for i = 1, 4 do
         Check("party" .. i .. "target")
         Check("partypet" .. i)
         Check("partypet" .. i .. "target")
     end
-
-    -- Raid members + their targets
     for i = 1, 40 do
-        Check("raid" .. i)
         Check("raid" .. i .. "target")
     end
 
-    -- Nameplates (visible units nearby — works even when nobody targets them)
+    -- Nameplates (not stable, but discover units nobody is targeting)
     if C_NamePlate and C_NamePlate.GetNamePlates then
         local plates = C_NamePlate.GetNamePlates()
         if plates then
             for _, plate in ipairs(plates) do
-                -- Try multiple property names for TBC Classic Anniversary compat
                 local unit = plate.namePlateUnitToken
                 if not unit and UnitTokenFromNamePlate then
                     unit = UnitTokenFromNamePlate(plate)
@@ -247,29 +303,6 @@ local function ScanMarkedUnits()
     end
 
     return found
-end
-
--- =========================================================
--- Find a party/raid member whose target matches this GUID
--- Returns e.g. "party2" or "raid5" for use with /assist
--- =========================================================
-
-local function FindAssistToken(guid)
-    -- Check party members first (more common, smaller loop)
-    for i = 1, 4 do
-        local token = "party" .. i .. "target"
-        if UnitExists(token) and UnitGUID(token) == guid then
-            return "party" .. i
-        end
-    end
-    -- Check raid members
-    for i = 1, 40 do
-        local token = "raid" .. i .. "target"
-        if UnitExists(token) and UnitGUID(token) == guid then
-            return "raid" .. i
-        end
-    end
-    return nil
 end
 
 -- =========================================================
@@ -326,33 +359,14 @@ local function UpdateDisplay()
             -- Store token for tooltip
             entry.unitToken = unit
 
-            -- Build a targeting macro: prefer /assist (exact unit) with
-            -- /targetexact fallback for nameplate-only discoveries
-            local assistToken = FindAssistToken(info.guid)
-            local unitName = UnitName(unit)
-
-            -- Update secure attribute (only out of combat)
-            if not inCombat then
-                if assistToken then
-                    entry:SetAttribute("macrotext", "/assist " .. assistToken)
-                elseif unitName then
-                    entry:SetAttribute("macrotext", "/targetexact " .. unitName)
-                else
-                    entry:SetAttribute("macrotext", "")
-                end
-            end
-
-            local canTarget = assistToken ~= nil or unitName ~= nil
+            -- Store targeting data for PreClick handler
+            entry.stableToken = info.stableToken
+            entry.targetName  = info.name
 
             -- Portrait
             SetPortraitTexture(entry.portrait, unit)
-            if canTarget then
-                entry.portrait:SetDesaturated(false)
-                entry.portrait:SetAlpha(1.0)
-            else
-                entry.portrait:SetDesaturated(true)
-                entry.portrait:SetAlpha(0.6)
-            end
+            entry.portrait:SetDesaturated(false)
+            entry.portrait:SetAlpha(1.0)
 
             -- Raid icon texture
             entry.raidIcon:SetTexture(
@@ -360,7 +374,7 @@ local function UpdateDisplay()
             entry.raidIcon:Show()
 
             -- Name (colored by reaction)
-            local name = UnitName(unit) or "?"
+            local name = info.name or "?"
             local r, g, b
             if UnitIsEnemy("player", unit) then
                 r, g, b = 0.90, 0.20, 0.20
@@ -370,11 +384,7 @@ local function UpdateDisplay()
                 r, g, b = 0.95, 0.95, 0.15
             end
             entry.nameText:SetText(name)
-            if canTarget then
-                entry.nameText:SetTextColor(r, g, b)
-            else
-                entry.nameText:SetTextColor(r * 0.5, g * 0.5, b * 0.5)
-            end
+            entry.nameText:SetTextColor(r, g, b)
 
             -- Health
             local hp    = UnitHealth(unit)
@@ -404,7 +414,9 @@ local function UpdateDisplay()
                 entry:Show()
             end
         else
-            entry.unitToken = nil
+            entry.unitToken    = nil
+            entry.stableToken  = nil
+            entry.targetName   = nil
             SetGlowActive(entry, false)
             if not inCombat then
                 entry:Hide()
