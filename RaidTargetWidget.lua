@@ -189,7 +189,8 @@ end
 -- =========================================================
 
 local function ScanMarkedUnits()
-    local found = {}   -- guid -> {unit, index}
+    local found = {}      -- guid -> {unit, index, guid}
+    local byIndex = {}    -- index -> guid (one entry per raid icon)
 
     local function Check(unit)
         if not UnitExists(unit) then return end
@@ -198,10 +199,11 @@ local function ScanMarkedUnits()
         if not idx then return end
         local guid = UnitGUID(unit)
         if not guid then return end
-        -- Prefer the first token we find per guid
-        if not found[guid] then
-            found[guid] = { unit = unit, index = idx, guid = guid }
-        end
+        -- Deduplicate: one entry per GUID, one GUID per icon index
+        if found[guid] then return end
+        if byIndex[idx] then return end
+        found[guid] = { unit = unit, index = idx, guid = guid }
+        byIndex[idx] = guid
     end
 
     -- Player's target and focus
