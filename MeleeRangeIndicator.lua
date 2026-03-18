@@ -74,22 +74,31 @@ local CIRCLE_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
 
 -- Ready-state pulsating glow ring (behind everything)
 local GLOW_PULSE_HZ  = 3.0
-local GLOW_PULSE_MIN = 0.35
-local GLOW_PULSE_MAX = 0.85
+local GLOW_PULSE_MIN = 0.45
+local GLOW_PULSE_MAX = 1.0
+
+-- Muted glow for in-range + cooldown (move away!)
+local GLOW_MUTED_MIN = 0.25
+local GLOW_MUTED_MAX = 0.6
 
 local glowRing = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
 glowRing:SetPoint("CENTER")
-glowRing:SetSize(92, 92)
+glowRing:SetSize(100, 100)
 glowRing:SetTexture(CIRCLE_MASK)
-glowRing:SetVertexColor(1.0, 0.78, 0.15, 0.7)
+glowRing:SetVertexColor(1.0, 0.95, 0.75, 0.85)
 glowRing:Hide()
 
 local glowRingActive = false
+local glowRingMuted  = false  -- true = muted gold, false = bright white
 
 local glowPulseFrame = CreateFrame("Frame")
 glowPulseFrame:SetScript("OnUpdate", function()
     if not glowRingActive then return end
-    glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX))
+    if glowRingMuted then
+        glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_MUTED_MIN, GLOW_MUTED_MAX))
+    else
+        glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX))
+    end
 end)
 
 -- Outer ring (slightly larger, lighter) for a subtle border
@@ -316,9 +325,17 @@ local function UpdateState()
     end
     SetGlowVisible(ready)
 
-    -- Pulsating border glow ring in ready state
+    -- Pulsating border glow ring:
+    -- bright white when ready, muted gold when in range + cooldown (move away!)
     if ready then
         glowRingActive = true
+        glowRingMuted  = false
+        glowRing:SetVertexColor(1.0, 0.95, 0.75, 0.85)
+        glowRing:Show()
+    elseif inRange and onCooldown then
+        glowRingActive = true
+        glowRingMuted  = true
+        glowRing:SetVertexColor(0.75, 0.60, 0.15, 0.65)
         glowRing:Show()
     else
         glowRingActive = false
