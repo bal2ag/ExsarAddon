@@ -24,14 +24,9 @@ local PADDING   = 6
 
 local frame = CreateFrame("Frame", ADDON_NAME .. "GCDFrame", UIParent)
 frame:SetSize(ICON_SIZE + PADDING * 2, ICON_SIZE + PADDING * 2)
-ExsarUI.SetupMovableFrame(frame, gDB)
+local movableBg = ExsarUI.SetupMovableFrame(frame, gDB)
+movableBg:Hide()
 frame:Hide()
-
--- Placeholder: background + label shown only when unlocked and GCD inactive
-local placeholderBg = frame:CreateTexture(nil, "BACKGROUND")
-placeholderBg:SetAllPoints()
-placeholderBg:SetColorTexture(0, 0, 0, 0.6)
-placeholderBg:Hide()
 
 local placeholderText = ExsarUI.CreatePlaceholder(frame, "GCD")
 
@@ -113,7 +108,7 @@ local function UpdateGCD()
             lastGCDStart = start
             lastGCDDuration = duration
         end
-        placeholderBg:Hide()
+        movableBg:Hide()
         placeholderText:Hide()
         sweepFrame:Show()
         frame:Show()
@@ -129,11 +124,11 @@ local function UpdateGCD()
         sweepFrame:Hide()
 
         if not C_locked then
-            placeholderBg:Show()
+            movableBg:Show()
             placeholderText:Show()
             frame:Show()
         else
-            placeholderBg:Hide()
+            movableBg:Hide()
             placeholderText:Hide()
             frame:Hide()
         end
