@@ -324,18 +324,23 @@ local function UpdateDisplay()
             -- Store token for tooltip
             entry.unitToken = unit
 
-            -- Find an assist-able token for reliable targeting
+            -- Build a targeting macro: prefer /assist (exact unit) with
+            -- /targetexact fallback for nameplate-only discoveries
             local assistToken = FindAssistToken(info.guid)
-            local canTarget = assistToken ~= nil
+            local unitName = UnitName(unit)
 
             -- Update secure attribute (only out of combat)
             if not inCombat then
-                if canTarget then
+                if assistToken then
                     entry:SetAttribute("macrotext", "/assist " .. assistToken)
+                elseif unitName then
+                    entry:SetAttribute("macrotext", "/targetexact " .. unitName)
                 else
                     entry:SetAttribute("macrotext", "")
                 end
             end
+
+            local canTarget = assistToken ~= nil or unitName ~= nil
 
             -- Portrait
             SetPortraitTexture(entry.portrait, unit)
