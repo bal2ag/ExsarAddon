@@ -78,6 +78,7 @@ local GLOW_PULSE_MIN = 0.45
 local GLOW_PULSE_MAX = 1.0
 
 -- Muted glow for in-range + cooldown (move away!)
+local GLOW_MUTED_HZ  = 1.5
 local GLOW_MUTED_MIN = 0.25
 local GLOW_MUTED_MAX = 0.6
 
@@ -95,7 +96,7 @@ local glowPulseFrame = CreateFrame("Frame")
 glowPulseFrame:SetScript("OnUpdate", function()
     if not glowRingActive then return end
     if glowRingMuted then
-        glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_MUTED_MIN, GLOW_MUTED_MAX))
+        glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_MUTED_HZ, GLOW_MUTED_MIN, GLOW_MUTED_MAX))
     else
         glowRing:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX))
     end
@@ -171,11 +172,16 @@ end
 -- =========================================================
 -- Cooldown sweep overlay
 -- =========================================================
+-- Sweep container sized to match the glow ring so the pie-chart
+-- animation covers both the icon and the pulsating border.
 
-local cooldown = ExsarUI.CreateSweep(frame)
--- Make the swipe the visual indicator: a grey circle that empties like a pie
+local sweepHolder = CreateFrame("Frame", nil, frame)
+sweepHolder:SetSize(100, 100)
+sweepHolder:SetPoint("CENTER")
+
+local cooldown = ExsarUI.CreateSweep(sweepHolder)
 if cooldown.SetSwipeColor then
-    cooldown:SetSwipeColor(0.4, 0.4, 0.4, 0.85)
+    cooldown:SetSwipeColor(0.65, 0.65, 0.65, 0.92)
 end
 if cooldown.SetSwipeTexture then
     cooldown:SetSwipeTexture(CIRCLE_MASK)
