@@ -301,7 +301,7 @@ end
 -- =========================================================
 
 local ENTER_RANGE_SOUND = 154   -- Sword1H_WeaponMetalCritical
-local LEAVE_RANGE_SOUND = 698  -- SHEATHINGMETALWEAPONSHEATHE
+local LEAVE_RANGE_SOUND = 1024  -- ChickenDeath
 
 local function UpdateState()
     local inRange     = CheckMeleeRange()
