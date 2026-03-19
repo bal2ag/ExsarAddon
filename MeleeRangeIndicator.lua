@@ -170,6 +170,24 @@ local function SetGlowVisible(show)
 end
 
 -- =========================================================
+-- Red X overlay (shown when out of range with swing on cooldown)
+-- =========================================================
+
+local redXFrame = CreateFrame("Frame", nil, frame)
+redXFrame:SetAllPoints()
+if redXFrame.SetIgnoreParentAlpha then
+    redXFrame:SetIgnoreParentAlpha(true)
+end
+local redX1, redX2 = ExsarUI.CreateRedX(redXFrame, 10, 4)
+redX1:Hide()
+redX2:Hide()
+
+local function SetRedXVisible(show)
+    if show then redX1:Show(); redX2:Show()
+    else redX1:Hide(); redX2:Hide() end
+end
+
+-- =========================================================
 -- Cooldown sweep overlay
 -- =========================================================
 -- Sweep container sized to match the glow ring so the pie-chart
@@ -330,6 +348,7 @@ local function UpdateState()
         frame:SetAlpha(1.0)
     end
     SetGlowVisible(ready)
+    SetRedXVisible(not inRange and onCooldown)
 
     -- Pulsating border glow ring:
     -- bright white when ready, muted gold when in range + cooldown (move away!)
