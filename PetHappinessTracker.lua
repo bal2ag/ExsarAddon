@@ -212,6 +212,7 @@ end
 
 local function CorrectToTier()
     -- If the API tier disagrees with our estimate's tier, snap to boundary
+    if S.tier == 0 then return end  -- not seeded yet; avoid clobbering saved data
     local happiness = GetPetHappiness()
     if not happiness then return end
 
