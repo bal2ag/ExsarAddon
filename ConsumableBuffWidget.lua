@@ -39,7 +39,7 @@ local TRACKED_ITEMS = {
           { name = "Scroll of Agility I",  id = 3012,  buffId = 8115  },
       },
     },
-    { name = "Adamantite Sharpening Stone",   id = 23529, weaponSlot = "mainhand", buffDuration = 1800 },
+    { name = "Adamantite Sharpening Stone",   id = 23529, weaponSlot = "mainhand", enchantId = 2713, buffDuration = 3600 },
     { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261 },
     { name = "Spicy Hot Talbuk",             id = 33872, buffName = "Well Fed",                    buffId = 43763 },
 }
@@ -93,6 +93,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
         buffId      = item.buffId,
         unit        = item.unit or "player",
         weaponSlot  = item.weaponSlot,
+        enchantId    = item.enchantId,
         buffDuration = item.buffDuration,
         ranks       = item.ranks,
         count       = -1,
@@ -241,30 +242,24 @@ local function UpdateBuffs()
     end
 
     -- Weapon enchant info (temporary sharpening/weightstones etc.)
-    local hasMainEnchant, mainExpMs = GetWeaponEnchantInfo()
+    -- 4th return is the enchant ID; used to distinguish our stone from
+    -- other temporary enchants (e.g. Windfury Weapon = 2636).
+    local hasMainEnchant, mainExpMs, _, mainEnchantId = GetWeaponEnchantInfo()
 
     for _, s in ipairs(slots) do
         local match
         if s.weaponSlot == "mainhand" then
-            if hasMainEnchant and mainExpMs and mainExpMs > 0 then
+            if hasMainEnchant and mainExpMs and mainExpMs > 0
+               and (not s.enchantId or mainEnchantId == s.enchantId) then
                 local remaining = mainExpMs / 1000
-                local duration = s.buffDuration or remaining
-                -- Only treat this as our enchant if remaining fits within
-                -- the expected duration (with a small tolerance for tick drift).
-                -- A fishing lure (10 min) or other enchant will have remaining
-                -- outside the expected window and be ignored.
-                if remaining <= duration + 5 then
-                    -- Recompute start from live remaining each tick.
-                    -- This avoids drift and stale-cache bugs when the enchant
-                    -- is replaced or reapplied.
-                    local startTime = now + remaining - duration
-                    local expTime   = now + remaining
-                    match = { duration = duration, expTime = expTime }
-                    -- Only update sweep when start changes significantly,
-                    -- to avoid animation resets on every poll tick.
-                    if not s.enchantStart or math.abs(startTime - s.enchantStart) > 2 then
-                        s.enchantStart = startTime
-                    end
+                local duration  = s.buffDuration or remaining
+                local expTime   = now + remaining
+                local startTime = expTime - duration
+                match = { duration = duration, expTime = expTime }
+                -- Only update sweep start when it changes significantly,
+                -- to avoid animation resets on every poll tick.
+                if not s.enchantStart or math.abs(startTime - s.enchantStart) > 2 then
+                    s.enchantStart = startTime
                 end
             else
                 s.enchantStart = nil

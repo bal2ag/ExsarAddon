@@ -161,7 +161,7 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
 - `PlaySound(soundKitID [, channel])` — plays a built-in sound; use `"Master"` channel for alerts that must be heard regardless of SFX volume
 - `IsInRaid()` / `IsInGroup()` — group context detection; solo = not `IsInGroup()`
 - `UnitIsUnit(unit1, unit2)` — true if both unit tokens refer to the same entity
-- `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, ...`; `mainExpMs` is milliseconds remaining
+- `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, mainCharges, mainEnchantId, hasOffEnchant, ...`; `mainExpMs` is milliseconds remaining; returns only remaining time, NOT total duration — total duration must be hardcoded if needed (e.g. for sweep animation). Use `mainEnchantId` to distinguish between different temporary enchants (e.g. Adamantite Sharpening Stone = 2713, Windfury Weapon = 2636)
 
 ## Lua Version Note
 
