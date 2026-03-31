@@ -16,11 +16,13 @@ local DEFAULT_WIDTH  = 240
 local DEFAULT_HEIGHT = 24
 local ICON_SIZE      = DEFAULT_HEIGHT   -- icon is square, height of the bar
 local FLASH_DURATION = 0.4
--- Auto Shot aim duration: base 0.5s + network latency (same formula as
--- SwingTimer's aimWindow).  Updated on login and after each Auto Shot fires.
--- YaHT uses a fixed 0.65s; SwingTimerPro uses 0.52 + latency; we use 0.5 +
--- latency which adapts to the player's actual network conditions.
-local AUTO_AIM_TIME  = 0.65  -- default before first latency measurement
+-- Two distinct Auto Shot timing windows:
+-- AUTO_CLIP_TIME:  hasted clipping window for the standing-still natural aim
+--                  bar (how long before cycle-end a new cast would clip).
+-- AUTO_WIND_UP:    unhasted 0.5s + latency for movement-delayed aim bars
+--                  (the actual wind-up time after the player stops moving).
+local AUTO_CLIP_TIME = 0.65  -- default before first measurement
+local AUTO_WIND_UP   = 0.65
 
 -- Used only to resolve localized spell names at login
 local SPELL_ID_AUTO   = 75
@@ -70,7 +72,8 @@ local C = {
     multiIcon    = nil,    -- cached icon texture for multi-shot
     lastAutoTime = 0,      -- GetTime() of the last Auto Shot fire; drives aim-window detection
     autoSpeed    = 0,      -- hasted ranged weapon speed (seconds); from UnitRangedDamage
-    inAutoAim    = false,  -- gate: true once the 0.5s aim window bar has been shown this cycle
+    baseSpeed    = 0,      -- base (unhasted) ranged weapon speed (seconds)
+    inAutoAim    = false,  -- gate: true once the hasted aim window bar has been shown this cycle
     locked       = false,  -- cached; updated on ADDON_LOADED and lock toggle
     -- Resolved at PLAYER_ENTERING_WORLD:
     nameAuto    = "Auto Shot",
@@ -85,13 +88,13 @@ local function RefreshAutoSpeed()
     C.autoSpeed = (type(speed) == "number" and speed > 0) and speed or 0
 end
 
+local function RefreshBaseSpeed()
+    C.baseSpeed = ExsarUI.GetBaseRangedSpeed()
+end
+
 local function RefreshAutoAimTime()
-    local _, _, homeMs, worldMs = GetNetStats()
-    local latency = math.max(
-        type(homeMs)  == "number" and homeMs  or 0,
-        type(worldMs) == "number" and worldMs or 0
-    ) / 1000
-    AUTO_AIM_TIME = 0.5 + latency
+    AUTO_CLIP_TIME = ExsarUI.GetAutoShotClipWindow(C.autoSpeed, C.baseSpeed)
+    AUTO_WIND_UP   = ExsarUI.GetAutoShotWindUpTime()
 end
 
 -- =========================================================
@@ -232,7 +235,11 @@ combatFrame:SetScript("OnEvent", function(self, event)
     if subEvent == "SPELL_CAST_START" then
         if MULTI_SHOT_IDS[spellId] then
             local now = GetTime()
-            ShowBar(C.nameMulti, C.multiIcon, now, now + 0.5)
+            -- Multi-Shot has a 0.5s base cast, reduced by haste (same as Auto Shot wind-up)
+            local multiDur = (C.baseSpeed > 0 and C.autoSpeed > 0)
+                and 0.5 * C.autoSpeed / C.baseSpeed
+                or 0.5
+            ShowBar(C.nameMulti, C.multiIcon, now, now + multiDur)
         elseif AIMED_SHOT_IDS[spellId] then
             -- Prefer UnitCastingInfo for the accurate hasted cast duration.
             -- Fall back to ranged weapon speed if the cast info isn't populated yet.
@@ -263,7 +270,7 @@ local EndCast
 -- and cannot detect the start of the aim window.  This separate frame is always
 -- shown so it ticks every frame and can trigger ShowBar at the right moment.
 -- Two cases are handled:
---   A) Normal (no movement delay): autoRemaining is in (0, AUTO_AIM_TIME].
+--   A) Normal (no movement delay): autoRemaining is in (0, AUTO_CLIP_TIME].
 --   B) Overdue (shot delayed by movement): autoRemaining <= 0 but the weapon
 --      cooldown (GetSpellCooldown) has expired and the player just stopped moving.
 local autoAimTicker = CreateFrame("Frame")
@@ -309,13 +316,14 @@ autoAimTicker:SetScript("OnUpdate", function(self, elapsed)
     -- the bar to the new stop time instead of the stale schedule.
     if C.autoSpeed > 0 and C.lastAutoTime > 0 then
         local naturalEnd   = C.lastAutoTime + C.autoSpeed
-        local naturalStart = naturalEnd - AUTO_AIM_TIME
+        local naturalStart = naturalEnd - AUTO_CLIP_TIME
         local autoRemaining = naturalEnd - now
-        if autoRemaining > 0 and autoRemaining <= AUTO_AIM_TIME then
+        if autoRemaining > 0 and autoRemaining <= AUTO_CLIP_TIME then
             if autoAimStopTime > naturalStart then
                 -- Aim was interrupted by movement and restarted at the new stop time.
+                -- Use the unhasted wind-up: the full 0.5s animation plays after stopping.
                 barStart = autoAimStopTime
-                barEnd   = autoAimStopTime + AUTO_AIM_TIME
+                barEnd   = autoAimStopTime + AUTO_WIND_UP
             else
                 -- Aim has been uninterrupted; use the natural window.
                 barStart = naturalStart
@@ -335,7 +343,7 @@ autoAimTicker:SetScript("OnUpdate", function(self, elapsed)
             or (C.autoSpeed > 0 and (C.autoSpeed - (now - C.lastAutoTime)) <= 0)
         if autoOverdue then
             barStart = autoAimStopTime
-            barEnd   = autoAimStopTime + AUTO_AIM_TIME
+            barEnd   = autoAimStopTime + AUTO_WIND_UP
             inAim    = now <= barEnd
         end
     end
@@ -505,6 +513,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         C.autoIcon  = autoIcon
         C.aimedIcon = aimedIcon
         C.multiIcon = multiIcon
+        RefreshBaseSpeed()
         RefreshAutoSpeed()
         RefreshAutoAimTime()
 
@@ -551,10 +560,15 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         end
 
     elseif event == "UNIT_AURA" then
-        if arg1 == "player" then RefreshAutoSpeed() end
+        if arg1 == "player" then
+            RefreshAutoSpeed()
+            RefreshAutoAimTime()
+        end
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+        RefreshBaseSpeed()
         RefreshAutoSpeed()
+        RefreshAutoAimTime()
     end
 end)
 

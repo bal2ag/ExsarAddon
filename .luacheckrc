@@ -37,6 +37,7 @@ read_globals = {
     "Settings",
     "TargetFrame",
     "UIParent",
+    "WorldFrame",
 
     -- WoW API functions
     "C_Container",
@@ -46,6 +47,7 @@ read_globals = {
     "GetCVar",
     "GetInventoryItemCooldown",
     "GetInventoryItemID",
+    "GetInventoryItemLink",
     "GetInventoryItemTexture",
     "GetItemCount",
     "GetItemInfo",

@@ -35,12 +35,15 @@ local S = {
     shooting       = false,
     lastShotTime   = 0,
     speed          = 0,      -- hasted ranged weapon speed (seconds)
-    aimWindow      = 0.5,    -- time before shot to stop moving (0.5s + latency)
+    baseSpeed      = 0,      -- base (unhasted) ranged weapon speed (seconds)
+    aimWindow      = 0.5,    -- hasted clip window (0.5s scaled by haste + latency)
     autoShotName   = "Auto Shot",
     aimedShotName  = "Aimed Shot",
     feignDeathName = "Feign Death",
     barZone        = -1,     -- last color zone (0=red,1=orange,2=blue); -1=unset
     castEnd        = 0,      -- absolute GetTime() when the player's current cast ends; 0 if not casting
+    autoFired      = false,  -- true after the first real auto shot; gates clip detection
+    clipStr        = "",     -- current clip text; set when a cast starts, cleared on next auto shot
     lastClipStr    = "",     -- cached clip text to avoid redundant SetText calls
     lastSpeedStr   = "",     -- cached countdown text to avoid redundant SetText calls
     refreshDelay   = 0,      -- seconds remaining before a deferred RefreshAll fires; 0 = inactive
@@ -158,16 +161,13 @@ local function RefreshSpeed()
 end
 
 local function RefreshAimWindow()
-    -- Stop-moving window = ~0.5s shot wind-up + server latency
-    local _, _, homeMs, worldMs = GetNetStats()
-    local latency = math.max(
-        type(homeMs)  == "number" and homeMs  or 0,
-        type(worldMs) == "number" and worldMs or 0
-    ) / 1000
-    S.aimWindow = 0.5 + latency
+    -- Reticules mark the hasted clipping window: starting a cast inside
+    -- this zone will delay the next auto shot.
+    S.aimWindow = ExsarUI.GetAutoShotClipWindow(S.speed, S.baseSpeed)
 end
 
 local function RefreshAll()
+    S.baseSpeed = ExsarUI.GetBaseRangedSpeed()
     RefreshSpeed()
     RefreshAimWindow()
     UpdateReticulePositions()
@@ -271,26 +271,11 @@ frame:SetScript("OnUpdate", function(self, elapsed)
 
     bar:Show()
 
-    -- Clip indicator: show when the active cast will push the auto shot past its due time.
-    -- castEnd expires naturally at its own timestamp; clear it here to avoid stale values.
-    if S.castEnd > 0 and now >= S.castEnd then
-        S.castEnd = 0
-    end
-
-    local clipStr = ""
-    if S.castEnd > 0 then
-        -- due = absolute time the next auto shot would fire if unimpeded
-        local due     = now + remaining
-        local clipAmt = S.castEnd - due
-        if clipAmt > 0.02 then   -- 0.02s threshold avoids noise at boundary
-            clipStr = string.format("(%.1f)", clipAmt)
-        end
-    end
-
-    if clipStr ~= S.lastClipStr then
-        S.lastClipStr = clipStr
-        if clipStr ~= "" then
-            clipText:SetText(clipStr)
+    -- Clip indicator: computed once at cast start, held until next auto shot fires.
+    if S.clipStr ~= S.lastClipStr then
+        S.lastClipStr = S.clipStr
+        if S.clipStr ~= "" then
+            clipText:SetText(S.clipStr)
             clipText:Show()
         else
             clipText:Hide()
@@ -315,6 +300,8 @@ pcall(function() frame:RegisterEvent("UNIT_SPELLCAST_STOP") end)
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("SPELLS_CHANGED")
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -341,10 +328,20 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
 
     elseif event == "UNIT_SPELLCAST_START" then
         if arg1 == "player" then
-            -- Capture the cast end time for clip detection.
+            -- Compute clip amount once at cast start.
             local _, _, _, _, endMS = UnitCastingInfo("player")
             if type(endMS) == "number" and endMS > 0 then
                 S.castEnd = endMS / 1000
+                -- How much will this cast delay the next auto shot?
+                if S.autoFired and S.speed > 0 and S.lastShotTime > 0 then
+                    local due = S.lastShotTime + S.speed
+                    local clipAmt = S.castEnd - due
+                    if clipAmt > 0.02 then
+                        S.clipStr = string.format("(%.2f)", clipAmt)
+                    else
+                        S.clipStr = ""
+                    end
+                end
             end
         end
 
@@ -364,9 +361,12 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or (arg5 == AUTO_SHOT_ID)
             if isAutoShot then
                 S.lastShotTime = GetTime()
-                S.barZone      = -1   -- force color re-evaluation on next frame
-                -- Resync speed in case haste changed mid-cycle
+                S.autoFired    = true  -- first real auto shot; enable clip detection
+                S.barZone      = -1    -- force color re-evaluation on next frame
+                S.clipStr      = ""    -- clear clip indicator on new cycle
+                -- Resync speed/aim in case haste changed mid-cycle
                 RefreshSpeed()
+                RefreshAimWindow()
                 UpdateReticulePositions()
             end
 
@@ -379,7 +379,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             if isAimedShot then
                 S.lastShotTime = GetTime()
                 S.barZone      = -1
+                S.clipStr      = ""
                 RefreshSpeed()
+                RefreshAimWindow()
                 UpdateReticulePositions()
             end
 
@@ -393,6 +395,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             if isFeignDeath then
                 S.lastShotTime = 0
                 S.shooting     = false
+                S.autoFired    = false
+                S.clipStr      = ""
                 bar:Hide()
                 edgeGlowL:Hide()
                 edgeGlowR:Hide()
@@ -410,6 +414,10 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     elseif event == "SPELLS_CHANGED" then
         -- Stats may not be updated immediately; wait 0.5s before re-reading speed.
         S.refreshDelay = 0.5
+
+    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        S.clipStr   = ""
+        S.autoFired = false
     end
 end)
 

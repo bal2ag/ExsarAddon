@@ -899,6 +899,73 @@ function ExsarUI.CreatePoller(frame, interval, callback)
     return frame
 end
 
+-- =========================================================
+-- Ranged weapon helpers
+-- =========================================================
+
+-- Hidden tooltip used to read base weapon speed (unaffected by haste buffs).
+local scanTip = CreateFrame("GameTooltip", ADDON_NAME .. "ScanTip", nil, "GameTooltipTemplate")
+scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+
+local RANGED_SLOT = 18  -- inventory slot for ranged weapon
+
+--- Read the base (unhasted) speed of the equipped ranged weapon via tooltip scan.
+-- @return number  base weapon speed in seconds, or 0 if no weapon equipped
+function ExsarUI.GetBaseRangedSpeed()
+    local link = GetInventoryItemLink("player", RANGED_SLOT)
+    if not link then return 0 end
+    scanTip:ClearLines()
+    scanTip:SetHyperlink(link)
+    for i = 1, scanTip:NumLines() do
+        local right = _G[scanTip:GetName() .. "TextRight" .. i]
+        if right then
+            local str = right:GetText()
+            if str then
+                local speed = str:match("Speed%s+(%d+%.?%d*)")
+                if speed then
+                    return tonumber(speed) or 0
+                end
+            end
+        end
+    end
+    return 0
+end
+
+-- Internal: current one-way network latency in seconds.
+local function GetLatency()
+    local _, _, homeMs, worldMs = GetNetStats()
+    return math.max(
+        type(homeMs)  == "number" and homeMs  or 0,
+        type(worldMs) == "number" and worldMs or 0
+    ) / 1000
+end
+
+--- Compute the haste-adjusted Auto Shot clipping window + latency.
+-- When standing still, the game auto-casts the wind-up inside the cycle.
+-- Starting a new spell (e.g. Steady Shot) during this window delays the auto
+-- shot. The window scales with haste because the internal cast is hasted.
+-- Used by the CastBar for the standing-still natural aim window.
+-- @param hastedSpeed  current hasted weapon speed from UnitRangedDamage("player")
+-- @param baseSpeed    base weapon speed from ExsarUI.GetBaseRangedSpeed()
+-- @return number  clipping window in seconds
+function ExsarUI.GetAutoShotClipWindow(hastedSpeed, baseSpeed)
+    local baseAim = 0.5
+    if baseSpeed > 0 and hastedSpeed > 0 then
+        baseAim = 0.5 * hastedSpeed / baseSpeed
+    end
+    return baseAim + GetLatency()
+end
+
+--- Compute the unhasted Auto Shot wind-up time + latency.
+-- After stopping from movement, the game must play the full unhasted 0.5s
+-- wind-up before the shot fires. This is NOT reduced by haste.
+-- Used by the swing timer reticules ("stop moving by here") and the CastBar
+-- for movement-delayed aim bars.
+-- @return number  wind-up time in seconds
+function ExsarUI.GetAutoShotWindUpTime()
+    return 0.5 + GetLatency()
+end
+
 function ExsarUI.AddSlashReset(cmd, frame, dbFunc, name, defaultX, defaultY)
     ExsarAddon.AddSlashCommand(cmd, function()
         frame:ClearAllPoints()

@@ -163,6 +163,67 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
 - `UnitIsUnit(unit1, unit2)` — true if both unit tokens refer to the same entity
 - `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, mainCharges, mainEnchantId, hasOffEnchant, ...`; `mainExpMs` is milliseconds remaining; returns only remaining time, NOT total duration — total duration must be hardcoded if needed (e.g. for sweep animation). Use `mainEnchantId` to distinguish between different temporary enchants (e.g. Adamantite Sharpening Stone = 2713, Windfury Weapon = 2636)
 
+## Hunter Ability Timing Reference (from diziet559/rotationtools)
+
+Source: https://github.com/diziet559/rotationtools/ — the authoritative TBC hunter rotation simulator.
+
+### Base Cast Times and Haste Interaction
+
+| Ability | Base Duration | Haste-Affected? | Formula |
+|---|---|---|---|
+| Auto Shot wind-up | 0.5s | Yes | `0.5 / totalRangedHaste` |
+| Auto Shot cooldown | `weaponSpeed - 0.5` | Yes | `(weaponSpeed - 0.5) / totalRangedHaste` |
+| Full Auto Shot cycle | `weaponSpeed` | Yes | `weaponSpeed / totalRangedHaste` (= effective weapon speed) |
+| Steady Shot | 1.5s | Yes | `1.5 / totalRangedHaste` |
+| Multi-Shot | 0.5s | Yes | `0.5 / totalRangedHaste` (NOT instant — same base as Auto Shot wind-up) |
+| Arcane Shot | ~0.1s | No | Fixed; effectively instant |
+| GCD | 1.5s | **No** | Fixed at 1.5s; ranged GCD is NOT reduced by haste in TBC |
+| Melee weave | ~0.4s | No | Fixed time to step in, swing, step out |
+
+### Haste Stacking
+
+Haste sources stack **multiplicatively** (buff-based) on top of an **additive** haste-rating base:
+
+```
+base_haste = 1 + haste_rating / 1577   (15.8 rating = 1% haste at level 70)
+-- Drums of Battle (+80 rating = +5.06%) and Haste Potion (+400 rating = +25.32%)
+-- are additive with haste rating, applied before multiplicative buffs.
+
+general_haste = base_haste * [bloodlust 1.30 if active]
+ranged_haste  = general_haste * 1.15(quiver) * 1.20(Serpent's Swiftness 5/5)
+                * [1.40 Rapid Fire if active] * [1.15 Imp Hawk proc if active]
+```
+
+### Key Haste Source Values
+
+| Source | Multiplier | Scope |
+|---|---|---|
+| Quiver (15%) | ×1.15 | Ranged only |
+| Serpent's Swiftness (BM 5/5) | ×1.20 | Ranged only |
+| Rapid Fire | ×1.40 | Ranged only; 15s duration (19s with 2pc T3) |
+| Imp Aspect of the Hawk (5/5) | ×1.15 | Ranged only; 10% proc chance, 12s duration |
+| Bloodlust / Heroism | ×1.30 | Both melee and ranged |
+| Drums of Battle | +5.06% | Additive with haste rating |
+| Haste Potion | +25.32% | Additive with haste rating |
+
+### Auto Shot Cycle Model
+
+The auto shot cycle has two phases:
+1. **Wind-up (cast)**: 0.5s base, haste-reduced — hunter must be stationary
+2. **Cooldown**: `(weaponSpeed - 0.5) / haste` — free to move or cast other spells
+
+When standing still, the game auto-starts the wind-up so it completes exactly at cycle end. When stopping from movement, the full unhasted 0.5s wind-up plays from the stop point (observed in-game; the sim does not model movement).
+
+**Clipping**: If a cast (Steady Shot, etc.) is still in progress when the auto shot becomes available, the auto is delayed until the cast finishes. The delay = `castEndTime - autoAvailableTime`.
+
+### Widget Implications
+
+- **Swing timer reticules**: Mark the hasted clip window (`0.5 / haste + latency`) — shows when starting a new cast would delay the next auto shot
+- **Cast bar (standing still auto aim)**: Uses hasted clip window duration
+- **Cast bar (after stopping from movement)**: Uses unhasted 0.5s + latency — the actual wind-up time
+- **Cast bar (Multi-Shot)**: Should use `0.5 / haste`, NOT a fixed 0.5s
+- **GCD tracker**: Must use fixed 1.5s, NOT haste-reduced
+
 ## Lua Version Note
 
 The WoW Classic client uses **Lua 5.1**. Do not use `goto`, `<const>`, `<close>`, or other Lua 5.2+ features.
