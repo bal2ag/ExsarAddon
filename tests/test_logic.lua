@@ -905,3 +905,40 @@ describe("SelectBestRank", function()
         assert.are.equal(10, result.id)
     end)
 end)
+
+-- =========================================================
+-- SuggestRotation
+-- =========================================================
+
+describe("SuggestRotation", function()
+    it("suggests 5:5:1:1 for very slow speeds", function()
+        assert.are.equal("5:5:1:1", Logic.SuggestRotation(2.0))
+        assert.are.equal("5:5:1:1", Logic.SuggestRotation(1.84))
+        assert.are.equal("5:5:1:1", Logic.SuggestRotation(3.0))
+    end)
+
+    it("suggests 1:1 at the 1.83 boundary", function()
+        assert.are.equal("1:1", Logic.SuggestRotation(1.83))
+    end)
+
+    it("suggests 1:1 for mid-range speeds", function()
+        assert.are.equal("1:1", Logic.SuggestRotation(1.5))
+        assert.are.equal("1:1", Logic.SuggestRotation(1.3))
+    end)
+
+    it("suggests 1:1 at the 1.22 boundary", function()
+        assert.are.equal("1:1", Logic.SuggestRotation(1.22))
+    end)
+
+    it("suggests 2:3 between 0.83 and 1.22", function()
+        assert.are.equal("2:3", Logic.SuggestRotation(1.0))
+        assert.are.equal("2:3", Logic.SuggestRotation(0.9))
+        assert.are.equal("2:3", Logic.SuggestRotation(1.21))
+    end)
+
+    it("suggests 1:2 at 0.83 and below", function()
+        assert.are.equal("1:2", Logic.SuggestRotation(0.83))
+        assert.are.equal("1:2", Logic.SuggestRotation(0.7))
+        assert.are.equal("1:2", Logic.SuggestRotation(0.5))
+    end)
+end)

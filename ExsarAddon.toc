@@ -30,3 +30,4 @@ PetAggressiveAlert.lua
 PetHappinessTracker.lua
 AggroAlert.lua
 AmmoTracker.lua
+RotationHelper.lua

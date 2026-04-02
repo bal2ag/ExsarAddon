@@ -297,6 +297,20 @@ function ExsarLogic.SelectBestRank(ranks, getCount)
     return best or ranks[1]
 end
 
+--- Given an effective (hasted) weapon speed, suggest a rotation string.
+-- Boundaries: >1.83 → "5:5:1:1", [1.22,1.83] → "1:1", (0.83,1.22) → "2:3", ≤0.83 → "1:2"
+function ExsarLogic.SuggestRotation(effectiveSpeed)
+    if effectiveSpeed > 1.83 then
+        return "5:5:1:1"
+    elseif effectiveSpeed >= 1.22 then
+        return "1:1"
+    elseif effectiveSpeed > 0.83 then
+        return "2:3"
+    else
+        return "1:2"
+    end
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic
