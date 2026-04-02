@@ -68,12 +68,12 @@ local function CreateEntry(index)
 
     -- PreClick: dynamically pick the best targeting strategy at click time.
     -- Tier 1: type=target with a stable unit token (exact, handles same-name mobs)
-    -- Tier 2: /assist a party/raid member targeting this unit (verified by raid icon)
+    -- Tier 2: /assist any party/raid member currently targeting a unit with the
+    --         matching raid icon (live scan, not stale stored value)
     -- Tier 3: type=macro with /targetexact Name (closest mob with that name)
     btn:SetScript("PreClick", function(self)
         local stable = self.stableToken
         local uname  = self.targetName
-        local assist = self.assistUnit
         local rIdx   = self.raidIndex
         -- Reset to macro type first so attrs are never out of sync
         self:SetAttribute("type", "macro")
@@ -81,21 +81,41 @@ local function CreateEntry(index)
         if stable and UnitExists(stable) then
             self:SetAttribute("type", "target")
             self:SetAttribute("unit", stable)
-        elseif assist and UnitExists(assist)
-               and UnitExists(assist .. "target")
-               and GetRaidTargetIndex(assist .. "target") == rIdx then
-            self:SetAttribute("macrotext", "/assist " .. assist)
-        elseif uname then
-            self:SetAttribute("macrotext", "/targetexact " .. uname)
         else
-            self:SetAttribute("macrotext", "/targetexact nil")
+            -- Dynamically find ANY group member whose target has the right raid icon
+            local assistFound
+            if rIdx then
+                local prefix, count
+                if IsInRaid() then
+                    prefix, count = "raid", 40
+                elseif IsInGroup() then
+                    prefix, count = "party", 4
+                end
+                if prefix then
+                    for i = 1, count do
+                        local member = prefix .. i
+                        local mt = member .. "target"
+                        if UnitExists(mt) and GetRaidTargetIndex(mt) == rIdx then
+                            self:SetAttribute("macrotext", "/assist " .. member)
+                            assistFound = true
+                            break
+                        end
+                    end
+                end
+            end
+            if not assistFound then
+                if uname then
+                    self:SetAttribute("macrotext", "/targetexact " .. uname)
+                else
+                    self:SetAttribute("macrotext", "/targetexact nil")
+                end
+            end
         end
     end)
 
     -- Targeting data (updated by UpdateDisplay, read by PreClick)
     btn.stableToken = nil
     btn.targetName  = nil
-    btn.assistUnit  = nil
     btn.raidIndex   = nil
 
     -- Hover highlight
@@ -236,7 +256,7 @@ local function ScanMarkedUnits()
     local found = {}      -- guid -> {unit, index, guid, stableToken, name}
     local byIndex = {}    -- index -> guid (one entry per raid icon)
 
-    local function Check(unit, assistSource)
+    local function Check(unit)
         if not UnitExists(unit) then return end
         if not UnitCanAttack("player", unit) then return end
         local idx = GetRaidTargetIndex(unit)
@@ -254,7 +274,6 @@ local function ScanMarkedUnits()
                 index = idx,
                 guid  = guid,
                 stableToken = IsStableToken(unit) and unit or nil,
-                assistUnit  = assistSource,
                 name  = UnitName(unit),
             }
         else
@@ -262,9 +281,6 @@ local function ScanMarkedUnits()
             local info = found[guid]
             if not info.stableToken and IsStableToken(unit) then
                 info.stableToken = unit
-            end
-            if not info.assistUnit and assistSource then
-                info.assistUnit = assistSource
             end
             if not info.name then
                 info.name = UnitName(unit)
@@ -285,16 +301,13 @@ local function ScanMarkedUnits()
     end
 
     -- Party/raid member targets (not stable, but useful for discovery)
-    -- Pass the member as assistSource so PreClick can use /assist.
     for i = 1, 4 do
-        local member = "party" .. i
-        Check(member .. "target", member)
+        Check("party" .. i .. "target")
         Check("partypet" .. i)
         Check("partypet" .. i .. "target")
     end
     for i = 1, 40 do
-        local member = "raid" .. i
-        Check(member .. "target", member)
+        Check("raid" .. i .. "target")
     end
 
     -- Nameplates (not stable, but discover units nobody is targeting)
@@ -365,6 +378,8 @@ local function UpdateDisplay()
     local inCombat = InCombatLockdown()
     local targetGUID = UnitExists("target") and UnitGUID("target") or nil
 
+    local staleEntries = {}
+
     for i = 1, 8 do
         local entry = entries[i]
         local info = sorted[i]
@@ -377,9 +392,9 @@ local function UpdateDisplay()
 
             -- Store targeting data for PreClick handler
             entry.stableToken = info.stableToken
-            entry.assistUnit  = info.assistUnit
             entry.raidIndex   = info.index
             entry.targetName  = info.name
+            entry.stale       = false
 
             -- Portrait
             SetPortraitTexture(entry.portrait, unit)
@@ -389,6 +404,7 @@ local function UpdateDisplay()
             -- Raid icon texture
             entry.raidIcon:SetTexture(
                 "Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. info.index)
+            entry.raidIcon:SetAlpha(1.0)
             entry.raidIcon:Show()
 
             -- Name (colored by reaction)
@@ -423,7 +439,7 @@ local function UpdateDisplay()
             local isTarget = targetGUID and info.guid == targetGUID
             SetGlowActive(entry, isTarget)
 
-            -- Position within frame
+            -- Position within frame (active entries first)
             entry:ClearAllPoints()
             entry:SetPoint("TOPLEFT", frame, "TOPLEFT",
                            PAD, -(PAD + (i - 1) * (ENTRY_H + ENTRY_GAP)))
@@ -434,20 +450,40 @@ local function UpdateDisplay()
         else
             entry.unitToken    = nil
             entry.stableToken  = nil
-            entry.assistUnit   = nil
             entry.raidIndex    = nil
             entry.targetName   = nil
+            entry.stale        = true
             SetGlowActive(entry, false)
             if not inCombat then
                 entry:Hide()
+            else
+                -- Can't hide secure buttons in combat; collect for bottom placement
+                staleEntries[#staleEntries + 1] = entry
+                entry.portrait:SetDesaturated(true)
+                entry.portrait:SetAlpha(0.35)
+                entry.nameText:SetTextColor(0.5, 0.5, 0.5)
+                entry.healthBar:SetStatusBarColor(0.3, 0.3, 0.3)
+                entry.healthText:SetText("")
+                entry.raidIcon:SetAlpha(0.35)
             end
         end
     end
 
-    -- Resize and show/hide frame
-    if count > 0 then
+    -- Reposition stale entries below all active entries
+    for s = 1, #staleEntries do
+        local entry = staleEntries[s]
+        local row = count + s - 1
+        entry:ClearAllPoints()
+        entry:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                       PAD, -(PAD + row * (ENTRY_H + ENTRY_GAP)))
+    end
+
+    -- Resize and show/hide frame (include stale entries in height during combat)
+    local visibleCount = count + #staleEntries
+    if visibleCount > 0 then
         placeholderText:Hide()
-        local totalH = PAD * 2 + count * ENTRY_H + math.max(0, count - 1) * ENTRY_GAP
+        local totalH = PAD * 2 + visibleCount * ENTRY_H
+                       + math.max(0, visibleCount - 1) * ENTRY_GAP
         frame:SetSize(FRAME_W, totalH)
         ReAnchor()
         frame:Show()
