@@ -18,6 +18,13 @@ local GCD_PROBE_SPELL = "Wing Clip"
 local ICON_SIZE = 29
 local PADDING   = 6
 
+local CIRCLE_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
+
+-- Glow ring pulse parameters
+local GLOW_PULSE_HZ  = 2.0
+local GLOW_PULSE_MIN = 0.4
+local GLOW_PULSE_MAX = 0.9
+
 -- =========================================================
 -- Frame
 -- =========================================================
@@ -38,14 +45,38 @@ local sweepFrame = CreateFrame("Frame", nil, frame)
 sweepFrame:SetSize(ICON_SIZE, ICON_SIZE)
 sweepFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -PADDING)
 
+-- Glow sweep: a larger Cooldown frame behind the main one, driven by the same
+-- timing so the pie-chart animation clips the glow effect identically.
+local GLOW_SIZE = ICON_SIZE + 16
+local glowSweepFrame = CreateFrame("Frame", nil, frame)
+glowSweepFrame:SetSize(GLOW_SIZE, GLOW_SIZE)
+glowSweepFrame:SetPoint("CENTER", sweepFrame, "CENTER")
+glowSweepFrame:SetFrameLevel(sweepFrame:GetFrameLevel() - 1)
+
+local glowCooldown = ExsarUI.CreateSweep(glowSweepFrame)
+if glowCooldown.SetSwipeColor then
+    glowCooldown:SetSwipeColor(0.5, 0.7, 1.0, 0.8)
+end
+if glowCooldown.SetSwipeTexture then
+    glowCooldown:SetSwipeTexture(CIRCLE_MASK)
+end
+glowSweepFrame:Hide()
+
+local glowActive = false
+
+local glowPulseFrame = CreateFrame("Frame")
+glowPulseFrame:SetScript("OnUpdate", function()
+    if not glowActive then return end
+    glowSweepFrame:SetAlpha(ExsarLogic.PulseAlpha(GetTime(), GLOW_PULSE_HZ, GLOW_PULSE_MIN, GLOW_PULSE_MAX))
+end)
+
+-- Main sweep (on top of glow)
 local cooldown = ExsarUI.CreateSweep(sweepFrame)
--- Make the swipe itself the visual: grey circle that empties like a pie.
--- No background needed — the swipe IS the indicator.
 if cooldown.SetSwipeColor then
-    cooldown:SetSwipeColor(0.25, 0.25, 0.25, 0.9)
+    cooldown:SetSwipeColor(0.55, 0.55, 0.55, 0.95)
 end
 if cooldown.SetSwipeTexture then
-    cooldown:SetSwipeTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+    cooldown:SetSwipeTexture(CIRCLE_MASK)
 end
 
 -- Timer text frame (above the cooldown overlay)
@@ -69,8 +100,8 @@ local lastGCDDuration = 0
 local C_locked        = false
 local gcdColorState   = 0  -- 0=grey, 1=blue (spell queue)
 
-local GREY_SWIPE = { 0.25, 0.25, 0.25, 0.9 }
-local BLUE_SWIPE = { 0.15, 0.55, 0.95, 0.85 }
+local GREY_SWIPE = { 0.55, 0.55, 0.55, 0.95 }
+local BLUE_SWIPE = { 0.3, 0.65, 1.0, 0.95 }
 
 sweepFrame:SetScript("OnUpdate", function()
     if lastGCDStart > 0 and lastGCDDuration > 0 then
@@ -90,6 +121,7 @@ sweepFrame:SetScript("OnUpdate", function()
                 end
                 -- Re-apply cooldown so the new color takes effect
                 cooldown:SetCooldown(lastGCDStart, lastGCDDuration)
+                glowCooldown:SetCooldown(lastGCDStart, lastGCDDuration)
             end
         else
             gcdTimerText:SetText("")
@@ -105,12 +137,15 @@ local function UpdateGCD()
         -- New GCD detected when start time changes
         if start ~= lastGCDStart then
             cooldown:SetCooldown(start, duration)
+            glowCooldown:SetCooldown(start, duration)
             lastGCDStart = start
             lastGCDDuration = duration
         end
         movableBg:Hide()
         placeholderText:Hide()
         sweepFrame:Show()
+        glowActive = true
+        glowSweepFrame:Show()
         frame:Show()
     else
         lastGCDStart = 0
@@ -120,8 +155,11 @@ local function UpdateGCD()
             cooldown:SetSwipeColor(GREY_SWIPE[1], GREY_SWIPE[2], GREY_SWIPE[3], GREY_SWIPE[4])
         end
         cooldown:SetCooldown(0, 0)
+        glowCooldown:SetCooldown(0, 0)
         gcdTimerText:SetText("")
         sweepFrame:Hide()
+        glowActive = false
+        glowSweepFrame:Hide()
 
         if not C_locked then
             movableBg:Show()
