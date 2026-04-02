@@ -47,6 +47,7 @@ local S = {
     lastClipStr    = "",     -- cached clip text to avoid redundant SetText calls
     lastSpeedStr   = "",     -- cached countdown text to avoid redundant SetText calls
     refreshDelay   = 0,      -- seconds remaining before a deferred RefreshAll fires; 0 = inactive
+    speedPoll      = 0,      -- accumulator for 1s speed poll
 }
 
 -- =========================================================
@@ -188,6 +189,14 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         end
     end
 
+    -- Poll speed every 1s: UnitRangedDamage can lag behind events
+    -- (e.g. Rapid Fire fading reports stale speed on UNIT_AURA).
+    S.speedPoll = S.speedPoll + elapsed
+    if S.speedPoll >= 1 then
+        S.speedPoll = 0
+        RefreshAll()
+    end
+
     if S.speed <= 0 or S.lastShotTime == 0 then
         bar:Hide()
         edgeGlowL:Hide()
@@ -215,6 +224,26 @@ frame:SetScript("OnUpdate", function(self, elapsed)
 
     local now       = GetTime()
     local remaining = math.max(0, S.speed - (now - S.lastShotTime))
+
+    -- Hide bar when the cycle is complete and auto shot is off
+    if remaining <= 0 and not S.shooting then
+        bar:Hide()
+        edgeGlowL:Hide()
+        edgeGlowR:Hide()
+        if S.lastClipStr ~= "" then
+            S.lastClipStr = ""
+            S.castEnd     = 0
+            clipText:Hide()
+        end
+        -- Show final speed even with bar hidden
+        local newSpeedStr = string.format("%.1fs", S.speed)
+        if newSpeedStr ~= S.lastSpeedStr then
+            S.lastSpeedStr = newSpeedStr
+            speedText:SetText(newSpeedStr)
+        end
+        return
+    end
+
     local frac      = remaining / S.speed
 
     local barW    = math.max(0.01, frac * cachedMaxBarW)
@@ -298,7 +327,9 @@ frame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
 -- UNIT_SPELLCAST_STOP clears castEnd as a safety net; not present in all builds
 pcall(function() frame:RegisterEvent("UNIT_SPELLCAST_STOP") end)
 frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("UNIT_ATTACK_SPEED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+frame:RegisterEvent("BAG_UPDATE")
 frame:RegisterEvent("SPELLS_CHANGED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -408,7 +439,12 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             RefreshAll()
         end
 
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    elseif event == "UNIT_ATTACK_SPEED" then
+        if arg1 == "player" then
+            RefreshAll()
+        end
+
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "BAG_UPDATE" then
         RefreshAll()
 
     elseif event == "SPELLS_CHANGED" then

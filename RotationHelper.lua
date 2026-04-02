@@ -86,13 +86,29 @@ local function UpdateDisplay()
 end
 
 -- =========================================================
+-- Polling fallback: UnitRangedDamage can lag behind events
+-- (e.g. Rapid Fire fading reports stale speed on UNIT_AURA).
+-- Poll every 1s as a cheap safety net.
+-- =========================================================
+
+local pollElapsed = 0
+frame:SetScript("OnUpdate", function(_, elapsed)
+    pollElapsed = pollElapsed + elapsed
+    if pollElapsed < 1 then return end
+    pollElapsed = 0
+    UpdateDisplay()
+end)
+
+-- =========================================================
 -- Events
 -- =========================================================
 
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("UNIT_ATTACK_SPEED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+frame:RegisterEvent("BAG_UPDATE")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -108,7 +124,12 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             UpdateDisplay()
         end
 
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    elseif event == "UNIT_ATTACK_SPEED" then
+        if arg1 == "player" then
+            UpdateDisplay()
+        end
+
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "BAG_UPDATE" then
         UpdateDisplay()
     end
 end)
