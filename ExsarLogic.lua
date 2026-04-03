@@ -300,6 +300,9 @@ end
 --- Given an effective (hasted) weapon speed, suggest a rotation string.
 -- Boundaries: >=1.83 → "5:6:1:1", [1.22,1.83) → "1:1", (0.83,1.22) → "2:3", ≤0.83 → "1:2"
 function ExsarLogic.SuggestRotation(effectiveSpeed)
+    -- Round to 2 decimal places to avoid floating point edge cases
+    -- (e.g. UnitRangedDamage returning 1.82999... for 1.83)
+    effectiveSpeed = math.floor(effectiveSpeed * 100 + 0.5) / 100
     if effectiveSpeed >= 1.83 then
         return "5:6:1:1"
     elseif effectiveSpeed >= 1.22 then
