@@ -298,10 +298,10 @@ function ExsarLogic.SelectBestRank(ranks, getCount)
 end
 
 --- Given an effective (hasted) weapon speed, suggest a rotation string.
--- Boundaries: >1.83 → "5:5:1:1", [1.22,1.83] → "1:1", (0.83,1.22) → "2:3", ≤0.83 → "1:2"
+-- Boundaries: >=1.83 → "5:6:1:1", [1.22,1.83) → "1:1", (0.83,1.22) → "2:3", ≤0.83 → "1:2"
 function ExsarLogic.SuggestRotation(effectiveSpeed)
-    if effectiveSpeed > 1.83 then
-        return "5:5:1:1"
+    if effectiveSpeed >= 1.83 then
+        return "5:6:1:1"
     elseif effectiveSpeed >= 1.22 then
         return "1:1"
     elseif effectiveSpeed > 0.83 then

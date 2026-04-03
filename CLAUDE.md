@@ -58,7 +58,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `PetAggressiveAlert.lua` | Pulsing red skull + text when pet is on aggressive mode |
 | `PetHappinessTracker.lua` | Granular happiness gauge estimating exact happiness points (0–1050); reverse sweep + timer showing time until tier drop; optional sound alert on happiness drop |
 | `AggroAlert.lua` | Pulsating red text alert when enemy mobs are targeting the player; scans nameplates + party/raid target-of-target; configurable for solo/party/raid contexts; plays raid warning sound on aggro gain |
-| `RotationHelper.lua` | Shows effective weapon speed and suggested rotation (two stacked text lines); rotation thresholds: >1.83s→5:5:1:1, [1.22,1.83]→1:1, (0.83,1.22)→2:3, ≤0.83→1:2; updates on haste buff changes and weapon swaps |
+| `RotationHelper.lua` | Shows effective weapon speed and suggested rotation (two stacked text lines); rotation thresholds: >=1.83s→5:6:1:1, [1.22,1.83)→1:1, (0.83,1.22)→2:3, ≤0.83→1:2; updates on haste buff changes and weapon swaps |
 
 **Adding a new feature module:**
 1. Create a new `.lua` file and add it to `ExsarAddon.toc` (after `ExsarUI.lua` and `Core.lua`)

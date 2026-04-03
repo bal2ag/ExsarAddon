@@ -911,14 +911,14 @@ end)
 -- =========================================================
 
 describe("SuggestRotation", function()
-    it("suggests 5:5:1:1 for very slow speeds", function()
-        assert.are.equal("5:5:1:1", Logic.SuggestRotation(2.0))
-        assert.are.equal("5:5:1:1", Logic.SuggestRotation(1.84))
-        assert.are.equal("5:5:1:1", Logic.SuggestRotation(3.0))
+    it("suggests 5:6:1:1 for very slow speeds", function()
+        assert.are.equal("5:6:1:1", Logic.SuggestRotation(2.0))
+        assert.are.equal("5:6:1:1", Logic.SuggestRotation(1.84))
+        assert.are.equal("5:6:1:1", Logic.SuggestRotation(3.0))
     end)
 
-    it("suggests 1:1 at the 1.83 boundary", function()
-        assert.are.equal("1:1", Logic.SuggestRotation(1.83))
+    it("suggests 5:6:1:1 at the 1.83 boundary", function()
+        assert.are.equal("5:6:1:1", Logic.SuggestRotation(1.83))
     end)
 
     it("suggests 1:1 for mid-range speeds", function()
