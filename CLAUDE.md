@@ -58,13 +58,17 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `PetAggressiveAlert.lua` | Pulsing red skull + text when pet is on aggressive mode |
 | `PetHappinessTracker.lua` | Granular happiness gauge estimating exact happiness points (0–1050); reverse sweep + timer showing time until tier drop; optional sound alert on happiness drop |
 | `AggroAlert.lua` | Pulsating red text alert when enemy mobs are targeting the player; scans nameplates + party/raid target-of-target; configurable for solo/party/raid contexts; plays raid warning sound on aggro gain |
+| `AmmoTracker.lua` | Equipped ammunition icon with bag-count overlay; red X when no ammo equipped; pulses a red low-ammo warning glow when count is 0 or ≤600 |
 | `RotationHelper.lua` | Shows effective weapon speed and suggested rotation (two stacked text lines); rotation thresholds: >=1.83s→5:6:1:1, [1.22,1.83)→1:1, (0.83,1.22)→2:3, ≤0.83→1:2; updates on haste buff changes and weapon swaps |
+
+**Keeping CLAUDE.md in sync:** Any change that adds a new widget, removes a widget, renames a module, alters its responsibilities, or changes its persisted settings MUST be accompanied by an update to this file. Before finishing any such change, cross-reference the file table, the SavedVariables list, and any module-specific structure notes against the code, and update whatever is now stale. Treat CLAUDE.md as a first-class deliverable of the change — a code change that leaves CLAUDE.md out of date is incomplete.
 
 **Adding a new feature module:**
 1. Create a new `.lua` file and add it to `ExsarAddon.toc` (after `ExsarUI.lua` and `Core.lua`)
 2. Call `ExsarAddon.RegisterModule({ name = "...", BuildConfig = function(parent, y) ... return y end })`
 3. Call `ExsarAddon.AddSlashCommand(cmd, fn)` for any slash sub-commands
 4. Store settings under `ExsarAddonDB.<moduleName>` via `ExsarUI.MakeDB("moduleName")`
+5. Add a row to the file table above and a `ExsarAddonDB.<moduleName>` entry to the SavedVariables list below
 
 **Code reuse principle:** Always prefer using shared helpers from `ExsarLogic.lua` and `ExsarUI.lua` over writing bespoke code. When building a new widget, check the shared libraries first — most common patterns are already available. If you write new logic that could be reused by other modules, extract it into the appropriate shared library: pure logic goes in `ExsarLogic.lua` (testable without WoW API), UI construction goes in `ExsarUI.lua`. Never duplicate code across module files. Refer to UI effects by their standard names (see below) and always use the shared implementation.
 
@@ -263,4 +267,5 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 - `ExsarAddonDB.petAggressiveAlert` — position (x, y), scale, locked, disabled
 - `ExsarAddonDB.petHappiness` — position (x, y), scale, locked, savedEstimate, savedTier, savedAnchored, happinessSound
 - `ExsarAddonDB.aggroAlert` — position (x, y), scale, locked, disabled, enableSolo, enableParty, enableRaid
+- `ExsarAddonDB.ammoTracker` — position (x, y), scale, locked
 - `ExsarAddonDB.rotationHelper` — position (x, y), scale, locked
