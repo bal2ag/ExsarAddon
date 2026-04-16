@@ -18,15 +18,29 @@ local uiDB = ExsarUI.MakeDB("usableItems")
 -- col/row define fixed grid positions (0-based):
 --   col 0 = left,  col 1 = right
 --   row 0 = top,   row 1 = bottom,  row 2 = extra row (left only)
--- alternate: a zone-restricted substitute shown instead of the primary item
---   when (a) the player is in one of the valid zones AND (b) count > 0.
+-- alternates: ordered list of substitute items. The first whose conditions are
+--   met (optional `zones` check, count > 0) replaces the primary. Order matters:
+--   zone-restricted alts should come first so they win in-zone.
+local TK_ZONES = {
+    ["The Eye"]      = true,
+    ["The Botanica"] = true,
+    ["The Arcatraz"] = true,
+    ["The Mechanar"] = true,
+}
+
 local TRACKED_ITEMS = {
     { name = "Dark Rune",                  id = 20520, col = 0, row = 0 },
     { name = "Demonic Rune",               id = 12662, col = 1, row = 0 },
     { name = "Super Mana Potion",          id = 22832, col = 0, row = 1,
-      alternate = { name = "Bottled Nethergon Energy", id = 32902 } },
+      alternates = {
+          { name = "Bottled Nethergon Energy", id = 32902, zones = TK_ZONES },
+          { name = "Auchenai Mana Potion",     id = 32948 },
+      } },
     { name = "Super Healing Potion",       id = 22829, col = 1, row = 1,
-      alternate = { name = "Bottled Nethergon Vapor",  id = 32905 } },
+      alternates = {
+          { name = "Bottled Nethergon Vapor",  id = 32905, zones = TK_ZONES },
+          { name = "Auchenai Healing Potion",  id = 32947 },
+      } },
     { name = "Drums of Battle",            id = 29529, col = 0, row = 2, cdDebuff = "Tinnitus", useCharges = true },
     { name = "Haste Potion",               id = 22838, col = 1, row = 2 },
     { name = "Heavy Netherweave Bandage",  id = 21991, col = 0, row = 3, cdDebuff = "Recently Bandaged" },
@@ -34,17 +48,6 @@ local TRACKED_ITEMS = {
     { name = "Master Healthstone",        id = 22104, col = 1, row = 3, hideWhenEmpty = true },
     { name = "Master Healthstone",        id = 22103, col = 1, row = 3, hideWhenEmpty = true },
 }
-
--- Zones where Bottled Nethergon items are usable (Tempest Keep subzones).
-local TK_ZONES = {
-    ["The Eye"]      = true,
-    ["The Botanica"] = true,
-    ["The Arcatraz"] = true,
-    ["The Mechanar"] = true,
-}
-local function InTempestKeep()
-    return TK_ZONES[GetRealZoneText()] and true or false
-end
 
 -- Durations at or below this threshold are just the GCD, not a real cooldown.
 local MIN_COOLDOWN = ExsarLogic.MIN_COOLDOWN_DURATION
@@ -90,9 +93,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
         itemName      = item.name,
         primaryId     = item.id,
         primaryName   = item.name,
-        altId         = item.alternate and item.alternate.id   or nil,
-        altName       = item.alternate and item.alternate.name or nil,
-        useAlternate  = false,
+        alternates    = item.alternates,
         cdDebuff      = item.cdDebuff,
         useCharges    = item.useCharges,
         hideWhenEmpty = item.hideWhenEmpty,
@@ -103,9 +104,11 @@ for i, item in ipairs(TRACKED_ITEMS) do
         known         = false,
     }
 
-    -- Pre-load alternate item data so the icon is ready before entering the zone.
-    if item.alternate and C_Item and C_Item.RequestLoadItemDataByID then
-        C_Item.RequestLoadItemDataByID(item.alternate.id)
+    -- Pre-load alternate item data so icons are ready before the swap happens.
+    if item.alternates and C_Item and C_Item.RequestLoadItemDataByID then
+        for _, alt in ipairs(item.alternates) do
+            C_Item.RequestLoadItemDataByID(alt.id)
+        end
     end
 
     s.iconFrame = CreateFrame("Button", ADDON_NAME .. "ItemBtn" .. i, frame,
@@ -227,18 +230,22 @@ end
 
 local function UpdateActiveItems()
     if InCombatLockdown() then return end
-    local inTK = InTempestKeep()
+    local zone = GetRealZoneText()
     for _, s in ipairs(slots) do
-        if s.altId then
-            local shouldUseAlt = inTK and GetItemCount(s.altId) > 0
-            if shouldUseAlt ~= s.useAlternate then
-                s.useAlternate = shouldUseAlt
-                local newId   = shouldUseAlt and s.altId   or s.primaryId
-                local newName = shouldUseAlt and s.altName or s.primaryName
-                s.itemId   = newId
-                s.itemName = newName
-                s.iconFrame:SetAttribute("item", newName)
-                local tex = select(10, GetItemInfo(newId))
+        if s.alternates then
+            local chosenId, chosenName = s.primaryId, s.primaryName
+            for _, alt in ipairs(s.alternates) do
+                local zoneOk = not alt.zones or alt.zones[zone]
+                if zoneOk and GetItemCount(alt.id) > 0 then
+                    chosenId, chosenName = alt.id, alt.name
+                    break
+                end
+            end
+            if chosenId ~= s.itemId then
+                s.itemId   = chosenId
+                s.itemName = chosenName
+                s.iconFrame:SetAttribute("item", chosenName)
+                local tex = select(10, GetItemInfo(chosenId))
                 s.icon:SetTexture(tex or nil)
                 s.count = -1  -- force countText refresh in ScanBags
             end
