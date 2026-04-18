@@ -942,3 +942,140 @@ describe("SuggestRotation", function()
         assert.are.equal("1:2", Logic.SuggestRotation(0.5))
     end)
 end)
+
+-- =========================================================
+-- Pet happiness model
+-- =========================================================
+
+describe("ReconcileHappinessTier", function()
+    local TIER_MIN = { [1] = 0,   [2] = 350, [3] = 700  }
+    local TIER_MAX = { [1] = 349, [2] = 699, [3] = 1050 }
+
+    it("preserves exact arithmetic when feed-carried estimate is already in the new tier (UP)", function()
+        -- Pet at 695 (tier 2), fed +8 → 703, API flips to tier 3.
+        -- Prior bug: snapped to TIER_MIN[3]=700, erasing +3 real points.
+        local est, anchored = Logic.ReconcileHappinessTier(703, 3, false, TIER_MIN, TIER_MAX)
+        assert.are.equal(703, est)
+        assert.is_false(anchored)
+    end)
+
+    it("preserves anchored=true when estimate is already in the new tier", function()
+        local est, anchored = Logic.ReconcileHappinessTier(703, 3, true, TIER_MIN, TIER_MAX)
+        assert.are.equal(703, est)
+        assert.is_true(anchored)
+    end)
+
+    it("snaps to tier floor and anchors when estimate is below the new tier (UP flip outpaced arithmetic)", function()
+        local est, anchored = Logic.ReconcileHappinessTier(680, 3, false, TIER_MIN, TIER_MAX)
+        assert.are.equal(700, est)
+        assert.is_true(anchored)
+    end)
+
+    it("snaps to tier ceiling and anchors when estimate is above the new tier (DOWN flip)", function()
+        -- Our decay lagged reality — API says tier 2 but we thought 710.
+        local est, anchored = Logic.ReconcileHappinessTier(710, 2, false, TIER_MIN, TIER_MAX)
+        assert.are.equal(699, est)
+        assert.is_true(anchored)
+    end)
+
+    it("preserves estimate when decay already predicted the DOWN flip", function()
+        -- Our arithmetic had us at 695 (already within tier 2) when API confirms tier 2.
+        local est, anchored = Logic.ReconcileHappinessTier(695, 2, false, TIER_MIN, TIER_MAX)
+        assert.are.equal(695, est)
+        assert.is_false(anchored)
+    end)
+
+    it("clamps above-range estimate to tier ceiling", function()
+        local est, anchored = Logic.ReconcileHappinessTier(1200, 3, false, TIER_MIN, TIER_MAX)
+        assert.are.equal(1050, est)
+        assert.is_true(anchored)
+    end)
+
+    it("is a no-op when estimate sits exactly on the floor boundary", function()
+        local est, anchored = Logic.ReconcileHappinessTier(700, 3, true, TIER_MIN, TIER_MAX)
+        assert.are.equal(700, est)
+        assert.is_true(anchored)
+    end)
+
+    it("is a no-op when estimate sits exactly on the ceiling boundary", function()
+        local est, anchored = Logic.ReconcileHappinessTier(699, 2, false, TIER_MIN, TIER_MAX)
+        assert.are.equal(699, est)
+        assert.is_false(anchored)
+    end)
+end)
+
+describe("ApplyHappinessDecay", function()
+    local TIER_MIN = { [1] = 0, [2] = 350, [3] = 700 }
+    local MAX = 1050
+    local DECAY = 50 / 6  -- ~8.33 pts/min
+
+    it("subtracts decay across elapsed seconds", function()
+        local newEst = Logic.ApplyHappinessDecay(800, 60, DECAY, 3, TIER_MIN, MAX)
+        assert.is_true(approx(800 - DECAY, newEst, 0.01))
+    end)
+
+    it("clamps at the API tier floor so estimate never drifts below it", function()
+        -- Prior bug: from 700 at tier 3, decay → ~691.67 → ptsAboveTier negative → 0.0s forever.
+        local newEst = Logic.ApplyHappinessDecay(700, 60, DECAY, 3, TIER_MIN, MAX)
+        assert.are.equal(700, newEst)
+    end)
+
+    it("stays clamped at floor across many decay ticks while API tier holds", function()
+        local est = 701
+        for _ = 1, 20 do
+            est = Logic.ApplyHappinessDecay(est, 10, DECAY, 3, TIER_MIN, MAX)
+        end
+        assert.are.equal(700, est)
+    end)
+
+    it("allows estimate to drift freely above the floor", function()
+        local newEst = Logic.ApplyHappinessDecay(1050, 60, DECAY, 3, TIER_MIN, MAX)
+        assert.is_true(approx(1050 - DECAY, newEst, 0.01))
+    end)
+
+    it("uses 0 as floor when API tier is unknown", function()
+        local newEst = Logic.ApplyHappinessDecay(5, 600, DECAY, 0, TIER_MIN, MAX)
+        assert.are.equal(0, newEst)
+    end)
+
+    it("clamps above max if somehow over", function()
+        local newEst = Logic.ApplyHappinessDecay(2000, 0, DECAY, 3, TIER_MIN, MAX)
+        assert.are.equal(1050, newEst)
+    end)
+
+    it("handles zero elapsed as a no-op", function()
+        local newEst = Logic.ApplyHappinessDecay(900, 0, DECAY, 3, TIER_MIN, MAX)
+        assert.are.equal(900, newEst)
+    end)
+
+    it("treats negative elapsed as zero", function()
+        local newEst = Logic.ApplyHappinessDecay(900, -5, DECAY, 3, TIER_MIN, MAX)
+        assert.are.equal(900, newEst)
+    end)
+
+    it("tier-2 floor clamps at 350, not 700", function()
+        local newEst = Logic.ApplyHappinessDecay(350, 60, DECAY, 2, TIER_MIN, MAX)
+        assert.are.equal(350, newEst)
+    end)
+
+    it("returns clamped=true when decay would cross the floor", function()
+        local _, clamped = Logic.ApplyHappinessDecay(700.5, 60, DECAY, 3, TIER_MIN, MAX)
+        assert.is_true(clamped)
+    end)
+
+    it("returns clamped=false when decay stays above the floor", function()
+        local _, clamped = Logic.ApplyHappinessDecay(900, 60, DECAY, 3, TIER_MIN, MAX)
+        assert.is_false(clamped)
+    end)
+
+    it("returns clamped=false when elapsed is zero even if already at floor", function()
+        -- A no-op tick shouldn't count as a clamp event.
+        local _, clamped = Logic.ApplyHappinessDecay(700, 0, DECAY, 3, TIER_MIN, MAX)
+        assert.is_false(clamped)
+    end)
+
+    it("returns clamped=true on every active tick while pinned at floor", function()
+        local _, clamped = Logic.ApplyHappinessDecay(700, 1, DECAY, 3, TIER_MIN, MAX)
+        assert.is_true(clamped)
+    end)
+end)

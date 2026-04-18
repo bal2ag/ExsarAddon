@@ -165,6 +165,12 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
 - The `FindTokenByGUID` / `FindAssistMember` helpers always do a full pass (no short-circuit) and return `(match, stats)` so that failure diagnostics always reflect the complete scan, not a partial one.
 - `entries` is forward-declared at the top of the file so `SnapshotAllMarks` (defined in the diagnostics section) can close over it before the entry pool is actually populated.
 
+**`PetHappinessTracker.lua` structure:**
+- Tier reconciliation delegates to `ExsarLogic.ReconcileHappinessTier`, which preserves the estimate when it is already inside the API-reported tier's range and only snaps to the crossed boundary when outside. This prevents feed-induced tier-ups from clobbering the exact `+amount` arithmetic (previous bug: pet at 695, feed +8 → estimate 703 → API reports tier 3 → code overwrote estimate to `TIER_MIN[3]=700`, producing a stuck `0.0s` display).
+- Passive decay delegates to `ExsarLogic.ApplyHappinessDecay`, which clamps the estimate at `TIER_MIN[S.tier]`. Since the WoW API is authoritative on tier, the real value cannot be below that floor while the API still reports the current tier. Without the clamp, estimate drifted past the floor and the display collapsed to `0.0s` until `UNIT_HAPPINESS` re-anchored it.
+- Debug ring buffer (`hDB().debugLog`, cap = 30) captures state transitions so the user can run `/exsar phdump` after observing a surprising display. Event types: `seed` (cold-start / restored-from-saved / saved-tier-mismatch), `tier` (tier flip or same-tier snap from `CorrectToTier`), `feed` (every Feed Pet bite detected via `SPELL_PERIODIC_ENERGIZE`), `clamp` (decay-floor pin — logged only on the transition into clamped state to avoid flooding while pinned), `penalty` (dismiss / death). Default ON; toggle with `/exsar phdebug`. `/exsar phdump` renders the buffer into a modal copy-paste window via `ExsarUI.ShowCopyableText`. `/exsar phclear` wipes the buffer. `FormatPHEntry(entry)` is shared between the live chat printer (`LogPH`) and the dump renderer.
+- `S.wasDecayClamped` tracks whether the previous decay tick hit the floor, so `LogPH` for `clamp` events fires once per clamp run, not every second while pinned.
+
 ## Key WoW API Used
 
 - `GetSpellInfo(spellName)` — returns name, rank, icon texture path for the highest-learned rank
@@ -278,7 +284,7 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 - `ExsarAddonDB.meleeRange` — position (x, y), scale, locked, rangeSound
 - `ExsarAddonDB.raidTargets` — position (x, y), scale, locked, debugClicks, clickMissLog
 - `ExsarAddonDB.petAggressiveAlert` — position (x, y), scale, locked, disabled
-- `ExsarAddonDB.petHappiness` — position (x, y), scale, locked, savedEstimate, savedTier, savedAnchored, happinessSound
+- `ExsarAddonDB.petHappiness` — position (x, y), scale, locked, savedEstimate, savedTier, savedAnchored, happinessSound, debug, debugLog
 - `ExsarAddonDB.aggroAlert` — position (x, y), scale, locked, disabled, enableSolo, enableParty, enableRaid
 - `ExsarAddonDB.ammoTracker` — position (x, y), scale, locked
 - `ExsarAddonDB.rotationHelper` — position (x, y), scale, locked

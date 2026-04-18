@@ -323,11 +323,12 @@ Happiness gauge estimating exact happiness points (0-1050) with a timer showing 
 - **Warning:** A pulsating red glow border appears when the pet is content or unhappy. An optional sound alert plays when happiness drops a tier (configurable).
 - **Algorithm:** The WoW API only exposes the happiness tier (1/2/3), not exact points. The tracker estimates exact happiness (0–1050, 350 points per tier) by:
   - Seeding at the tier midpoint on first login, or restoring the saved estimate if the tier matches
-  - Applying passive decay continuously (~8.33 points/minute)
+  - Applying passive decay continuously (~8.33 points/minute), clamped at the current tier's floor since the API is authoritative on tier
   - Adding feed amounts detected from combat log events (`SPELL_PERIODIC_ENERGIZE` with happiness power type), using the actual per-bite value (8, 17, or 35 depending on food quality)
   - Subtracting fixed penalties for pet death (–350) and dismissal (–50)
-  - Snapping to the exact tier boundary whenever the API tier changes, which "anchors" the estimate to a known value
+  - Reconciling with the API tier after each change: the estimate is preserved when it already falls inside the new tier's range (so exact feed arithmetic is not lost on a tier-up), and snapped to the crossed boundary only when outside — in which case we "anchor" to a known value
 - **Storage:** The current estimate, tier, and anchored state are persisted to SavedVariables on every update tick, so the estimate survives across sessions. If the tier changed while logged out, it anchors to the appropriate boundary on login.
+- **Debug logging:** A persistent ring buffer (last 30 events, survives `/reload`) captures state transitions: seed events, tier changes, feed bites, decay-floor clamp activations, and dismiss/death penalties — enough to diagnose a surprising display after the fact. Default ON; toggle with `/exsar phdebug`. `/exsar phdump` opens the log in a copy-paste window (Ctrl+A, Ctrl+C, Esc to close). `/exsar phclear` wipes the buffer.
 
 <!-- ![Pet Happiness Tracker](screenshots/pet-happiness.png) -->
 

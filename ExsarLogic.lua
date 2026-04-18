@@ -314,6 +314,67 @@ function ExsarLogic.SuggestRotation(effectiveSpeed)
     end
 end
 
+-- =========================================================
+-- Pet happiness model
+-- =========================================================
+
+--- Reconcile a happiness point estimate against an authoritative API tier.
+-- Snaps the estimate to the nearest tier boundary when it falls outside the
+-- tier's range; otherwise preserves it. When a snap happens we are at a known
+-- boundary, so the returned `anchored` flag becomes true. Inside the range,
+-- `anchored` is passed through unchanged.
+--
+-- This replaces a direction-based "tier went up → set to floor / went down →
+-- set to ceiling" rule that destroyed exact arithmetic (e.g. a feed that
+-- crossed the boundary by a known amount) whenever the API tier flipped.
+--
+-- Params:
+--   estimate   current numeric estimate
+--   newTier    API-reported tier (1, 2, or 3)
+--   anchored   current anchored flag
+--   tierMin    table keyed by tier → lower bound (inclusive)
+--   tierMax    table keyed by tier → upper bound (inclusive)
+-- Returns: newEstimate, newAnchored
+function ExsarLogic.ReconcileHappinessTier(estimate, newTier, anchored, tierMin, tierMax)
+    local lo = tierMin[newTier]
+    local hi = tierMax[newTier]
+    if estimate < lo then
+        return lo, true
+    elseif estimate > hi then
+        return hi, true
+    end
+    return estimate, anchored
+end
+
+--- Apply passive happiness decay, clamped to the API-reported tier floor.
+-- The WoW API is authoritative on tier; if it still reports the current tier,
+-- the real value cannot be below that tier's floor, so our estimate shouldn't
+-- drop past it either. Without this clamp, estimate drifts below floor and
+-- `ptsAboveTier` goes negative, which the display collapses to a stuck 0.0s.
+--
+-- Params:
+--   estimate      current estimate
+--   elapsedSec    seconds since last decay tick (non-negative)
+--   decayPerMin   decay rate in points/minute
+--   apiTier       authoritative API tier (1,2,3) or 0 if unknown
+--   tierMin       table keyed by tier → lower bound
+--   maxHappiness  absolute maximum (upper clamp)
+-- Returns: newEstimate, clamped (true iff decay would have pushed below floor)
+function ExsarLogic.ApplyHappinessDecay(estimate, elapsedSec, decayPerMin, apiTier, tierMin, maxHappiness)
+    if elapsedSec < 0 then elapsedSec = 0 end
+    local decayed = estimate - decayPerMin * (elapsedSec / 60)
+    local newEst = decayed
+    if newEst > maxHappiness then newEst = maxHappiness end
+    local floor = tierMin[apiTier] or 0
+    local clamped = false
+    if newEst < floor then
+        newEst = floor
+        clamped = elapsedSec > 0  -- only count as a decay-clamp when decay actually ran
+    end
+    if newEst < 0 then newEst = 0 end
+    return newEst, clamped
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

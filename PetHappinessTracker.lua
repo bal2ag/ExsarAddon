@@ -60,7 +60,70 @@ local S = {
     initialized        = false,   -- true after ADDON_LOADED has fired
     anchored           = false,   -- true once we know the exact value
     lastHappSoundTime  = 0,       -- GetTime() of last happiness sound
+    wasDecayClamped    = false,   -- was last decay tick pinned at tier floor
 }
+
+-- =========================================================
+-- Debug ring buffer (survives /reload)
+-- =========================================================
+-- Captures state transitions (seed, tier, feed, clamp, penalty) so the user
+-- can run /exsar phdump after observing a surprising display to see what
+-- produced it. Chat echo is gated on the same flag; default ON so that
+-- when someone hits a stuck/unexpected state they already have the trail.
+
+local PH_LOG_CAP = 30
+
+local function IsDebugEnabled()
+    local v = hDB().debug
+    if v == nil then return true end
+    return v
+end
+
+local function FormatPHEntry(e)
+    local t = e.t or "?"
+    local ev = e.event
+    if ev == "seed" then
+        local saved = "-"
+        if e.savedTier then
+            saved = string.format("(t=%d,est=%.1f,a=%s)",
+                e.savedTier, e.savedEst or -1, e.savedAnchored and "Y" or "N")
+        end
+        return string.format("%s seed[%s] api=%d saved=%s -> est=%.1f a=%s",
+            t, e.source, e.apiTier or 0, saved,
+            e.newEst or -1, e.newAnchored and "Y" or "N")
+    elseif ev == "tier" then
+        return string.format("%s tier %d->%d trig=%s est %.1f->%.1f a %s->%s snap=%s sound=%s",
+            t, e.oldTier or 0, e.newTier or 0, e.trigger or "?",
+            e.estBefore or -1, e.estAfter or -1,
+            e.anchoredBefore and "Y" or "N", e.anchoredAfter and "Y" or "N",
+            e.snapped and "Y" or "N", e.soundFired and "Y" or "N")
+    elseif ev == "feed" then
+        return string.format("%s feed +%d est %.1f->%.1f tier=%d atMax=%s",
+            t, e.amount or 0, e.estBefore or -1, e.estAfter or -1,
+            e.tierBefore or 0, e.atMax and "Y" or "N")
+    elseif ev == "clamp" then
+        return string.format("%s clamp elapsed=%.2fs est %.3f->%.1f tier=%d",
+            t, e.elapsed or 0, e.estBefore or -1, e.estAfter or -1, e.apiTier or 0)
+    elseif ev == "penalty" then
+        return string.format("%s penalty %s -%d est %.1f->%.1f",
+            t, e.reason or "?", e.amount or 0, e.estBefore or -1, e.estAfter or -1)
+    end
+    return t .. " unknown event"
+end
+
+local function LogPH(entry)
+    if not IsDebugEnabled() then return end
+    entry.t = date("%H:%M:%S")
+    local line = FormatPHEntry(entry)
+    print("|cffff8800[ExsarPH]|r " .. line)
+    local db = hDB()
+    local log = db.debugLog or {}
+    log[#log + 1] = entry
+    while #log > PH_LOG_CAP do
+        table.remove(log, 1)
+    end
+    db.debugLog = log
+end
 
 -- =========================================================
 -- Main frame
@@ -177,72 +240,86 @@ local function SeedEstimate()
     end
     S.tier = happiness
 
-    -- Try to restore from saved data
     local db = hDB()
+    local source, savedTier, savedEst, savedAnchored
     if db.savedEstimate and db.savedTier then
+        savedTier     = db.savedTier
+        savedEst      = db.savedEstimate
+        savedAnchored = db.savedAnchored or false
         if db.savedTier == happiness then
-            -- Saved tier matches — use the saved estimate (no offline decay)
+            source = "saved"
             S.estimate = db.savedEstimate
             S.anchored = db.savedAnchored or false
-            -- Ensure still within tier bounds
             if S.estimate < TIER_MIN[happiness] then
                 S.estimate = TIER_MIN[happiness]
             elseif S.estimate > TIER_MAX[happiness] then
                 S.estimate = TIER_MAX[happiness]
             end
         else
+            source = "mismatch"
             -- Tier changed while logged out — anchor at boundary
             if db.savedTier > happiness then
-                -- Dropped tier(s): set to top of new tier
                 S.estimate = TIER_MAX[happiness]
             else
-                -- Gained tier(s): set to bottom of new tier
                 S.estimate = TIER_MIN[happiness]
             end
             S.anchored = true
             SaveEstimate()
         end
     else
-        -- No saved data — guess midpoint
+        source = "cold"
         S.estimate = TIER_MIN[happiness] + TIER_SIZE / 2
         S.anchored = false
     end
     S.lastUpdate = GetTime()
+    S.wasDecayClamped = false
+
+    LogPH({
+        event = "seed", source = source, apiTier = happiness,
+        savedTier = savedTier, savedEst = savedEst, savedAnchored = savedAnchored,
+        newEst = S.estimate, newAnchored = S.anchored,
+    })
 end
 
-local function CorrectToTier()
-    -- If the API tier disagrees with our estimate's tier, snap to boundary
+local function CorrectToTier(trigger)
+    -- Reconcile our estimate against the authoritative API tier.
     if S.tier == 0 then return end  -- not seeded yet; avoid clobbering saved data
     local happiness = GetPetHappiness()
     if not happiness then return end
 
     local oldTier = S.tier
+    local estBefore = S.estimate
+    local anchoredBefore = S.anchored
     S.tier = happiness
 
-    if happiness ~= oldTier then
-        -- Play sound when happiness drops to content or unhappy
-        if happiness <= 2 and oldTier > 0 and hDB().happinessSound ~= false then
-            local now = GetTime()
-            if now - S.lastHappSoundTime >= SOUND_COOLDOWN then
-                PlaySound(HAPPINESS_SOUND_ID, "Master")
-                S.lastHappSoundTime = now
-            end
+    local soundFired = false
+    if happiness ~= oldTier and happiness <= 2 and oldTier > 0
+            and hDB().happinessSound ~= false then
+        local now = GetTime()
+        if now - S.lastHappSoundTime >= SOUND_COOLDOWN then
+            PlaySound(HAPPINESS_SOUND_ID, "Master")
+            S.lastHappSoundTime = now
+            soundFired = true
         end
-        -- Tier changed — we know the exact value at the boundary
-        if happiness > oldTier then
-            S.estimate = TIER_MIN[happiness]
-        else
-            S.estimate = TIER_MAX[happiness]
-        end
-        S.anchored = true
+    end
+
+    local newEst, newAnchored = ExsarLogic.ReconcileHappinessTier(
+        S.estimate, happiness, S.anchored, TIER_MIN, TIER_MAX)
+    local snapped = newEst ~= S.estimate
+    local changed = snapped or newAnchored ~= S.anchored
+    S.estimate = newEst
+    S.anchored = newAnchored
+    if changed or happiness ~= oldTier then
         SaveEstimate()
-    else
-        -- Same tier — make sure estimate stays within tier bounds
-        if S.estimate < TIER_MIN[happiness] then
-            S.estimate = TIER_MIN[happiness]
-        elseif S.estimate > TIER_MAX[happiness] then
-            S.estimate = TIER_MAX[happiness]
-        end
+    end
+    if happiness ~= oldTier or snapped then
+        LogPH({
+            event = "tier", trigger = trigger or "?",
+            oldTier = oldTier, newTier = happiness,
+            estBefore = estBefore, estAfter = newEst,
+            anchoredBefore = anchoredBefore, anchoredAfter = newAnchored,
+            snapped = snapped, soundFired = soundFired,
+        })
     end
 end
 
@@ -367,9 +444,19 @@ ExsarUI.CreatePoller(nil, UPDATE_INTERVAL, function()
     local now = GetTime()
     local elapsed = now - S.lastUpdate
     if elapsed > 0 then
-        local decayPts = DECAY_PER_MIN * (elapsed / 60)
-        S.estimate = S.estimate - decayPts
-        ClampEstimate()
+        local estBefore = S.estimate
+        local newEst, clamped = ExsarLogic.ApplyHappinessDecay(
+            S.estimate, elapsed, DECAY_PER_MIN, S.tier, TIER_MIN, MAX_HAPPINESS)
+        S.estimate = newEst
+        -- Log the transition into clamped state only; subsequent pinned ticks
+        -- would flood the buffer without adding information.
+        if clamped and not S.wasDecayClamped then
+            LogPH({
+                event = "clamp", elapsed = elapsed,
+                estBefore = estBefore, estAfter = newEst, apiTier = S.tier,
+            })
+        end
+        S.wasDecayClamped = clamped
     end
     S.lastUpdate = now
     SaveEstimate()
@@ -400,7 +487,10 @@ feedFrame:SetScript("OnEvent", function()
 
     -- Only count happiness energize, not mana/focus/etc.
     if powerType == POWER_TYPE_HAPPINESS and amount and amount > 0 then
-        if amount < 1 then
+        local estBefore = S.estimate
+        local tierBefore = S.tier
+        local atMax = amount < 1
+        if atMax then
             -- Server is clamping the gain — pet is at max happiness
             S.estimate = MAX_HAPPINESS
             S.anchored = true
@@ -410,7 +500,11 @@ feedFrame:SetScript("OnEvent", function()
             ClampEstimate()
             -- Feeding amount is exact, so if already anchored we stay anchored
         end
-        CorrectToTier()
+        LogPH({
+            event = "feed", amount = amount, estBefore = estBefore,
+            estAfter = S.estimate, tierBefore = tierBefore, atMax = atMax,
+        })
+        CorrectToTier("feed")
     end
 end)
 
@@ -452,34 +546,73 @@ frame:SetScript("OnEvent", function(self, event, arg1)
                 -- If pet died, UNIT_HAPPINESS likely already fired
                 -- For dismiss, subtract the penalty
                 if not UnitIsDead("pet") then
+                    local estBefore = S.estimate
                     S.estimate = S.estimate - DISMISS_LOSS
                     ClampEstimate()
                     SaveEstimate()
+                    LogPH({
+                        event = "penalty", reason = "dismiss",
+                        amount = DISMISS_LOSS,
+                        estBefore = estBefore, estAfter = S.estimate,
+                    })
                 end
             end
             UpdateVisuals()
         end
 
     elseif event == "UNIT_HAPPINESS" then
-        CorrectToTier()
+        CorrectToTier("happiness_event")
         UpdateVisuals()
 
     elseif event == "PLAYER_DEAD" then
         -- Check if pet also died
         if S.petActive and UnitIsDead("pet") then
+            local estBefore = S.estimate
             S.estimate = S.estimate - DEATH_LOSS
             ClampEstimate()
-            CorrectToTier()
+            LogPH({
+                event = "penalty", reason = "death",
+                amount = DEATH_LOSS,
+                estBefore = estBefore, estAfter = S.estimate,
+            })
+            CorrectToTier("post_death")
             SaveEstimate()
         end
     end
 end)
 
 -- =========================================================
--- Slash sub-command
+-- Slash sub-commands
 -- =========================================================
 
 ExsarUI.AddSlashReset("happinessreset", frame, hDB, "Pet Happiness", 0, 100)
+
+ExsarAddon.AddSlashCommand("phdebug", function()
+    local nowOn = not IsDebugEnabled()
+    hDB().debug = nowOn
+    print(ADDON_NAME .. ": Pet happiness debug logging " .. (nowOn and "ON" or "OFF"))
+end)
+
+ExsarAddon.AddSlashCommand("phdump", function()
+    local log = hDB().debugLog
+    if not log or #log == 0 then
+        print(ADDON_NAME .. ": no pet happiness events logged.")
+        return
+    end
+    local lines = {}
+    lines[#lines + 1] = ADDON_NAME .. " — " .. #log .. " pet happiness event(s)"
+    lines[#lines + 1] = string.rep("-", 72)
+    for i, entry in ipairs(log) do
+        lines[#lines + 1] = string.format("#%d %s", i, FormatPHEntry(entry))
+    end
+    ExsarUI.ShowCopyableText(table.concat(lines, "\n"),
+        { title = "ExsarAddon — Pet Happiness Events" })
+end)
+
+ExsarAddon.AddSlashCommand("phclear", function()
+    hDB().debugLog = nil
+    print(ADDON_NAME .. ": pet happiness event log cleared.")
+end)
 
 -- =========================================================
 -- Register with Core
