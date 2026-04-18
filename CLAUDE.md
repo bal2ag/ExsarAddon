@@ -63,6 +63,8 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 
 **Keeping CLAUDE.md in sync:** Any change that adds a new widget, removes a widget, renames a module, alters its responsibilities, or changes its persisted settings MUST be accompanied by an update to this file. Before finishing any such change, cross-reference the file table, the SavedVariables list, and any module-specific structure notes against the code, and update whatever is now stale. Treat CLAUDE.md as a first-class deliverable of the change — a code change that leaves CLAUDE.md out of date is incomplete.
 
+**Keeping README.md in sync:** Any change that affects user-facing behavior — adding/removing/renaming a widget, changing tracked items or buffs, altering visual effects, modifying thresholds or defaults, changing detection algorithms, or updating slash commands — MUST be accompanied by a corresponding update to `README.md`. Cross-check the widget's one-liner description and bullet-point notes against the code and update whatever is now stale. Treat `README.md` as a first-class deliverable alongside `CLAUDE.md`.
+
 **Adding a new feature module:**
 1. Create a new `.lua` file and add it to `ExsarAddon.toc` (after `ExsarUI.lua` and `Core.lua`)
 2. Call `ExsarAddon.RegisterModule({ name = "...", BuildConfig = function(parent, y) ... return y end })`
