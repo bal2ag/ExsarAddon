@@ -44,6 +44,7 @@ read_globals = {
     "C_Item",
     "C_NamePlate",
     "C_Timer",
+    "date",
     "CombatLogGetCurrentEventInfo",
     "GetCVar",
     "GetInventoryItemCooldown",

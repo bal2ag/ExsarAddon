@@ -284,32 +284,8 @@ local function DebugTargetFrameRegions()
 
     ScanRegions(TargetFrame, "")
 
-    local existing = _G["ExsarDbgFrame"]
-    if existing then existing:Hide() end
-
-    local f = CreateFrame("Frame", "ExsarDbgFrame", UIParent)
-    f:SetSize(750, 320)
-    f:SetPoint("CENTER")
-    f:EnableMouse(true)
-    f:SetFrameStrata("FULLSCREEN_DIALOG")
-    f:SetMovable(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop",  f.StopMovingOrSizing)
-
-    local bg = f:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0.92)
-
-    local eb = CreateFrame("EditBox", nil, f)
-    eb:SetMultiLine(true)
-    eb:SetSize(730, 300)
-    eb:SetPoint("CENTER")
-    eb:SetFontObject(ChatFontNormal)
-    eb:SetAutoFocus(true)
-    eb:SetText(table.concat(lines, "\n"))
-    eb:HighlightText()
-    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    ExsarUI.ShowCopyableText(table.concat(lines, "\n"),
+        { title = "ExsarAddon — TargetFrame regions", width = 780, height = 360 })
 end
 
 SLASH_EXSAR1 = "/exsar"

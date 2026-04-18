@@ -35,7 +35,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 |---|---|
 | `ExsarAddon.toc` | Addon metadata, interface version, SavedVariables declaration |
 | `ExsarLogic.lua` | Pure Lua logic helpers (no WoW API dependency); testable outside the client. Timer formatting, health colors, cooldown state, grid math, anchor offset calc, etc. |
-| `ExsarUI.lua` | Shared WoW UI construction helpers. `MakeDB`, `SetupMovableFrame`, `SetupTopleftFrame`, `RestorePosition`, `CreateIcon`, `CreateSweep`, `CreateAuraIcon`, `CreateGlow`, `BuildDashes`, `AnimateDashes`, config panel helpers (`AddScaleSlider`, `AddLockCheckbox`, `AddResetButton`), `POWER_COLORS` |
+| `ExsarUI.lua` | Shared WoW UI construction helpers. `MakeDB`, `SetupMovableFrame`, `SetupTopleftFrame`, `RestorePosition`, `CreateIcon`, `CreateSweep`, `CreateAuraIcon`, `CreateGlow`, `BuildDashes`, `AnimateDashes`, `ShowCopyableText` (modal copy-paste window), config panel helpers (`AddScaleSlider`, `AddLockCheckbox`, `AddResetButton`), `POWER_COLORS` |
 | `Core.lua` | `ExsarAddon` namespace, module registration API, shared config widget helpers, config panel, slash command dispatch, DB init |
 | `CooldownTracker.lua` | Cooldown tracker feature module |
 | `RangedSwingTimer.lua` | Ranged auto shot cycle tracker |
@@ -161,7 +161,9 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
   1. `FindTokenByGUID(guid)` — scan tokens and return the first whose `UnitGUID` currently equals our stored GUID → secure `type=target, unit=<token>`. Safe to use nameplate/`partyNtarget` tokens because they are re-verified at click time.
   2. `FindAssistMember(guid, rIdx)` — find a group member whose `memberNtarget` GUID matches (or icon matches as fallback) → secure macrotext `/assist [@memberN]`. The `[@unit]` conditional form is more reliable than bare `/assist memberN`.
   3. `/targetexact Name` — last resort; picks the closest mob with that name.
-- Failure logging (`PostClick` → `C_Timer.After(0.25, CheckClickOutcome)`): snapshots the player's target before the click, checks it again after a 0.25s delay, and if the new target GUID ≠ intended GUID prints a multi-line `CLICK MISSED` entry to chat showing intended/resolver/before/after. Default ON; toggle with `/exsar rtdebug`. Stored under `rDB().debugClicks`.
+- Failure logging (`PostClick` → `C_Timer.After(0.25, CheckClickOutcome)`): snapshots context at click time and compares the player's target before/after. On mismatch, logs a multi-line `CLICK MISSED` entry to chat AND appends it to a capped ring buffer in SavedVariables (`rDB().clickMissLog`, cap = 20) so failures survive `/reload` and are retrievable after the fight. Each entry captures: timestamp, combat state, group kind/size, nameplate count, latency, intended mob (guid/name/icon/scan-discovery token), resolver path (tier + token/assist/macrotext), Tier 1 scan stats (checked/existed/hadGuid/matched), Tier 2 scan stats (size/withTarget/guidMatch/iconMatch), before/after target, and a snapshot of every currently marked mob. Default ON; toggle with `/exsar rtdebug`. `/exsar rtdump` opens the log in a modal copy-paste window (via `ExsarUI.ShowCopyableText`) — chat is unusable mid-fight, and the window is Ctrl+A / Ctrl+C friendly. `/exsar rtclear` wipes the buffer. `FormatClickMiss(dbg, prefix)` is shared between the live chat printer and the dump renderer.
+- The `FindTokenByGUID` / `FindAssistMember` helpers always do a full pass (no short-circuit) and return `(match, stats)` so that failure diagnostics always reflect the complete scan, not a partial one.
+- `entries` is forward-declared at the top of the file so `SnapshotAllMarks` (defined in the diagnostics section) can close over it before the entry pool is actually populated.
 
 ## Key WoW API Used
 
@@ -274,7 +276,7 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 - `ExsarAddonDB.playerInfo` — position (x, y), scale, locked, enabled, lowHpThreshold, lowHpSound
 - `ExsarAddonDB.petInfo` — position (x, y), scale, locked, enabled, lowHpThreshold, lowHpSound, dmgSound
 - `ExsarAddonDB.meleeRange` — position (x, y), scale, locked, rangeSound
-- `ExsarAddonDB.raidTargets` — position (x, y), scale, locked, debugClicks
+- `ExsarAddonDB.raidTargets` — position (x, y), scale, locked, debugClicks, clickMissLog
 - `ExsarAddonDB.petAggressiveAlert` — position (x, y), scale, locked, disabled
 - `ExsarAddonDB.petHappiness` — position (x, y), scale, locked, savedEstimate, savedTier, savedAnchored, happinessSound
 - `ExsarAddonDB.aggroAlert` — position (x, y), scale, locked, disabled, enableSolo, enableParty, enableRaid

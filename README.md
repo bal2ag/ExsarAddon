@@ -296,7 +296,7 @@ Compact info for all units marked with raid target icons. Click a row to target 
   1. Scan every queryable unit token (nameplates, `raidNtarget`, `partyNtarget`, boss frames, target/focus/mouseover) and use the first one whose `UnitGUID` still matches the intended mob — secure `type=target`
   2. `/assist [@memberN]` for any group member whose target matches the intended GUID (or icon, if the client can't resolve their target's GUID locally)
   3. `/targetexact Name` as a last resort
-- **Click-failure logging:** When a click fails to swap your target to the intended mob, a `CLICK MISSED` entry is printed to chat showing intended/resolver/before/after so the failure mode can be diagnosed without running macros mid-fight. Default ON; toggle with `/exsar rtdebug`.
+- **Click-failure logging:** When a click fails to swap your target to the intended mob, a `CLICK MISSED` entry is both printed to chat and appended to a persistent ring buffer (last 20 misses, survives `/reload`). Each entry captures timestamp, combat state, group kind/size, nameplate count, latency, intended mob, resolver path, Tier 1 and Tier 2 scan stats, before/after target, and all currently marked mobs — enough to diagnose the failure mode after the fight ends. Default ON; toggle with `/exsar rtdebug`. `/exsar rtdump` opens the log in a copy-paste window (Ctrl+A, Ctrl+C, Esc to close). `/exsar rtclear` wipes the buffer.
 - **Hidden when:** No marked units are found (and widget is locked)
 
 <!-- ![Raid Target Widget](screenshots/raid-targets.png) -->

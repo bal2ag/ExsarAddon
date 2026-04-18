@@ -636,6 +636,93 @@ function ExsarUI.CreatePlaceholder(frame, text, fontSize)
     return ph
 end
 
+--- Show a modal-ish window with copyable multi-line text.
+-- Singleton: subsequent calls reuse the same frame, just swapping the content.
+-- @param text  string  the text to display
+-- @param opts  table (optional) { title=string, width=number, height=number }
+function ExsarUI.ShowCopyableText(text, opts)
+    opts = opts or {}
+    local W = opts.width  or 800
+    local H = opts.height or 500
+
+    local f = _G["ExsarCopyFrame"]
+    if not f then
+        f = CreateFrame("Frame", "ExsarCopyFrame", UIParent)
+        f:SetFrameStrata("FULLSCREEN_DIALOG")
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop",  f.StopMovingOrSizing)
+
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.92)
+
+        -- thin border
+        local top = f:CreateTexture(nil, "BORDER")
+        top:SetColorTexture(0.5, 0.5, 0.5, 0.9); top:SetHeight(1)
+        top:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        top:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+        local bot = f:CreateTexture(nil, "BORDER")
+        bot:SetColorTexture(0.5, 0.5, 0.5, 0.9); bot:SetHeight(1)
+        bot:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
+        bot:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+        local lft = f:CreateTexture(nil, "BORDER")
+        lft:SetColorTexture(0.5, 0.5, 0.5, 0.9); lft:SetWidth(1)
+        lft:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        lft:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
+        local rgt = f:CreateTexture(nil, "BORDER")
+        rgt:SetColorTexture(0.5, 0.5, 0.5, 0.9); rgt:SetWidth(1)
+        rgt:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+        rgt:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+
+        local titleFs = f:CreateFontString(nil, "OVERLAY")
+        titleFs:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+        titleFs:SetPoint("TOP", f, "TOP", 0, -8)
+        f.titleFs = titleFs
+
+        local hint = f:CreateFontString(nil, "OVERLAY")
+        hint:SetFont("Fonts\\FRIZQT__.TTF", 10)
+        hint:SetPoint("BOTTOM", f, "BOTTOM", 0, 8)
+        hint:SetText("Ctrl+A select all  \194\183  Ctrl+C copy  \194\183  Esc close")
+        hint:SetTextColor(0.6, 0.6, 0.6)
+
+        local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        if closeBtn then
+            closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+            closeBtn:SetScript("OnClick", function() f:Hide() end)
+        end
+
+        local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT",     f, "TOPLEFT",     10, -26)
+        sf:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -28, 22)
+        f.scrollFrame = sf
+
+        local eb = CreateFrame("EditBox", nil, sf)
+        eb:SetMultiLine(true)
+        eb:SetAutoFocus(true)
+        eb:SetFontObject(ChatFontNormal)
+        eb:SetScript("OnEscapePressed", function() f:Hide() end)
+        sf:SetScrollChild(eb)
+        f.editBox = eb
+    end
+
+    f:SetSize(W, H)
+    f:ClearAllPoints()
+    f:SetPoint("CENTER")
+    f.titleFs:SetText(opts.title or "")
+
+    local eb = f.editBox
+    eb:SetWidth(W - 40)        -- leave room for scrollbar + padding
+    eb:SetText(text or "")
+    eb:HighlightText()
+
+    f:Show()
+    eb:SetFocus()
+    return f
+end
+
 -- =========================================================
 -- Icon construction helpers
 -- =========================================================

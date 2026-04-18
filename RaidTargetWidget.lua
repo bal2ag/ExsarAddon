@@ -30,6 +30,10 @@ local GLOW_PULSE_HZ  = 1.2
 local GLOW_PULSE_MIN = 0.45
 local GLOW_PULSE_MAX = 1.0
 
+-- Forward declaration so SnapshotAllMarks (defined below) can close over
+-- the entries table declared further down in the file.
+local entries
+
 -- =========================================================
 -- Helpers
 -- =========================================================
@@ -41,33 +45,37 @@ local PulseAlpha   = ExsarLogic.PulseAlpha
 -- GUID still matches. Re-verifying at click time lets us safely use tokens
 -- that are normally considered "unstable" (nameplateN, partyNtarget) --
 -- because we confirm the token currently points to the intended mob.
+--
+-- Does NOT short-circuit: we always do a full pass so the stats reflect
+-- the complete picture, which is critical for after-the-fact debugging.
 local function FindTokenByGUID(guid)
-    if not guid then return nil end
+    local stats = { checked = 0, existed = 0, hadGuid = 0, matched = 0 }
+    local matched = nil
 
-    if UnitExists("target")    and UnitGUID("target")    == guid then return "target"    end
-    if UnitExists("focus")     and UnitGUID("focus")     == guid then return "focus"     end
-    if UnitExists("mouseover") and UnitGUID("mouseover") == guid then return "mouseover" end
-
-    for i = 1, 5 do
-        local t = "boss" .. i
-        if UnitExists(t) and UnitGUID(t) == guid then return t end
+    local function try(t)
+        if not t then return end
+        stats.checked = stats.checked + 1
+        if not UnitExists(t) then return end
+        stats.existed = stats.existed + 1
+        local g = UnitGUID(t)
+        if not g then return end
+        stats.hadGuid = stats.hadGuid + 1
+        if guid and g == guid then
+            stats.matched = stats.matched + 1
+            if not matched then matched = t end
+        end
     end
 
+    try("target"); try("focus"); try("mouseover"); try("pettarget")
+    for i = 1, 5 do try("boss" .. i) end
     if IsInRaid() then
-        for i = 1, 40 do
-            local t = "raid" .. i .. "target"
-            if UnitExists(t) and UnitGUID(t) == guid then return t end
-        end
+        for i = 1, 40 do try("raid" .. i .. "target") end
     elseif IsInGroup() then
         for i = 1, 4 do
-            local t = "party" .. i .. "target"
-            if UnitExists(t) and UnitGUID(t) == guid then return t end
-            local pt = "partypet" .. i .. "target"
-            if UnitExists(pt) and UnitGUID(pt) == guid then return pt end
+            try("party" .. i .. "target")
+            try("partypet" .. i .. "target")
         end
     end
-    if UnitExists("pettarget") and UnitGUID("pettarget") == guid then return "pettarget" end
-
     if C_NamePlate and C_NamePlate.GetNamePlates then
         local plates = C_NamePlate.GetNamePlates()
         if plates then
@@ -76,49 +84,61 @@ local function FindTokenByGUID(guid)
                 if not t and UnitTokenFromNamePlate then
                     t = UnitTokenFromNamePlate(plate)
                 end
-                if t and UnitExists(t) and UnitGUID(t) == guid then
-                    return t
-                end
+                try(t)
             end
         end
     end
 
-    return nil
+    return matched, stats
 end
 
--- Find a party/raid member whose current target is the intended mob,
--- for the `/assist` fallback when no direct token resolves the GUID.
+-- Find a party/raid member whose current target is the intended mob, for the
+-- `/assist` fallback when no direct token resolves the GUID. Returns the
+-- member token (or nil) plus scan stats for diagnostics.
 local function FindAssistMember(guid, rIdx)
+    local stats = { groupKind = "solo", size = 0, withTarget = 0, guidMatch = 0, iconMatch = 0 }
     local prefix, count
     if IsInRaid() then
         prefix, count = "raid", 40
+        stats.groupKind = "raid"
     elseif IsInGroup() then
         prefix, count = "party", 4
+        stats.groupKind = "party"
     else
-        return nil
+        return nil, stats
     end
+
+    local guidHit, iconHit
     for i = 1, count do
         local m  = prefix .. i
         local mt = m .. "target"
-        if UnitExists(mt) and UnitGUID(mt) == guid then return m end
-    end
-    -- GUID on member's target may be nil if they're out of our client range;
-    -- fall back to icon match so /assist can still rescue us.
-    if rIdx then
-        for i = 1, count do
-            local m  = prefix .. i
-            local mt = m .. "target"
-            if UnitExists(mt) and GetRaidTargetIndex(mt) == rIdx then return m end
+        if UnitExists(m) then
+            stats.size = stats.size + 1
+            if UnitExists(mt) then
+                stats.withTarget = stats.withTarget + 1
+                local g = UnitGUID(mt)
+                if guid and g == guid then
+                    stats.guidMatch = stats.guidMatch + 1
+                    if not guidHit then guidHit = m end
+                end
+                if rIdx and GetRaidTargetIndex(mt) == rIdx then
+                    stats.iconMatch = stats.iconMatch + 1
+                    if not iconHit then iconHit = m end
+                end
+            end
         end
     end
-    return nil
+    -- Prefer GUID-verified match; fall back to icon match when GUID isn't
+    -- locally resolvable on the member's target.
+    return (guidHit or iconHit), stats
 end
 
 -- =========================================================
--- Click outcome diagnostics (failure-only chat logging)
+-- Click outcome diagnostics (failure-only, persistent log)
 -- =========================================================
 
 local RT_ICON_NAMES = { "Star", "Circle", "Diamond", "Triangle", "Moon", "Square", "Cross", "Skull" }
+local CLICK_LOG_CAP = 20   -- ring-buffer size for persistent miss log
 
 local function IsDebugEnabled()
     local v = rDB().debugClicks
@@ -136,23 +156,91 @@ local function FormatIcon(i)
     return i .. " " .. (RT_ICON_NAMES[i] or "?")
 end
 
-local function LogClickMiss(dbg)
-    local p = "|cffff8800[ExsarRTW]|r "
-    print(p .. "CLICK MISSED (tier=" .. tostring(dbg.tier) .. ")")
-    print(p .. "  intended: icon=" .. FormatIcon(dbg.intendedIdx)
+-- Snapshot every currently marked mob. Lets us tell after-the-fact whether
+-- the widget's scan even knew about the intended mob, and via which token.
+local function SnapshotAllMarks()
+    local out = {}
+    for i = 1, 8 do
+        local e = entries[i]
+        if e and e.targetGuid then
+            out[#out + 1] = {
+                idx   = e.raidIndex,
+                name  = e.targetName,
+                guid  = e.targetGuid,
+                token = e.unitToken,
+            }
+        end
+    end
+    return out
+end
+
+-- Render one miss entry as lines of text. Shared by chat print and /exsar rtdump.
+local function FormatClickMiss(dbg, prefix)
+    local p = prefix or ""
+    local lines = {}
+    local when = dbg.timeStr or "?"
+    lines[#lines + 1] = p .. "CLICK MISSED @" .. when
+          .. " tier=" .. tostring(dbg.tier)
+          .. " grp=" .. tostring(dbg.groupKind) .. "/" .. tostring(dbg.groupSize or 0)
+          .. " combat=" .. tostring(dbg.combat and "Y" or "N")
+          .. " nameplates=" .. tostring(dbg.nameplateCount or 0)
+          .. " lag=" .. tostring(dbg.latency or "?") .. "ms"
+    lines[#lines + 1] = p .. "  intended: icon=" .. FormatIcon(dbg.intendedIdx)
           .. " name=\"" .. (dbg.intendedName or "?") .. "\""
-          .. " guid=" .. ShortGuid(dbg.intendedGuid))
+          .. " guid=" .. ShortGuid(dbg.intendedGuid)
+          .. " scanTok=" .. tostring(dbg.scanToken or "?")
     local r = ""
     if dbg.token     then r = r .. " token=" .. dbg.token end
     if dbg.assist    then r = r .. " assist=" .. dbg.assist end
     if dbg.macrotext then r = r .. " macro=\"" .. dbg.macrotext .. "\"" end
-    if r ~= "" then print(p .. "  resolver:" .. r) end
-    print(p .. "  before: name=\"" .. (dbg.oldName or "none") .. "\""
+    if r ~= "" then lines[#lines + 1] = p .. "  resolver:" .. r end
+    if dbg.tier1 then
+        lines[#lines + 1] = p .. "  tier1scan: checked=" .. dbg.tier1.checked
+              .. " existed=" .. dbg.tier1.existed
+              .. " hadGuid=" .. dbg.tier1.hadGuid
+              .. " matched=" .. dbg.tier1.matched
+    end
+    if dbg.tier2 then
+        lines[#lines + 1] = p .. "  tier2scan: kind=" .. dbg.tier2.groupKind
+              .. " size=" .. dbg.tier2.size
+              .. " withTarget=" .. dbg.tier2.withTarget
+              .. " guidMatch=" .. dbg.tier2.guidMatch
+              .. " iconMatch=" .. dbg.tier2.iconMatch
+    end
+    lines[#lines + 1] = p .. "  before: name=\"" .. (dbg.oldName or "none") .. "\""
           .. " guid=" .. ShortGuid(dbg.oldGuid)
-          .. " icon=" .. FormatIcon(dbg.oldIdx))
-    print(p .. "  after:  name=\"" .. (dbg.newName or "none") .. "\""
+          .. " icon=" .. FormatIcon(dbg.oldIdx)
+    lines[#lines + 1] = p .. "  after:  name=\"" .. (dbg.newName or "none") .. "\""
           .. " guid=" .. ShortGuid(dbg.newGuid)
-          .. " icon=" .. FormatIcon(dbg.newIdx))
+          .. " icon=" .. FormatIcon(dbg.newIdx)
+    if dbg.allMarks and #dbg.allMarks > 0 then
+        local parts = {}
+        for _, m in ipairs(dbg.allMarks) do
+            parts[#parts + 1] = FormatIcon(m.idx) .. "=" .. (m.name or "?")
+                  .. "(" .. ShortGuid(m.guid) .. "," .. tostring(m.token or "?") .. ")"
+        end
+        lines[#lines + 1] = p .. "  marks: " .. table.concat(parts, " | ")
+    end
+    return lines
+end
+
+local function LogClickMiss(dbg)
+    local p = "|cffff8800[ExsarRTW]|r "
+    for _, line in ipairs(FormatClickMiss(dbg, p)) do
+        print(line)
+    end
+end
+
+-- Persist the miss to a capped ring buffer in SavedVariables so the user can
+-- retrieve it after the fight ends (/exsar rtdump), even across /reload.
+local function PersistMiss(dbg)
+    local db = rDB()
+    local log = db.clickMissLog or {}
+    log[#log + 1] = dbg
+    while #log > CLICK_LOG_CAP do
+        table.remove(log, 1)
+    end
+    db.clickMissLog = log
 end
 
 local function CheckClickOutcome(dbg)
@@ -162,6 +250,8 @@ local function CheckClickOutcome(dbg)
     dbg.newIdx  = UnitExists("target") and GetRaidTargetIndex("target") or nil
     if dbg.newGuid == dbg.intendedGuid then return end  -- success, nothing to log
     if not IsDebugEnabled() then return end
+    dbg.allMarks = SnapshotAllMarks()
+    PersistMiss(dbg)
     LogClickMiss(dbg)
 end
 
@@ -184,7 +274,7 @@ local PLACEHOLDER_H = 30
 -- Entry pool (max 8, one per possible raid icon)
 -- =========================================================
 
-local entries = {}
+entries = {}
 
 local function CreateEntry(index)
     local btn = CreateFrame("Button", ADDON_NAME .. "RaidTarget" .. index,
@@ -211,7 +301,37 @@ local function CreateEntry(index)
         self:SetAttribute("unit", nil)
         self:SetAttribute("macrotext", "/targetexact nil")
 
+        -- Snapshot context for failure diagnostics. Captured at click time
+        -- because most of it is gone by the time the fight ends.
+        local latency
+        pcall(function()
+            local _, _, h, w = GetNetStats()
+            latency = w or h
+        end)
+        local nameplateCount = 0
+        if C_NamePlate and C_NamePlate.GetNamePlates then
+            local plates = C_NamePlate.GetNamePlates()
+            if plates then nameplateCount = #plates end
+        end
+        local groupKind = IsInRaid() and "raid" or (IsInGroup() and "party" or "solo")
+        local groupSize = 0
+        if groupKind == "raid" then
+            for i = 1, 40 do if UnitExists("raid" .. i) then groupSize = groupSize + 1 end end
+        elseif groupKind == "party" then
+            groupSize = 1  -- player
+            for i = 1, 4 do if UnitExists("party" .. i) then groupSize = groupSize + 1 end end
+        end
+
         local dbg = {
+            time         = GetTime(),
+            timeStr      = date("%H:%M:%S"),
+            zone         = GetRealZoneText and GetRealZoneText() or nil,
+            combat       = InCombatLockdown() and true or false,
+            groupKind    = groupKind,
+            groupSize    = groupSize,
+            nameplateCount = nameplateCount,
+            latency      = latency,
+            scanToken    = self.unitToken,  -- how the scanner discovered this mob
             intendedGuid = guid,
             intendedName = name,
             intendedIdx  = rIdx,
@@ -226,7 +346,8 @@ local function CreateEntry(index)
             return
         end
 
-        local token = FindTokenByGUID(guid)
+        local token, tier1Stats = FindTokenByGUID(guid)
+        dbg.tier1 = tier1Stats
         if token then
             self:SetAttribute("type", "target")
             self:SetAttribute("unit", token)
@@ -236,7 +357,8 @@ local function CreateEntry(index)
             return
         end
 
-        local member = FindAssistMember(guid, rIdx)
+        local member, tier2Stats = FindAssistMember(guid, rIdx)
+        dbg.tier2 = tier2Stats
         if member then
             local macro = "/assist [@" .. member .. "]"
             self:SetAttribute("macrotext", macro)
@@ -690,6 +812,31 @@ ExsarAddon.AddSlashCommand("rtdebug", function()
     local nowOn = not IsDebugEnabled()
     rDB().debugClicks = nowOn
     print(ADDON_NAME .. ": Raid target click debug logging " .. (nowOn and "ON" or "OFF"))
+end)
+
+ExsarAddon.AddSlashCommand("rtdump", function()
+    local log = rDB().clickMissLog
+    if not log or #log == 0 then
+        print(ADDON_NAME .. ": no raid-target click misses logged.")
+        return
+    end
+    local lines = {}
+    lines[#lines + 1] = ADDON_NAME .. " — " .. #log .. " raid-target click miss(es)"
+    lines[#lines + 1] = string.rep("-", 72)
+    for i, dbg in ipairs(log) do
+        lines[#lines + 1] = "#" .. i
+        for _, line in ipairs(FormatClickMiss(dbg, "")) do
+            lines[#lines + 1] = line
+        end
+        lines[#lines + 1] = ""
+    end
+    ExsarUI.ShowCopyableText(table.concat(lines, "\n"),
+        { title = "ExsarAddon — Raid Target Click Misses" })
+end)
+
+ExsarAddon.AddSlashCommand("rtclear", function()
+    rDB().clickMissLog = nil
+    print(ADDON_NAME .. ": raid-target click miss log cleared.")
 end)
 
 -- =========================================================
