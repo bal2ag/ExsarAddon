@@ -292,10 +292,11 @@ Compact info for all units marked with raid target icons. Click a row to target 
 
 - **Display:** Each marked unit gets a row showing its portrait, raid target icon, name (colored by reaction), and a health bar with percentage. Sorted by raid icon index (skull first, star last). Your current target is highlighted with a pulsating gold glow border.
 - **Unit discovery:** Scans multiple sources to find marked units: your target and focus, party/raid members, party/raid member targets, visible nameplates, and boss frames. Units are deduplicated by GUID.
-- **Click to target:** Uses a three-tier targeting strategy at click time:
-  1. Direct unit targeting via a stable unit token (party/raid member, target, focus) if available
-  2. `/assist` a group member who is currently targeting a unit with the matching raid icon
-  3. `/targetexact Name` as a last resort (targets the closest mob with that name)
+- **Click to target:** GUID-verified, three-tier targeting at click time:
+  1. Scan every queryable unit token (nameplates, `raidNtarget`, `partyNtarget`, boss frames, target/focus/mouseover) and use the first one whose `UnitGUID` still matches the intended mob — secure `type=target`
+  2. `/assist [@memberN]` for any group member whose target matches the intended GUID (or icon, if the client can't resolve their target's GUID locally)
+  3. `/targetexact Name` as a last resort
+- **Click-failure logging:** When a click fails to swap your target to the intended mob, a `CLICK MISSED` entry is printed to chat showing intended/resolver/before/after so the failure mode can be diagnosed without running macros mid-fight. Default ON; toggle with `/exsar rtdebug`.
 - **Hidden when:** No marked units are found (and widget is locked)
 
 <!-- ![Raid Target Widget](screenshots/raid-targets.png) -->

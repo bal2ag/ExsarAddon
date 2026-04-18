@@ -37,6 +37,134 @@ local GLOW_PULSE_MAX = 1.0
 local HealthColor  = ExsarLogic.HealthColorGradient
 local PulseAlpha   = ExsarLogic.PulseAlpha
 
+-- Iterate every unit token we can cheaply query and return the first whose
+-- GUID still matches. Re-verifying at click time lets us safely use tokens
+-- that are normally considered "unstable" (nameplateN, partyNtarget) --
+-- because we confirm the token currently points to the intended mob.
+local function FindTokenByGUID(guid)
+    if not guid then return nil end
+
+    if UnitExists("target")    and UnitGUID("target")    == guid then return "target"    end
+    if UnitExists("focus")     and UnitGUID("focus")     == guid then return "focus"     end
+    if UnitExists("mouseover") and UnitGUID("mouseover") == guid then return "mouseover" end
+
+    for i = 1, 5 do
+        local t = "boss" .. i
+        if UnitExists(t) and UnitGUID(t) == guid then return t end
+    end
+
+    if IsInRaid() then
+        for i = 1, 40 do
+            local t = "raid" .. i .. "target"
+            if UnitExists(t) and UnitGUID(t) == guid then return t end
+        end
+    elseif IsInGroup() then
+        for i = 1, 4 do
+            local t = "party" .. i .. "target"
+            if UnitExists(t) and UnitGUID(t) == guid then return t end
+            local pt = "partypet" .. i .. "target"
+            if UnitExists(pt) and UnitGUID(pt) == guid then return pt end
+        end
+    end
+    if UnitExists("pettarget") and UnitGUID("pettarget") == guid then return "pettarget" end
+
+    if C_NamePlate and C_NamePlate.GetNamePlates then
+        local plates = C_NamePlate.GetNamePlates()
+        if plates then
+            for _, plate in ipairs(plates) do
+                local t = plate.namePlateUnitToken
+                if not t and UnitTokenFromNamePlate then
+                    t = UnitTokenFromNamePlate(plate)
+                end
+                if t and UnitExists(t) and UnitGUID(t) == guid then
+                    return t
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+-- Find a party/raid member whose current target is the intended mob,
+-- for the `/assist` fallback when no direct token resolves the GUID.
+local function FindAssistMember(guid, rIdx)
+    local prefix, count
+    if IsInRaid() then
+        prefix, count = "raid", 40
+    elseif IsInGroup() then
+        prefix, count = "party", 4
+    else
+        return nil
+    end
+    for i = 1, count do
+        local m  = prefix .. i
+        local mt = m .. "target"
+        if UnitExists(mt) and UnitGUID(mt) == guid then return m end
+    end
+    -- GUID on member's target may be nil if they're out of our client range;
+    -- fall back to icon match so /assist can still rescue us.
+    if rIdx then
+        for i = 1, count do
+            local m  = prefix .. i
+            local mt = m .. "target"
+            if UnitExists(mt) and GetRaidTargetIndex(mt) == rIdx then return m end
+        end
+    end
+    return nil
+end
+
+-- =========================================================
+-- Click outcome diagnostics (failure-only chat logging)
+-- =========================================================
+
+local RT_ICON_NAMES = { "Star", "Circle", "Diamond", "Triangle", "Moon", "Square", "Cross", "Skull" }
+
+local function IsDebugEnabled()
+    local v = rDB().debugClicks
+    if v == nil then return true end  -- default ON so failures surface without setup
+    return v
+end
+
+local function ShortGuid(g)
+    if not g then return "nil" end
+    return "." .. string.sub(g, -6)
+end
+
+local function FormatIcon(i)
+    if not i then return "none" end
+    return i .. " " .. (RT_ICON_NAMES[i] or "?")
+end
+
+local function LogClickMiss(dbg)
+    local p = "|cffff8800[ExsarRTW]|r "
+    print(p .. "CLICK MISSED (tier=" .. tostring(dbg.tier) .. ")")
+    print(p .. "  intended: icon=" .. FormatIcon(dbg.intendedIdx)
+          .. " name=\"" .. (dbg.intendedName or "?") .. "\""
+          .. " guid=" .. ShortGuid(dbg.intendedGuid))
+    local r = ""
+    if dbg.token     then r = r .. " token=" .. dbg.token end
+    if dbg.assist    then r = r .. " assist=" .. dbg.assist end
+    if dbg.macrotext then r = r .. " macro=\"" .. dbg.macrotext .. "\"" end
+    if r ~= "" then print(p .. "  resolver:" .. r) end
+    print(p .. "  before: name=\"" .. (dbg.oldName or "none") .. "\""
+          .. " guid=" .. ShortGuid(dbg.oldGuid)
+          .. " icon=" .. FormatIcon(dbg.oldIdx))
+    print(p .. "  after:  name=\"" .. (dbg.newName or "none") .. "\""
+          .. " guid=" .. ShortGuid(dbg.newGuid)
+          .. " icon=" .. FormatIcon(dbg.newIdx))
+end
+
+local function CheckClickOutcome(dbg)
+    if not dbg or not dbg.intendedGuid then return end
+    dbg.newGuid = UnitExists("target") and UnitGUID("target") or nil
+    dbg.newName = UnitExists("target") and UnitName("target") or nil
+    dbg.newIdx  = UnitExists("target") and GetRaidTargetIndex("target") or nil
+    if dbg.newGuid == dbg.intendedGuid then return end  -- success, nothing to log
+    if not IsDebugEnabled() then return end
+    LogClickMiss(dbg)
+end
+
 -- =========================================================
 -- Main frame
 -- =========================================================
@@ -66,55 +194,83 @@ local function CreateEntry(index)
     btn:SetAttribute("type", "macro")
     btn:SetAttribute("macrotext", "/targetexact nil")
 
-    -- PreClick: dynamically pick the best targeting strategy at click time.
-    -- Tier 1: type=target with a stable unit token (exact, handles same-name mobs)
-    -- Tier 2: /assist any party/raid member currently targeting a unit with the
-    --         matching raid icon (live scan, not stale stored value)
-    -- Tier 3: type=macro with /targetexact Name (closest mob with that name)
+    -- PreClick: pick the best targeting strategy at click time, using the
+    -- intended mob's GUID as the ground truth.
+    -- Tier 1: find ANY unit token whose UnitGUID() currently equals our stored
+    --         GUID -- handles nameplateN, partyNtarget, etc. safely because
+    --         we re-verify at click time. Uses secure type=target.
+    -- Tier 2: /assist a group member whose current target matches our GUID
+    --         (or, if GUIDs aren't resolvable locally, our raid icon).
+    -- Tier 3: /targetexact Name -- last resort; may hit wrong same-name mob.
     btn:SetScript("PreClick", function(self)
-        local stable = self.stableToken
-        local uname  = self.targetName
-        local rIdx   = self.raidIndex
-        -- Reset to macro type first so attrs are never out of sync
+        local guid = self.targetGuid
+        local name = self.targetName
+        local rIdx = self.raidIndex
+
         self:SetAttribute("type", "macro")
         self:SetAttribute("unit", nil)
-        if stable and UnitExists(stable) then
+        self:SetAttribute("macrotext", "/targetexact nil")
+
+        local dbg = {
+            intendedGuid = guid,
+            intendedName = name,
+            intendedIdx  = rIdx,
+            oldGuid = UnitExists("target") and UnitGUID("target") or nil,
+            oldName = UnitExists("target") and UnitName("target") or nil,
+            oldIdx  = UnitExists("target") and GetRaidTargetIndex("target") or nil,
+        }
+
+        if not guid then
+            dbg.tier = "no-guid"
+            self.lastClickDbg = dbg
+            return
+        end
+
+        local token = FindTokenByGUID(guid)
+        if token then
             self:SetAttribute("type", "target")
-            self:SetAttribute("unit", stable)
+            self:SetAttribute("unit", token)
+            dbg.tier  = 1
+            dbg.token = token
+            self.lastClickDbg = dbg
+            return
+        end
+
+        local member = FindAssistMember(guid, rIdx)
+        if member then
+            local macro = "/assist [@" .. member .. "]"
+            self:SetAttribute("macrotext", macro)
+            dbg.tier      = 2
+            dbg.assist    = member
+            dbg.macrotext = macro
+            self.lastClickDbg = dbg
+            return
+        end
+
+        if name then
+            local macro = "/targetexact " .. name
+            self:SetAttribute("macrotext", macro)
+            dbg.tier      = 3
+            dbg.macrotext = macro
         else
-            -- Dynamically find ANY group member whose target has the right raid icon
-            local assistFound
-            if rIdx then
-                local prefix, count
-                if IsInRaid() then
-                    prefix, count = "raid", 40
-                elseif IsInGroup() then
-                    prefix, count = "party", 4
-                end
-                if prefix then
-                    for i = 1, count do
-                        local member = prefix .. i
-                        local mt = member .. "target"
-                        if UnitExists(mt) and GetRaidTargetIndex(mt) == rIdx then
-                            self:SetAttribute("macrotext", "/assist " .. member)
-                            assistFound = true
-                            break
-                        end
-                    end
-                end
-            end
-            if not assistFound then
-                if uname then
-                    self:SetAttribute("macrotext", "/targetexact " .. uname)
-                else
-                    self:SetAttribute("macrotext", "/targetexact nil")
-                end
-            end
+            dbg.tier = "none"
+        end
+        self.lastClickDbg = dbg
+    end)
+
+    -- PostClick: schedule an outcome check so we log when a click failed to
+    -- swap the player's target to the intended mob.
+    btn:SetScript("PostClick", function(self)
+        local dbg = self.lastClickDbg
+        self.lastClickDbg = nil
+        if not dbg or not dbg.intendedGuid then return end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.25, function() CheckClickOutcome(dbg) end)
         end
     end)
 
     -- Targeting data (updated by UpdateDisplay, read by PreClick)
-    btn.stableToken = nil
+    btn.targetGuid  = nil
     btn.targetName  = nil
     btn.raidIndex   = nil
 
@@ -241,19 +397,8 @@ end
 -- Unit scanning
 -- =========================================================
 
--- "Stable" tokens are unit IDs that won't change between scan and click.
--- Nameplate tokens and *target tokens are excluded because they can shift
--- at any moment (nameplate recycled, player retargets).
-local function IsStableToken(unit)
-    if unit == "target" or unit == "focus" then return true end
-    -- "party1", "raid5", "boss2" etc. are stable; "party1target" is not
-    if unit:match("target$") then return false end
-    if unit:match("^nameplate") then return false end
-    return true
-end
-
 local function ScanMarkedUnits()
-    local found = {}      -- guid -> {unit, index, guid, stableToken, name}
+    local found = {}      -- guid -> {unit, index, guid, name}
     local byIndex = {}    -- index -> guid (one entry per raid icon)
 
     local function Check(unit)
@@ -273,18 +418,10 @@ local function ScanMarkedUnits()
                 unit  = unit,
                 index = idx,
                 guid  = guid,
-                stableToken = IsStableToken(unit) and unit or nil,
                 name  = UnitName(unit),
             }
-        else
-            -- Already found this GUID; upgrade stableToken if we find one
-            local info = found[guid]
-            if not info.stableToken and IsStableToken(unit) then
-                info.stableToken = unit
-            end
-            if not info.name then
-                info.name = UnitName(unit)
-            end
+        elseif not found[guid].name then
+            found[guid].name = UnitName(unit)
         end
     end
 
@@ -391,7 +528,7 @@ local function UpdateDisplay()
             entry.unitToken = unit
 
             -- Store targeting data for PreClick handler
-            entry.stableToken = info.stableToken
+            entry.targetGuid  = info.guid
             entry.raidIndex   = info.index
             entry.targetName  = info.name
             entry.stale       = false
@@ -449,7 +586,7 @@ local function UpdateDisplay()
             end
         else
             entry.unitToken    = nil
-            entry.stableToken  = nil
+            entry.targetGuid   = nil
             entry.raidIndex    = nil
             entry.targetName   = nil
             entry.stale        = true
@@ -547,6 +684,12 @@ ExsarAddon.AddSlashCommand("rtreset", function()
     rDB().x = nil
     rDB().y = nil
     print(ADDON_NAME .. ": Raid target widget position reset.")
+end)
+
+ExsarAddon.AddSlashCommand("rtdebug", function()
+    local nowOn = not IsDebugEnabled()
+    rDB().debugClicks = nowOn
+    print(ADDON_NAME .. ": Raid target click debug logging " .. (nowOn and "ON" or "OFF"))
 end)
 
 -- =========================================================

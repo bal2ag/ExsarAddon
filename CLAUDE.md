@@ -154,6 +154,15 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
 - Pulsating gold glow ring (3.0 Hz) behind the icon in ready state only
 - Optional enter/leave range sound effects (SoundKit 154 / 698)
 
+**`RaidTargetWidget.lua` structure:**
+- Scan phase (every 0.3s via `CreatePoller`): iterate every queryable unit token (`target`, `focus`, `party/raid/partypet/boss` members and their `target` variants, nameplates). Record `{unit, guid, name, index}` deduplicated by GUID, one entry per raid icon. No "stability" distinction — GUID is the ground truth.
+- Entry data stored on each secure button: `targetGuid`, `targetName`, `raidIndex`
+- Click resolution (`PreClick`, in order):
+  1. `FindTokenByGUID(guid)` — scan tokens and return the first whose `UnitGUID` currently equals our stored GUID → secure `type=target, unit=<token>`. Safe to use nameplate/`partyNtarget` tokens because they are re-verified at click time.
+  2. `FindAssistMember(guid, rIdx)` — find a group member whose `memberNtarget` GUID matches (or icon matches as fallback) → secure macrotext `/assist [@memberN]`. The `[@unit]` conditional form is more reliable than bare `/assist memberN`.
+  3. `/targetexact Name` — last resort; picks the closest mob with that name.
+- Failure logging (`PostClick` → `C_Timer.After(0.25, CheckClickOutcome)`): snapshots the player's target before the click, checks it again after a 0.25s delay, and if the new target GUID ≠ intended GUID prints a multi-line `CLICK MISSED` entry to chat showing intended/resolver/before/after. Default ON; toggle with `/exsar rtdebug`. Stored under `rDB().debugClicks`.
+
 ## Key WoW API Used
 
 - `GetSpellInfo(spellName)` — returns name, rank, icon texture path for the highest-learned rank
@@ -265,7 +274,7 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 - `ExsarAddonDB.playerInfo` — position (x, y), scale, locked, enabled, lowHpThreshold, lowHpSound
 - `ExsarAddonDB.petInfo` — position (x, y), scale, locked, enabled, lowHpThreshold, lowHpSound, dmgSound
 - `ExsarAddonDB.meleeRange` — position (x, y), scale, locked, rangeSound
-- `ExsarAddonDB.raidTargets` — position (x, y), scale, locked
+- `ExsarAddonDB.raidTargets` — position (x, y), scale, locked, debugClicks
 - `ExsarAddonDB.petAggressiveAlert` — position (x, y), scale, locked, disabled
 - `ExsarAddonDB.petHappiness` — position (x, y), scale, locked, savedEstimate, savedTier, savedAnchored, happinessSound
 - `ExsarAddonDB.aggroAlert` — position (x, y), scale, locked, disabled, enableSolo, enableParty, enableRaid
