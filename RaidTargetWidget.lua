@@ -288,7 +288,13 @@ local function CreateEntry(index)
     -- intended mob's GUID as the ground truth.
     -- Tier 1: find ANY unit token whose UnitGUID() currently equals our stored
     --         GUID -- handles nameplateN, partyNtarget, etc. safely because
-    --         we re-verify at click time. Uses secure type=target.
+    --         we re-verify at click time. Uses /target [@<token>] via secure
+    --         macrotext rather than type=target/unit=<token>. Empirical: the
+    --         latter silently no-ops for many derived tokens on TBC Classic
+    --         Anniversary even when UnitGUID(token) clearly matches; the
+    --         macro-bracket form resolves the same token reliably (confirmed
+    --         by manual `/target [@pettarget]` in chat). Matches the Tier 2
+    --         `/assist [@memberN]` pattern.
     -- Tier 2: /assist a group member whose current target matches our GUID
     --         (or, if GUIDs aren't resolvable locally, our raid icon).
     -- Tier 3: /targetexact Name -- last resort; may hit wrong same-name mob.
@@ -349,10 +355,12 @@ local function CreateEntry(index)
         local token, tier1Stats = FindTokenByGUID(guid)
         dbg.tier1 = tier1Stats
         if token then
-            self:SetAttribute("type", "target")
-            self:SetAttribute("unit", token)
-            dbg.tier  = 1
-            dbg.token = token
+            local macro = "/target [@" .. token .. "]"
+            self:SetAttribute("type", "macro")
+            self:SetAttribute("macrotext", macro)
+            dbg.tier      = 1
+            dbg.token     = token
+            dbg.macrotext = macro
             self.lastClickDbg = dbg
             return
         end
