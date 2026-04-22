@@ -1,6 +1,11 @@
 # ExsarAddon
 
-A Hunter toolkit addon for World of Warcraft: TBC Classic Anniversary (Interface 20505). It provides a collection of lightweight, movable widgets that surface combat timers, cooldowns, alerts, and status information — everything a BM/survival hunter needs visible at a glance.
+A (highly opinionated) Hunter toolkit addon for World of Warcraft: TBC Classic Anniversary (Interface 20505). It provides a collection of lightweight, movable widgets that surface combat timers, cooldowns, alerts, and status information — everything a BM/survival hunter needs visible at a glance.
+
+This addon was built primarily with [Claude Code](https://code.claude.com/docs/en/overview).
+
+<img width="1464" height="950" alt="Screenshot 2026-04-21 at 7 43 03 PM" src="https://github.com/user-attachments/assets/2e39a7d7-cc15-417c-9369-a71482e23853" />
+
 
 ## Table of Contents
 
@@ -70,7 +75,11 @@ Shows core abilities, trinkets, and cooldowns, and tracks cooldown time remainin
 
 ### Ranged Swing Timer
 
+<img width="362" height="208" alt="Screenshot 2026-04-21 at 7 43 28 PM" src="https://github.com/user-attachments/assets/c68d1036-4736-49ca-8cd4-459078fe74a2" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
+
 
 Bar showing your Auto Shot cycle with a clip-window indicator so you know when it's safe to cast without delaying your next auto.
 
@@ -82,6 +91,9 @@ Bar showing your Auto Shot cycle with a clip-window indicator so you know when i
 <!-- ![Ranged Swing Timer](screenshots/ranged-swing-timer.png) -->
 
 ### Cast Bar
+
+<img width="362" height="208" alt="Screenshot 2026-04-21 at 7 43 28 PM" src="https://github.com/user-attachments/assets/693e0817-ead9-4cd5-ad42-961f453d97c8" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -97,6 +109,9 @@ Cast bar for Auto Shot aim window, Aimed Shot, Steady Shot, and Multi-Shot. Each
 
 ### Kill Command Alert
 
+<img width="363" height="487" alt="Screenshot 2026-04-21 at 7 45 07 PM" src="https://github.com/user-attachments/assets/0ae8b900-106f-48a6-bf16-3778090592e9" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Pulsing wing-shaped alert when Kill Command is ready and your pet is active.
@@ -108,6 +123,9 @@ Pulsing wing-shaped alert when Kill Command is ready and your pet is active.
 <!-- ![Kill Command Alert](screenshots/kill-command-alert.png) -->
 
 ### Active Effects Tracker
+
+<img width="362" height="260" alt="Screenshot 2026-04-21 at 7 59 28 PM" src="https://github.com/user-attachments/assets/4385f23d-bab5-4846-8e68-e6d8ec622795" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -121,6 +139,9 @@ Icons with animated borders and countdowns for relevant rotation buffs (Quick Sh
 <!-- ![Active Effects Tracker](screenshots/active-effects-tracker.png) -->
 
 ### Usable Items
+
+<img width="126" height="170" alt="Screenshot 2026-04-21 at 7 46 00 PM" src="https://github.com/user-attachments/assets/67f71008-dc1a-4245-a332-8369c99e843d" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -146,6 +167,9 @@ Shows your Hunter's Mark and Serpent Sting on the current target with countdowns
 
 ### Mend Pet Tracker
 
+<img width="133" height="84" alt="Screenshot 2026-04-21 at 7 46 13 PM" src="https://github.com/user-attachments/assets/b185dce4-6d57-40ed-8889-4efd66091ec6" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Tracks your Mend Pet HoT.
@@ -158,6 +182,9 @@ Tracks your Mend Pet HoT.
 
 ### Food & Drink Widget
 
+<img width="150" height="60" alt="Screenshot 2026-04-21 at 7 45 41 PM" src="https://github.com/user-attachments/assets/a54b955e-6d53-4ceb-993f-0d9897b1c84c" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Food and drink icons that dim automatically in combat.
@@ -169,6 +196,9 @@ Food and drink icons that dim automatically in combat.
 <!-- ![Food & Drink Widget](screenshots/food-and-drink.png) -->
 
 ### Consumable Buff Widget
+
+<img width="398" height="61" alt="Screenshot 2026-04-21 at 7 45 49 PM" src="https://github.com/user-attachments/assets/62573d7d-1079-41a3-949b-0a1a830844da" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -184,6 +214,9 @@ Always-visible icons for consumable buffs (scrolls, elixirs, weapon enchants) wi
 
 ### Mount Widget
 
+<img width="107" height="52" alt="Screenshot 2026-04-21 at 7 45 39 PM" src="https://github.com/user-attachments/assets/c1eb5830-dd94-4cf9-80c5-8274db2c2f11" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 One-click to use mounts.
@@ -194,6 +227,9 @@ One-click to use mounts.
 <!-- ![Mount Widget](screenshots/mount.png) -->
 
 ### Target Info
+
+<img width="138" height="92" alt="Screenshot 2026-04-21 at 7 45 22 PM" src="https://github.com/user-attachments/assets/23b63f33-011c-4c91-affb-ae5a32927f61" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -210,6 +246,9 @@ Target portrait with health bar and auras. Hides when you have no target.
 
 ### Player Info
 
+<img width="135" height="95" alt="Screenshot 2026-04-21 at 7 45 18 PM" src="https://github.com/user-attachments/assets/0a9c9f79-8bea-49c3-a6e0-b251c8dd75c5" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Player portrait with health bar and auras. Includes an optional low-HP burst warning with sound alert.
@@ -225,6 +264,9 @@ Player portrait with health bar and auras. Includes an optional low-HP burst war
 <!-- ![Player Info](screenshots/player-info.png) -->
 
 ### Pet Info
+
+<img width="145" height="93" alt="Screenshot 2026-04-21 at 7 45 15 PM" src="https://github.com/user-attachments/assets/62c7efd2-a90c-44d4-a4bf-6d8ddd492f65" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -255,6 +297,14 @@ Shows which aspect is currently active. Pulses a red warning when Aspect of the 
 <!-- ![Aspect Tracker](screenshots/aspect-tracker.png) -->
 
 ### Melee Range Indicator
+<table>
+  <tr>
+    <td><img width="236" height="359" alt="Screenshot 2026-04-21 at 7 43 59 PM" src="https://github.com/user-attachments/assets/f3d50a1a-a343-45f4-90ba-25578d2a039a" /></td>
+    <td><img width="216" height="371" alt="Screenshot 2026-04-21 at 7 44 12 PM" src="https://github.com/user-attachments/assets/449f218d-8094-4ab5-87a4-85d1d76434e0" /></td>
+    <td><img width="217" height="377" alt="Screenshot 2026-04-21 at 7 44 16 PM" src="https://github.com/user-attachments/assets/1c139ae0-9952-4864-b167-53b75806a3ed" /></td>
+  </tr>
+</table>
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
@@ -273,6 +323,9 @@ Crossed-swords icon showing melee range status. Displays a cooldown sweep for yo
 
 ### Global Cooldown Tracker
 
+<img width="362" height="208" alt="Screenshot 2026-04-21 at 7 43 28 PM" src="https://github.com/user-attachments/assets/0966be23-4567-432f-91d5-0197409110b4" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Sweep effect for the current GCD.
@@ -285,6 +338,9 @@ Sweep effect for the current GCD.
 <!-- ![Global Cooldown Tracker](screenshots/gcd-tracker.png) -->
 
 ### Raid Target Widget
+
+<img width="1512" height="982" alt="Screenshot 2026-04-20 at 10 34 17 PM" src="https://github.com/user-attachments/assets/cb011ddd-06ac-4473-9dbe-9a883f33d927" />
+
 
 ![Experimental](https://img.shields.io/badge/Experimental-yellow)
 
@@ -303,6 +359,9 @@ Compact info for all units marked with raid target icons. Click a row to target 
 
 ### Pet Aggressive Alert
 
+<img width="277" height="201" alt="Screenshot 2026-04-21 at 7 58 45 PM" src="https://github.com/user-attachments/assets/bfbb541e-f948-4064-851c-0a38714b288c" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Pulsing red skull when your pet is set to aggressive mode.
@@ -314,6 +373,9 @@ Pulsing red skull when your pet is set to aggressive mode.
 <!-- ![Pet Aggressive Alert](screenshots/pet-aggressive.png) -->
 
 ### Pet Happiness Tracker
+
+<img width="145" height="93" alt="Screenshot 2026-04-21 at 7 45 15 PM" src="https://github.com/user-attachments/assets/ce824939-bde7-4675-98e2-f55e145bffe7" />
+
 
 ![Experimental](https://img.shields.io/badge/Experimental-yellow)
 
@@ -334,6 +396,9 @@ Happiness gauge estimating exact happiness points (0-1050) with a timer showing 
 
 ### Aggro Alert
 
+<img width="647" height="209" alt="Screenshot 2026-04-21 at 7 46 23 PM" src="https://github.com/user-attachments/assets/a9de7f0f-9605-42ba-8a5f-25ddade9aa0d" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Pulsating red text alert when enemy mobs are targeting you. Scans nameplates and group targets. Configurable for solo, party, and raid contexts. Plays a sound when you gain aggro.
@@ -353,6 +418,9 @@ Pulsating red text alert when enemy mobs are targeting you. Scans nameplates and
 
 ### Ammo Tracker
 
+<img width="62" height="80" alt="Screenshot 2026-04-21 at 7 45 32 PM" src="https://github.com/user-attachments/assets/a724f730-a000-47d1-b62f-7074dc6d912b" />
+
+
 ![Supported](https://img.shields.io/badge/Supported-green)
 
 Equipped ammo icon with bag count overlay. Shows a red warning glow when ammo is low or missing.
@@ -365,6 +433,9 @@ Equipped ammo icon with bag count overlay. Shows a red warning glow when ammo is
 <!-- ![Ammo Tracker](screenshots/ammo-tracker.png) -->
 
 ### Rotation Helper
+
+<img width="362" height="208" alt="Screenshot 2026-04-21 at 7 43 28 PM" src="https://github.com/user-attachments/assets/e8d01b7e-bb4f-4268-af55-8f6c146fcd1d" />
+
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
