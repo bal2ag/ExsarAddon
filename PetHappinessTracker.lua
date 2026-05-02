@@ -21,6 +21,9 @@ local DECAY_PER_MIN = 50 / 6      -- ~8.33 pts/min (50 per 6 min)
 local DEATH_LOSS    = 350          -- one full tier
 local DISMISS_LOSS  = 50
 
+local DISMISS_PET_SPELL_ID = 2641
+local DISMISS_PET_NAME     = "Dismiss Pet"
+
 -- Tier boundaries: [0,350) = unhappy, [350,700) = content, [700,1050] = happy
 local TIER_MIN = { [1] = 0, [2] = 350, [3] = 700 }
 local TIER_MAX = { [1] = 349, [2] = 699, [3] = 1050 }
@@ -59,6 +62,9 @@ local S = {
     petActive          = false,   -- whether pet is currently out
     initialized        = false,   -- true after ADDON_LOADED has fired
     anchored           = false,   -- true once we know the exact value
+    guessing           = false,   -- true when the estimate is a cold-start midpoint
+                                   -- guess (no saved data, never anchored). Display
+                                   -- shows "?" instead of a fake timer.
     lastHappSoundTime  = 0,       -- GetTime() of last happiness sound
     wasDecayClamped    = false,   -- was last decay tick pinned at tier floor
 }
@@ -228,6 +234,7 @@ local function SaveEstimate()
     db.savedEstimate = S.estimate
     db.savedTier = S.tier
     db.savedAnchored = S.anchored
+    db.savedGuessing = S.guessing
 end
 
 local function SeedEstimate()
@@ -236,6 +243,7 @@ local function SeedEstimate()
         S.estimate = 0
         S.tier = 0
         S.anchored = false
+        S.guessing = false
         return
     end
     S.tier = happiness
@@ -250,6 +258,7 @@ local function SeedEstimate()
             source = "saved"
             S.estimate = db.savedEstimate
             S.anchored = db.savedAnchored or false
+            S.guessing = db.savedGuessing or false
             if S.estimate < TIER_MIN[happiness] then
                 S.estimate = TIER_MIN[happiness]
             elseif S.estimate > TIER_MAX[happiness] then
@@ -264,12 +273,16 @@ local function SeedEstimate()
                 S.estimate = TIER_MIN[happiness]
             end
             S.anchored = true
+            S.guessing = false
             SaveEstimate()
         end
     else
         source = "cold"
+        -- No saved data: midpoint is only a fallback for internal decay math.
+        -- S.guessing = true makes the display show "?" instead of a fake timer.
         S.estimate = TIER_MIN[happiness] + TIER_SIZE / 2
         S.anchored = false
+        S.guessing = true
     end
     S.lastUpdate = GetTime()
     S.wasDecayClamped = false
@@ -309,6 +322,10 @@ local function CorrectToTier(trigger)
     local changed = snapped or newAnchored ~= S.anchored
     S.estimate = newEst
     S.anchored = newAnchored
+    if newAnchored then
+        -- We now have a trusted anchor point; no longer guessing.
+        S.guessing = false
+    end
     if changed or happiness ~= oldTier then
         SaveEstimate()
     end
@@ -369,7 +386,21 @@ local function UpdateVisuals()
 
     -- Sweep + timer
     local belowLabel = TIER_BELOW_LABELS[tier]
-    if belowLabel then
+    if S.guessing then
+        -- No trusted anchor: don't render a fake timer. Show a faint "?" on
+        -- tiers that would normally display a time-until-drop; for unhappy
+        -- (no lower tier) just leave the text blank.
+        sweep:Clear()
+        lastSweepStart = 0
+        lastSweepDuration = 0
+        if belowLabel then
+            text:SetText("?")
+            text:SetTextColor(1, 1, 1, 0.5)
+        else
+            text:SetText("")
+            text:SetTextColor(1, 1, 1, 1)
+        end
+    elseif belowLabel then
         local ptsAboveTier = S.estimate - TIER_MIN[tier]
         local secsToDown = ptsAboveTier / DECAY_PER_MIN * 60
         if secsToDown < 0 then secsToDown = 0 end
@@ -389,12 +420,13 @@ local function UpdateVisuals()
 
         local approx = S.anchored and "" or "~"
         text:SetText(approx .. FormatTime(secsToDown))
+        text:SetTextColor(1, 1, 1, 1)
     else
         -- Unhappy — no lower tier, fully grey
         sweep:Clear()
         text:SetText("")
+        text:SetTextColor(1, 1, 1, 1)
     end
-    text:SetTextColor(1, 1, 1)
 
     frame:Show()
 end
@@ -494,6 +526,7 @@ feedFrame:SetScript("OnEvent", function()
             -- Server is clamping the gain — pet is at max happiness
             S.estimate = MAX_HAPPINESS
             S.anchored = true
+            S.guessing = false
             SaveEstimate()
         else
             S.estimate = S.estimate + amount
@@ -510,17 +543,20 @@ end)
 
 -- =========================================================
 -- Events
--- Note: no mount tracking needed — pet despawns when mounted, so
--- S.petActive becomes false and decay stops automatically.
+-- Note: pet temporarily despawns when the player mounts, enters a vehicle,
+-- takes a taxi, etc. These are NOT dismisses and must not subtract happiness.
+-- We detect explicit Dismiss Pet casts via UNIT_SPELLCAST_SUCCEEDED instead
+-- of inferring them from pet disappearance in UNIT_PET.
 -- =========================================================
 
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("UNIT_PET")
 frame:RegisterEvent("UNIT_HAPPINESS")
+frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 frame:RegisterEvent("PLAYER_DEAD")
 
-frame:SetScript("OnEvent", function(self, event, arg1)
+frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         DoInit(self)
 
@@ -541,23 +577,30 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             if S.petActive and not wasActive then
                 -- Pet just appeared: seed estimate
                 SeedEstimate()
-            elseif not S.petActive and wasActive then
-                -- Pet just disappeared — could be dismiss or death
-                -- If pet died, UNIT_HAPPINESS likely already fired
-                -- For dismiss, subtract the penalty
-                if not UnitIsDead("pet") then
-                    local estBefore = S.estimate
-                    S.estimate = S.estimate - DISMISS_LOSS
-                    ClampEstimate()
-                    SaveEstimate()
-                    LogPH({
-                        event = "penalty", reason = "dismiss",
-                        amount = DISMISS_LOSS,
-                        estBefore = estBefore, estAfter = S.estimate,
-                    })
-                end
             end
+            -- Pet disappearing (mount, vehicle, taxi, dismiss, death) carries
+            -- no penalty from this handler. Explicit Dismiss Pet is handled in
+            -- UNIT_SPELLCAST_SUCCEEDED; death is handled in PLAYER_DEAD.
             UpdateVisuals()
+        end
+
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if arg1 == "player" and S.petActive then
+            -- Support both old TBC API (arg2 = spellName) and modern API (arg3/arg5 = spellID)
+            local isDismiss = (arg2 == DISMISS_PET_NAME)
+                or (arg3 == DISMISS_PET_SPELL_ID)
+                or (arg5 == DISMISS_PET_SPELL_ID)
+            if isDismiss then
+                local estBefore = S.estimate
+                S.estimate = S.estimate - DISMISS_LOSS
+                ClampEstimate()
+                SaveEstimate()
+                LogPH({
+                    event = "penalty", reason = "dismiss",
+                    amount = DISMISS_LOSS,
+                    estBefore = estBefore, estAfter = S.estimate,
+                })
+            end
         end
 
     elseif event == "UNIT_HAPPINESS" then

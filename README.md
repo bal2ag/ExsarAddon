@@ -381,10 +381,10 @@ Pulsing red skull when your pet is set to aggressive mode.
 
 Happiness gauge estimating exact happiness points (0-1050) with a timer showing how long until the next tier drop. Optional sound alert when happiness decreases.
 
-- **Display:** Shows the WoW pet happiness face icon (happy/content/unhappy) with a reverse cooldown sweep that fills as happiness drains toward the next tier boundary. A countdown timer shows estimated time until the next tier drop. When the estimate is approximate (not anchored to a known boundary), the timer is prefixed with `~`.
+- **Display:** Shows the WoW pet happiness face icon (happy/content/unhappy) with a reverse cooldown sweep that fills as happiness drains toward the next tier boundary. A countdown timer shows estimated time until the next tier drop. When the estimate is approximate (not anchored to a known boundary), the timer is prefixed with `~`. On a fresh install with no saved data, a faint `?` is shown instead of a timer until a real anchor point is observed (tier crossing or feed-at-max) — no sweep is drawn in that state.
 - **Warning:** A pulsating red glow border appears when the pet is content or unhappy. An optional sound alert plays when happiness drops a tier (configurable).
 - **Algorithm:** The WoW API only exposes the happiness tier (1/2/3), not exact points. The tracker estimates exact happiness (0–1050, 350 points per tier) by:
-  - Seeding at the tier midpoint on first login, or restoring the saved estimate if the tier matches
+  - Restoring the saved estimate if the tier matches; otherwise marking the estimate as a guess (tier midpoint used internally, `?` shown) until a tier crossing or feed-at-max anchors it
   - Applying passive decay continuously (~8.33 points/minute), clamped at the current tier's floor since the API is authoritative on tier
   - Adding feed amounts detected from combat log events (`SPELL_PERIODIC_ENERGIZE` with happiness power type), using the actual per-bite value (8, 17, or 35 depending on food quality)
   - Subtracting fixed penalties for pet death (–350) and dismissal (–50)
