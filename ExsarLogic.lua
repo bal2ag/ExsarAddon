@@ -297,6 +297,27 @@ function ExsarLogic.SelectBestRank(ranks, getCount)
     return best or ranks[1]
 end
 
+--- Pick the soonest-to-expire weapon enchant matching a target enchant ID.
+-- Temporary weapon enchants (sharpening / weightstones) can be applied to both
+-- weapons at once; the widget tracks whichever hand will run out first so the
+-- displayed timer never overstates the protection remaining. Pass the main-
+-- and off-hand returns of GetWeaponEnchantInfo plus the enchant ID to match
+-- (nil matches any enchant — used when we don't care which stone it is).
+-- @return smallest remaining-ms among matching hands, or nil if neither matches
+function ExsarLogic.MinWeaponEnchantRemaining(targetEnchantId,
+        hasMain, mainMs, mainId, hasOff, offMs, offId)
+    local best
+    if hasMain and mainMs and mainMs > 0
+       and (not targetEnchantId or mainId == targetEnchantId) then
+        best = mainMs
+    end
+    if hasOff and offMs and offMs > 0
+       and (not targetEnchantId or offId == targetEnchantId) then
+        if not best or offMs < best then best = offMs end
+    end
+    return best
+end
+
 --- Given an effective (hasted) weapon speed, suggest a rotation string.
 -- Boundaries: >=1.83 → "5:6:1:1", [1.22,1.83) → "1:1", (0.83,1.22) → "2:3", ≤0.83 → "1:2"
 function ExsarLogic.SuggestRotation(effectiveSpeed)

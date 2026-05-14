@@ -17,7 +17,7 @@ Then reload the UI in-game with `/reload`. There is no build step.
 ## Quality Checks
 
 Run these before committing changes:
-- `busted` — runs unit tests (161 tests covering ExsarLogic and MakeDB)
+- `busted` — runs unit tests (193 tests covering ExsarLogic and MakeDB)
 - `luacheck .` — static analysis; should report 0 warnings / 0 errors
 - `luac -p *.lua` — syntax check (redundant with luacheck but faster)
 
@@ -98,6 +98,9 @@ Several modules play `PlaySound(soundKitID, "Master")` on state transitions (e.g
 
 **Ranked item fallback** (`ConsumableBuffWidget`):
 Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-first) automatically show the highest rank with bag stock, falling back to the highest rank (greyed out) when none are available. Uses `ExsarLogic.SelectBestRank(ranks, getCount)` for the selection logic. Buff detection checks all rank buff IDs. Secure button `item` attribute is updated out of combat when the active rank changes.
+
+**Weapon enchant tracking** (`ConsumableBuffWidget`):
+Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weightstone) are tracked via `GetWeaponEnchantInfo()` instead of the buff list. Both weapon hands are read; `ExsarLogic.MinWeaponEnchantRemaining(enchantId, ...)` returns the soonest-to-expire hand carrying the matching `enchantId`, so a stone applied to a dual-wield pair shows the timer that will run out first. `buffDuration` is hardcoded (3600s) for the sweep animation since the API reports only remaining time, not total duration. When the soonest-expiring hand switches, the >2s sweep-start guard catches the jump.
 
 **Core API available to modules:**
 - `ExsarAddon.RegisterModule(module)` — registers the module; `module.BuildConfig(parent, y)` must return the final y position after placing widgets
@@ -186,7 +189,7 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
 - `PlaySound(soundKitID [, channel])` — plays a built-in sound; use `"Master"` channel for alerts that must be heard regardless of SFX volume
 - `IsInRaid()` / `IsInGroup()` — group context detection; solo = not `IsInGroup()`
 - `UnitIsUnit(unit1, unit2)` — true if both unit tokens refer to the same entity
-- `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, mainCharges, mainEnchantId, hasOffEnchant, ...`; `mainExpMs` is milliseconds remaining; returns only remaining time, NOT total duration — total duration must be hardcoded if needed (e.g. for sweep animation). Use `mainEnchantId` to distinguish between different temporary enchants (e.g. Adamantite Sharpening Stone = 2713, Windfury Weapon = 2636)
+- `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, mainCharges, mainEnchantId, hasOffEnchant, ...`; `mainExpMs` is milliseconds remaining; returns only remaining time, NOT total duration — total duration must be hardcoded if needed (e.g. for sweep animation). Returns the off-hand equivalents (`hasOffEnchant, offExpMs, offCharges, offEnchantId`) as returns 5–8. Use the enchant IDs to distinguish between different temporary enchants (e.g. Adamantite Sharpening Stone = 2713, Adamantite Weightstone = 2955, Windfury Weapon = 2636)
 
 ## Hunter Ability Timing Reference (from diziet559/rotationtools)
 

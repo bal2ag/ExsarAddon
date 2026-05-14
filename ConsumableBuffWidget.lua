@@ -39,7 +39,8 @@ local TRACKED_ITEMS = {
           { name = "Scroll of Agility I",  id = 3012,  buffId = 8115  },
       },
     },
-    { name = "Adamantite Sharpening Stone",   id = 23529, weaponSlot = "mainhand", enchantId = 2713, buffDuration = 3600 },
+    { name = "Adamantite Sharpening Stone",   id = 23529, weaponEnchant = true, enchantId = 2713, buffDuration = 3600 },
+    { name = "Adamantite Weightstone",        id = 28421, weaponEnchant = true, enchantId = 2955, buffDuration = 3600 },
     { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261 },
     { name = "Spicy Hot Talbuk",             id = 33872, buffName = "Well Fed",                    buffId = 43763 },
 }
@@ -92,7 +93,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
         buffName    = item.buffName,
         buffId      = item.buffId,
         unit        = item.unit or "player",
-        weaponSlot  = item.weaponSlot,
+        weaponEnchant = item.weaponEnchant,
         enchantId    = item.enchantId,
         buffDuration = item.buffDuration,
         ranks       = item.ranks,
@@ -242,22 +243,29 @@ local function UpdateBuffs()
     end
 
     -- Weapon enchant info (temporary sharpening/weightstones etc.)
-    -- 4th return is the enchant ID; used to distinguish our stone from
-    -- other temporary enchants (e.g. Windfury Weapon = 2636).
-    local hasMainEnchant, mainExpMs, _, mainEnchantId = GetWeaponEnchantInfo()
+    -- The enchant ID returns distinguish our stone from other temporary
+    -- enchants (e.g. Windfury Weapon = 2636). Both hands are read because
+    -- weightstones are commonly applied to a dual-wield pair.
+    local hasMainEnchant, mainExpMs, _, mainEnchantId,
+          hasOffEnchant,  offExpMs,  _, offEnchantId = GetWeaponEnchantInfo()
 
     for _, s in ipairs(slots) do
         local match
-        if s.weaponSlot == "mainhand" then
-            if hasMainEnchant and mainExpMs and mainExpMs > 0
-               and (not s.enchantId or mainEnchantId == s.enchantId) then
-                local remaining = mainExpMs / 1000
+        if s.weaponEnchant then
+            -- A stone can sit on both weapons at once; track whichever hand
+            -- will expire first so the timer never overstates coverage.
+            local remMs = ExsarLogic.MinWeaponEnchantRemaining(s.enchantId,
+                hasMainEnchant, mainExpMs, mainEnchantId,
+                hasOffEnchant,  offExpMs,  offEnchantId)
+            if remMs then
+                local remaining = remMs / 1000
                 local duration  = s.buffDuration or remaining
                 local expTime   = now + remaining
                 local startTime = expTime - duration
                 match = { duration = duration, expTime = expTime }
                 -- Only update sweep start when it changes significantly,
-                -- to avoid animation resets on every poll tick.
+                -- to avoid animation resets on every poll tick. The jump
+                -- when the soonest-expiring hand switches clears this gate.
                 if not s.enchantStart or math.abs(startTime - s.enchantStart) > 2 then
                     s.enchantStart = startTime
                 end

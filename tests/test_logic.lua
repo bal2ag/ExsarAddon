@@ -907,6 +907,81 @@ describe("SelectBestRank", function()
 end)
 
 -- =========================================================
+-- MinWeaponEnchantRemaining
+-- =========================================================
+
+describe("MinWeaponEnchantRemaining", function()
+    -- args: targetEnchantId, hasMain, mainMs, mainId, hasOff, offMs, offId
+
+    it("returns main-hand remaining when only main hand carries the enchant", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2713,
+            true, 120000, 2713, false, nil, nil)
+        assert.are.equal(120000, ms)
+    end)
+
+    it("returns off-hand remaining when only off hand carries the enchant", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2955,
+            false, nil, nil, true, 90000, 2955)
+        assert.are.equal(90000, ms)
+    end)
+
+    it("picks the soonest-to-expire hand when both carry the enchant", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2955,
+            true, 200000, 2955, true, 75000, 2955)
+        assert.are.equal(75000, ms)
+    end)
+
+    it("picks main when main expires first", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2955,
+            true, 30000, 2955, true, 600000, 2955)
+        assert.are.equal(30000, ms)
+    end)
+
+    it("ignores a hand whose enchant ID does not match", function()
+        -- Main hand has Windfury (2636), off hand has our weightstone.
+        local ms = Logic.MinWeaponEnchantRemaining(2955,
+            true, 10000, 2636, true, 500000, 2955)
+        assert.are.equal(500000, ms)
+    end)
+
+    it("returns nil when neither hand carries the target enchant", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2955,
+            true, 10000, 2636, false, nil, nil)
+        assert.is_nil(ms)
+    end)
+
+    it("returns nil when no weapon enchants are present at all", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2713,
+            false, nil, nil, false, nil, nil)
+        assert.is_nil(ms)
+    end)
+
+    it("treats zero or negative remaining as absent", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2713,
+            true, 0, 2713, true, -5, 2713)
+        assert.is_nil(ms)
+    end)
+
+    it("skips an expired hand and uses the other matching hand", function()
+        local ms = Logic.MinWeaponEnchantRemaining(2713,
+            true, 0, 2713, true, 45000, 2713)
+        assert.are.equal(45000, ms)
+    end)
+
+    it("matches any enchant when target ID is nil", function()
+        local ms = Logic.MinWeaponEnchantRemaining(nil,
+            true, 80000, 2636, true, 40000, 9999)
+        assert.are.equal(40000, ms)
+    end)
+
+    it("with nil target ID, still requires a present enchant", function()
+        local ms = Logic.MinWeaponEnchantRemaining(nil,
+            false, nil, nil, false, nil, nil)
+        assert.is_nil(ms)
+    end)
+end)
+
+-- =========================================================
 -- SuggestRotation
 -- =========================================================
 

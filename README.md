@@ -204,9 +204,9 @@ Food and drink icons that dim automatically in combat.
 
 Always-visible icons for consumable buffs (scrolls, elixirs, weapon enchants) with bag counts and active timers.
 
-- **Items tracked:** Kibler's Bits (pet), Scroll of Strength (pet), Flask of Relentless Assault, Elixir of Major Agility, Elixir of Demonslaying, Elixir of Major Mageblood, Scroll of Agility, Adamantite Sharpening Stone, Grilled Mudfish, Spicy Hot Talbuk
+- **Items tracked:** Kibler's Bits (pet), Scroll of Strength (pet), Flask of Relentless Assault, Elixir of Major Agility, Elixir of Demonslaying, Elixir of Major Mageblood, Scroll of Agility, Adamantite Sharpening Stone, Adamantite Weightstone, Grilled Mudfish, Spicy Hot Talbuk
 - **Ranked items:** Scroll of Agility and Scroll of Strength support ranked fallback (V through I). The highest rank you have in your bags is shown; if none are available, the highest rank is shown greyed out. Any rank's buff counts as active.
-- **Weapon enchants:** Adamantite Sharpening Stone is tracked via `GetWeaponEnchantInfo()` rather than as a buff, since temporary weapon enchants don't appear in the buff list. Duration is hardcoded (1 hour) since the API only provides time remaining, not total duration.
+- **Weapon enchants:** Adamantite Sharpening Stone and Adamantite Weightstone are tracked via `GetWeaponEnchantInfo()` rather than as buffs, since temporary weapon enchants don't appear in the buff list. Both weapon hands are checked — when a stone is applied to a dual-wield pair, the timer shows whichever hand will expire first. Duration is hardcoded (1 hour) since the API only provides time remaining, not total duration.
 - **When active:** A gold glow border appears, a reverse cooldown sweep fills as the buff expires, and a countdown timer is shown
 - **Click to use:** Click an icon to use the consumable
 
