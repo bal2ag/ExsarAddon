@@ -68,6 +68,7 @@ read_globals = {
     "InCombatLockdown",
     "IsSpellInRange",
     "PlaySound",
+    "PlaySoundFile",
     "IsUsableSpell",
     "SetPortraitTexture",
     "UnitAffectingCombat",

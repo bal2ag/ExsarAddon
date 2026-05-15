@@ -129,6 +129,37 @@ function ExsarUI.AnimateDashes(slots, now, speed, dashCount, tailLen)
     end
 end
 
+function ExsarUI.CreateUpArrows(parentFrame, opts)
+    opts = opts or {}
+    local thickness = opts.thickness or 6
+    local height    = opts.height    or 34
+    local headLen   = opts.headLen   or 12
+    local spacing   = opts.spacing   or 12
+    local color     = opts.color     or { 1.0, 0.85, 0.0, 1.0 }
+    local layer     = opts.layer     or "OVERLAY"
+
+    local lines = {}
+    local half  = height / 2
+
+    for _, cx in ipairs({ -spacing, spacing }) do
+        local segments = {
+            { cx, -half,   cx,           half           },  -- shaft
+            { cx,  half,   cx - headLen, half - headLen  },  -- left arrowhead
+            { cx,  half,   cx + headLen, half - headLen  },  -- right arrowhead
+        }
+        for _, s in ipairs(segments) do
+            local line = parentFrame:CreateLine(nil, layer)
+            line:SetColorTexture(color[1], color[2], color[3], color[4])
+            line:SetThickness(thickness)
+            line:SetStartPoint("CENTER", parentFrame, s[1], s[2])
+            line:SetEndPoint("CENTER", parentFrame, s[3], s[4])
+            lines[#lines + 1] = line
+        end
+    end
+
+    return lines
+end
+
 -- =========================================================
 -- UpdateInfoBars
 -- =========================================================
@@ -502,5 +533,76 @@ describe("AnimateDashes", function()
 
         assert.are.equal(1, #d1._alpha)
         assert.are.equal(1, #d2._alpha)
+    end)
+end)
+
+-- =========================================================
+-- CreateUpArrows
+-- =========================================================
+
+describe("CreateUpArrows", function()
+    local function stubLine()
+        local l = {}
+        l.SetColorTexture, l._color = spy()
+        l.SetThickness, l._thickness = spy()
+        l.SetStartPoint, l._start = spy()
+        l.SetEndPoint, l._end = spy()
+        return l
+    end
+
+    local function stubLineFrame()
+        local f = {}
+        local lines = {}
+        f.CreateLine = function()
+            local l = stubLine()
+            lines[#lines + 1] = l
+            return l
+        end
+        f._lines = lines
+        return f
+    end
+
+    it("creates six lines (two 3-segment arrows)", function()
+        local f = stubLineFrame()
+        local arrows = ExsarUI.CreateUpArrows(f)
+        assert.are.equal(6, #f._lines)
+        assert.are.equal(6, #arrows)
+    end)
+
+    it("sets thickness and color on every line", function()
+        local f = stubLineFrame()
+        ExsarUI.CreateUpArrows(f, { thickness = 7, color = { 1, 0.85, 0, 1 } })
+        for _, l in ipairs(f._lines) do
+            assert.are.equal(1, #l._thickness)
+            assert.are.equal(7, l._thickness[1][2])
+            assert.are.same({ l, 1, 0.85, 0, 1 }, l._color[1])
+        end
+    end)
+
+    it("anchors each line with a start and end point", function()
+        local f = stubLineFrame()
+        ExsarUI.CreateUpArrows(f)
+        for _, l in ipairs(f._lines) do
+            assert.are.equal(1, #l._start)
+            assert.are.equal(1, #l._end)
+        end
+    end)
+
+    it("arrowhead segments converge on the shaft tip", function()
+        local f = stubLineFrame()
+        ExsarUI.CreateUpArrows(f, { height = 34, headLen = 12, spacing = 12 })
+        -- First arrow: lines 1 (shaft), 2 (left head), 3 (right head)
+        local shaft, headL, headR = f._lines[1], f._lines[2], f._lines[3]
+        -- spy records { self, anchor, frame, x, y }; compare the x/y coords
+        local shaftEnd  = shaft._end[1]
+        local headLStrt = headL._start[1]
+        local headRStrt = headR._start[1]
+        -- shaft end point and both arrowhead start points are the same tip
+        assert.are.equal(shaftEnd[4], headLStrt[4])
+        assert.are.equal(shaftEnd[5], headLStrt[5])
+        assert.are.equal(shaftEnd[4], headRStrt[4])
+        assert.are.equal(shaftEnd[5], headRStrt[5])
+        -- the tip y is +half (17) — pointing up
+        assert.are.equal(17, shaftEnd[5])
     end)
 end)

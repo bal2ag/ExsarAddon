@@ -116,6 +116,23 @@ bg:SetSize(74, 74)
 bg:SetTexture(CIRCLE_MASK)
 bg:SetVertexColor(0.12, 0.10, 0.06, 0.75)
 
+-- Background color modes: warm gold (normal) vs neutral grey (out-of-range idle)
+local BG_NORMAL_RING = { 0.35, 0.28, 0.10, 0.5  }
+local BG_NORMAL_FILL = { 0.12, 0.10, 0.06, 0.75 }
+local BG_GREY_RING   = { 0.28, 0.28, 0.28, 0.55 }
+local BG_GREY_FILL   = { 0.10, 0.10, 0.10, 0.80 }
+
+local currentBgMode = "normal"
+
+local function SetBackgroundMode(mode)
+    if mode == currentBgMode then return end
+    currentBgMode = mode
+    local ring = mode == "grey" and BG_GREY_RING or BG_NORMAL_RING
+    local fill = mode == "grey" and BG_GREY_FILL or BG_NORMAL_FILL
+    bgRing:SetVertexColor(ring[1], ring[2], ring[3], ring[4])
+    bg:SetVertexColor(fill[1], fill[2], fill[3], fill[4])
+end
+
 -- =========================================================
 -- Crossed swords visuals
 -- =========================================================
@@ -169,22 +186,44 @@ local function SetGlowVisible(show)
     end
 end
 
--- =========================================================
--- Red X overlay (shown when out of range with swing on cooldown)
--- =========================================================
-
-local redXFrame = CreateFrame("Frame", nil, frame)
-redXFrame:SetAllPoints()
-if redXFrame.SetIgnoreParentAlpha then
-    redXFrame:SetIgnoreParentAlpha(true)
+local function SetSwordsVisible(show)
+    for _, entry in ipairs(allLines) do
+        if show then entry.line:Show() else entry.line:Hide() end
+    end
 end
-local redX1, redX2 = ExsarUI.CreateRedX(redXFrame, 10, 4)
+
+-- =========================================================
+-- Status overlays
+-- =========================================================
+-- Red X: shown when out of range with the swing on cooldown.
+-- Green up-arrows: shown in the out-of-range idle state (in combat, swing
+-- ready) as a "step in" cue — kept visually distinct from the red X (and from
+-- the gold/grey sword tones of the indicator itself).
+
+local overlayFrame = CreateFrame("Frame", nil, frame)
+overlayFrame:SetAllPoints()
+if overlayFrame.SetIgnoreParentAlpha then
+    overlayFrame:SetIgnoreParentAlpha(true)
+end
+
+local redX1, redX2 = ExsarUI.CreateRedX(overlayFrame, 10, 4)
 redX1:Hide()
 redX2:Hide()
 
 local function SetRedXVisible(show)
     if show then redX1:Show(); redX2:Show()
     else redX1:Hide(); redX2:Hide() end
+end
+
+local upArrows = ExsarUI.CreateUpArrows(overlayFrame, { color = { 0.2, 0.9, 0.25, 1.0 } })
+for _, line in ipairs(upArrows) do
+    line:Hide()
+end
+
+local function SetArrowsVisible(show)
+    for _, line in ipairs(upArrows) do
+        if show then line:Show() else line:Hide() end
+    end
 end
 
 -- =========================================================
@@ -300,18 +339,20 @@ end
 -- Update: visibility, colors, cooldown sweep, alpha
 -- =========================================================
 
-local ENTER_RANGE_SOUND = 154   -- Sword1H_WeaponMetalCritical
-local LEAVE_RANGE_SOUND = 1024  -- ChickenDeath
+-- ENTER is a FileDataID (played via PlaySoundFile); LEAVE is a SoundKit ID (played via PlaySound)
+local ENTER_RANGE_SOUND = 567947  -- BullWhipHit1 (FileDataID)
+local LEAVE_RANGE_SOUND = 1024     -- ChickenDeath (SoundKit ID)
 
 local function UpdateState()
     local inRange     = CheckMeleeRange()
     local onCooldown  = IsSwingOnCooldown()
+    local inCombat    = UnitAffectingCombat("player")
     local wasInRange  = M.inRange
     M.inRange = inRange
 
     -- Range transition sounds
     if inRange and not wasInRange and mrDB().rangeSound ~= false then
-        PlaySound(ENTER_RANGE_SOUND, "Master")
+        PlaySoundFile(ENTER_RANGE_SOUND, "Master")
     elseif not inRange and wasInRange and mrDB().rangeSound ~= false then
         PlaySound(LEAVE_RANGE_SOUND, "Master")
     end
@@ -319,8 +360,9 @@ local function UpdateState()
     local unlocked = not mrDB().locked
 
     -- Determine visibility
-    -- Show when: in range (any cooldown state), OR out of range but swing on cooldown, OR unlocked
-    local shouldShow = inRange or onCooldown or unlocked
+    -- Show when: in range, OR swing on cooldown, OR in combat (always-on
+    -- out-of-range cue), OR unlocked
+    local shouldShow = inRange or onCooldown or inCombat or unlocked
 
     if not shouldShow then
         frame:Hide()
@@ -329,10 +371,16 @@ local function UpdateState()
 
     frame:Show()
 
+    -- "Out of range, swing ready" resting state: green up-arrows on a grey
+    -- circular background. This is the always-on in-combat cue.
+    local outOfRangeIdle = inCombat and not inRange and not onCooldown
+
     -- Determine color mode, alpha, and glow
     local ready = inRange and not onCooldown
     if inRange then
         SetSwordColors("normal")
+        SetSwordsVisible(true)
+        SetBackgroundMode("normal")
         if onCooldown then
             frame:SetAlpha(0.5)
         else
@@ -341,14 +389,24 @@ local function UpdateState()
     elseif onCooldown then
         -- Out of range, swing on cooldown: greyed out
         SetSwordColors("grey")
+        SetSwordsVisible(true)
+        SetBackgroundMode("normal")
         frame:SetAlpha(0.5)
+    elseif outOfRangeIdle then
+        -- Out of range, swing ready (in combat): green up-arrows on grey background
+        SetSwordsVisible(false)
+        SetBackgroundMode("grey")
+        frame:SetAlpha(1.0)
     else
         -- Unlocked edit mode, not in combat scenario
         SetSwordColors("normal")
+        SetSwordsVisible(true)
+        SetBackgroundMode("normal")
         frame:SetAlpha(1.0)
     end
     SetGlowVisible(ready)
     SetRedXVisible(not inRange and onCooldown)
+    SetArrowsVisible(outOfRangeIdle)
 
     -- Pulsating border glow ring:
     -- bright white when ready, muted gold when in range + cooldown (move away!)

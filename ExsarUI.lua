@@ -800,6 +800,49 @@ function ExsarUI.CreateRedX(parentFrame, inset, thickness)
     return line1, line2
 end
 
+--- Build two parallel arrows pointing up, centered on a frame.
+-- Each arrow is a vertical shaft plus two arrowhead segments (3 lines each,
+-- 6 lines total). Useful as a "move / reposition" status cue.
+-- @param parentFrame  the frame to draw on (lines are centered on it)
+-- @param opts         optional table:
+--                       thickness — line width (default 6)
+--                       height    — shaft length (default 34)
+--                       headLen   — arrowhead segment length (default 12)
+--                       spacing   — half the gap between the two arrows (default 12)
+--                       color     — {r,g,b,a} (default yellow)
+--                       layer     — draw layer (default "OVERLAY")
+-- @return lines table (1-indexed, 6 entries)
+function ExsarUI.CreateUpArrows(parentFrame, opts)
+    opts = opts or {}
+    local thickness = opts.thickness or 6
+    local height    = opts.height    or 34
+    local headLen   = opts.headLen   or 12
+    local spacing   = opts.spacing   or 12
+    local color     = opts.color     or { 1.0, 0.85, 0.0, 1.0 }
+    local layer     = opts.layer     or "OVERLAY"
+
+    local lines = {}
+    local half  = height / 2
+
+    for _, cx in ipairs({ -spacing, spacing }) do
+        local segments = {
+            { cx, -half,   cx,           half           },  -- shaft
+            { cx,  half,   cx - headLen, half - headLen  },  -- left arrowhead
+            { cx,  half,   cx + headLen, half - headLen  },  -- right arrowhead
+        }
+        for _, s in ipairs(segments) do
+            local line = parentFrame:CreateLine(nil, layer)
+            line:SetColorTexture(color[1], color[2], color[3], color[4])
+            line:SetThickness(thickness)
+            line:SetStartPoint("CENTER", parentFrame, s[1], s[2])
+            line:SetEndPoint("CENTER", parentFrame, s[3], s[4])
+            lines[#lines + 1] = line
+        end
+    end
+
+    return lines
+end
+
 -- =========================================================
 -- Marching ants border construction
 -- =========================================================

@@ -52,7 +52,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `PlayerInfoWidget.lua` | Player portrait/health/auras, always visible (toggleable); low-HP burst warning with optional sound alert |
 | `PetInfoWidget.lua` | Pet portrait/health/auras, shows only when pet exists; low-HP burst warning and damage border with optional sound alerts |
 | `AspectTracker.lua` | Aspect of the Pack warning — pulses red glow + red marching-ants when Pack is active in combat |
-| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating gold glow ring when swing is ready in range; optional range-change sound effects |
+| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating gold glow ring when swing is ready in range; always-on red-X-on-grey cue while in combat and out of range; optional range-change sound effects |
 | `GlobalCooldownTracker.lua` | Global cooldown tracker |
 | `RaidTargetWidget.lua` | Compact info for all units marked with raid target icons; click to target; scans nameplates + party/raid targets |
 | `PetAggressiveAlert.lua` | Pulsing red skull + text when pet is on aggressive mode |
@@ -84,13 +84,14 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | **Marching Ants** | Animated gold dashed border rotating around an icon perimeter. A bright trailing tail fades behind the head. Standard params: 16 dashes, speed 1.5, tail length 5. | `ExsarUI.BuildDashes(iconFrame, iconSize, dashCount, borderW)` + `ExsarUI.AnimateDashes(slots, now, speed, dashCount, tailLen)` (or `ExsarLogic.MarchingAntHead` / `MarchingAntAlpha` for custom per-dash logic) |
 | **Cooldown Sweep** | WoW's built-in circular pie-chart timer overlay. Normal mode fills as cooldown elapses; reverse mode empties as a buff expires. | `ExsarUI.CreateSweep(frame, { reverse = bool })` |
 | **Red X** | Two diagonal red lines forming an X across an icon, indicating an inactive or missing state. | `ExsarUI.CreateRedX(frame, inset, thickness)` |
+| **Up Arrows** | Two parallel arrows pointing up, each built from CreateLine segments (shaft + two arrowhead lines). Yellow by default; a "step in / reposition" status cue. | `ExsarUI.CreateUpArrows(frame, opts)` |
 | **Pulse** | Sine-wave alpha oscillation (breathing effect). Used for alert/ready indicators. Params: frequency (Hz), min/max alpha. | `ExsarLogic.PulseAlpha(time, frequency, minAlpha, maxAlpha)` |
 | **Dimmed** | Desaturated + reduced alpha for unavailable/out-of-stock items. Standard: `SetDesaturated(true)` + `SetAlpha(0.35)`. In-combat dimming: `SetAlpha(0.5)`, no desaturation. | Inline pattern (icon:SetDesaturated / icon:SetAlpha) |
 
 When adding a new widget that needs a highlight, border, alert, or status indicator, use one of these standard effects rather than creating a bespoke visual.
 
 **Sound effects pattern:**
-Several modules play `PlaySound(soundKitID, "Master")` on state transitions (e.g. aggro gained, low HP threshold crossed, melee range entered/left). Standard pattern:
+Several modules play `PlaySound(soundKitID, "Master")` on state transitions (e.g. aggro gained, low HP threshold crossed, melee range entered/left). Use `PlaySoundFile(fileDataID, "Master")` instead when the sound is identified by a FileDataID rather than a SoundKit ID (see the API note below). Standard pattern:
 - Track the previous state to detect edges (e.g. `wasActive` → `isActive`)
 - Use a cooldown timer (`GetTime() - lastSoundTime >= COOLDOWN`) to prevent spam
 - Gate behind a per-module DB flag (e.g. `db.lowHpSound ~= false`) with a config checkbox
@@ -150,12 +151,14 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - Placeholder text shown when unlocked; glow border shown in both active and unlocked states
 
 **`MeleeRangeIndicator.lua` structure:**
-- Crossed-swords icon with circular mask background; gold/grey color modes for in-range/out-of-range
-- Range check via `IsSpellInRange("Wing Clip", "target")` polled at 0.1s; only shown in combat
+- Crossed-swords icon with circular mask background; gold/grey sword color modes and warm/grey background color modes (`SetBackgroundMode`)
+- Range check via `IsSpellInRange("Wing Clip", "target")` polled at 0.1s
 - Swing timer from combat log `SWING_DAMAGE`/`SWING_MISSED` + Raptor Strike spell IDs
-- Three visual states: ready (full alpha + gold swords + glow ring + blade glow), on-cooldown (half alpha + sweep), out-of-range (grey + half alpha + sweep)
+- Four visual states: ready (full alpha + gold swords + glow ring + blade glow), in-range on-cooldown (half alpha + gold swords + muted glow + sweep), out-of-range on-cooldown (grey swords + half alpha + sweep + red X), out-of-range idle (green up-arrows on grey background, no swords — the always-on in-combat cue, `outOfRangeIdle`)
+- Visibility (`shouldShow`): shown whenever in combat, or while the swing lingers on cooldown out of combat, or when unlocked; hidden otherwise
+- `SetSwordsVisible` toggles the sword lines (hidden in the out-of-range idle state); `SetRedXVisible` / `SetArrowsVisible` toggle the two mutually-exclusive status overlays (red X = out-of-range on-cooldown, green up-arrows = out-of-range idle), both built on `overlayFrame`
 - Pulsating gold glow ring (3.0 Hz) behind the icon in ready state only
-- Optional enter/leave range sound effects (SoundKit 154 / 698)
+- Optional enter/leave range sound effects: enter = FileDataID 567947 (BullWhipHit1) via `PlaySoundFile`; leave = SoundKit ID 1024 (ChickenDeath) via `PlaySound`
 
 **`RaidTargetWidget.lua` structure:**
 - Scan phase (every 0.3s via `CreatePoller`): iterate every queryable unit token (`target`, `focus`, `party/raid/partypet/boss` members and their `target` variants, nameplates). Record `{unit, guid, name, index}` deduplicated by GUID, one entry per raid icon. No "stability" distinction — GUID is the ground truth.
@@ -186,7 +189,8 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - `CombatLogGetCurrentEventInfo()` — unpacks combat log event data; required on TBC Classic Anniversary (modern client); replaces the old variadic-args approach
 - `texture:SetMask(path)` — clips a texture to the shape of a mask image; used for circular glow discs; wrapped in `pcall` for safety
 - `UnitExists("pet")` — true when the player has an active pet
-- `PlaySound(soundKitID [, channel])` — plays a built-in sound; use `"Master"` channel for alerts that must be heard regardless of SFX volume
+- `PlaySound(soundKitID [, channel])` — plays a built-in sound; use `"Master"` channel for alerts that must be heard regardless of SFX volume. Only accepts **SoundKit IDs** (small numbers, e.g. 154, 1024) — passing a FileDataID silently does nothing.
+- `PlaySoundFile(fileDataID or path [, channel])` — plays a sound by **FileDataID** (the large 6-digit IDs, e.g. 567947) or file path; use this, not `PlaySound`, when the ID came from a sound-file database
 - `IsInRaid()` / `IsInGroup()` — group context detection; solo = not `IsInGroup()`
 - `UnitIsUnit(unit1, unit2)` — true if both unit tokens refer to the same entity
 - `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, mainCharges, mainEnchantId, hasOffEnchant, ...`; `mainExpMs` is milliseconds remaining; returns only remaining time, NOT total duration — total duration must be hardcoded if needed (e.g. for sweep animation). Returns the off-hand equivalents (`hasOffEnchant, offExpMs, offCharges, offEnchantId`) as returns 5–8. Use the enchant IDs to distinguish between different temporary enchants (e.g. Adamantite Sharpening Stone = 2713, Adamantite Weightstone = 2955, Windfury Weapon = 2636)
