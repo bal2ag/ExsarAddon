@@ -314,8 +314,8 @@ Crossed-swords icon showing melee range status. Displays a cooldown sweep for yo
 - **Visual states:**
   - **Ready** (in range, swing available): Full-alpha gold swords with blade glow lines, fast-pulsating gold glow ring (3 Hz) — swing now!
   - **On cooldown** (in range, swing cooling down): Half-alpha gold swords with cooldown sweep and countdown timer, slow-pulsating muted glow ring — move away after swinging
-  - **Out of range, swing on cooldown:** Half-alpha grey swords with red X overlay, cooldown sweep and countdown timer — swing is resetting, no glow
-  - **Out of range, swing ready:** Two green arrows pointing up on a grey circular background (no swords) — the always-on cue, shown whenever you're in combat but not in melee range. Kept visually distinct from the red X so it isn't confused with the on-cooldown state.
+  - **Out of range, swing on cooldown:** Two green arrows pointing up on a grey circular background (no swords) with the cooldown sweep and countdown timer — step in, swing is resetting, no glow
+  - **Out of range, swing ready:** Two green arrows pointing up on a grey circular background (no swords) — the always-on cue, shown whenever you're in combat but not in melee range. Same look as the on-cooldown state but without the sweep/timer.
   - **Hidden:** Out of combat with no swing cooldown lingering (and widget is locked)
 - **Swing timer:** Tracked via combat log (SWING_DAMAGE/SWING_MISSED and Raptor Strike hits). Cooldown sweep and countdown show time until next swing.
 - **Sound effects:** Optional sounds play when entering and leaving melee range (configurable in the config panel)

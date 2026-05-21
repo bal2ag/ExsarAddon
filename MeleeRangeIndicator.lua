@@ -1,7 +1,8 @@
 -- MeleeRangeIndicator module
 -- Shows two crossed gold swords when the player is in melee range of their target.
 -- Also tracks the melee swing timer cooldown with a sweep effect and alpha reduction.
--- When out of range but swing is on cooldown, shows greyed-out with sweep.
+-- When out of range, shows green up-arrows on a grey background (plus the
+-- cooldown sweep + timer when the swing is on cooldown).
 -- Settings are stored under ExsarAddonDB.meleeRange.
 
 local ADDON_NAME = "ExsarAddon"
@@ -195,24 +196,14 @@ end
 -- =========================================================
 -- Status overlays
 -- =========================================================
--- Red X: shown when out of range with the swing on cooldown.
--- Green up-arrows: shown in the out-of-range idle state (in combat, swing
--- ready) as a "step in" cue — kept visually distinct from the red X (and from
--- the gold/grey sword tones of the indicator itself).
+-- Green up-arrows: shown in all out-of-range states (swing ready or on
+-- cooldown) as a "step in" cue. When the swing is on cooldown the arrows are
+-- accompanied by the cooldown sweep + timer.
 
 local overlayFrame = CreateFrame("Frame", nil, frame)
 overlayFrame:SetAllPoints()
 if overlayFrame.SetIgnoreParentAlpha then
     overlayFrame:SetIgnoreParentAlpha(true)
-end
-
-local redX1, redX2 = ExsarUI.CreateRedX(overlayFrame, 10, 4)
-redX1:Hide()
-redX2:Hide()
-
-local function SetRedXVisible(show)
-    if show then redX1:Show(); redX2:Show()
-    else redX1:Hide(); redX2:Hide() end
 end
 
 local upArrows = ExsarUI.CreateUpArrows(overlayFrame, { color = { 0.2, 0.9, 0.25, 1.0 } })
@@ -238,11 +229,16 @@ sweepHolder:SetPoint("CENTER")
 
 local cooldown = ExsarUI.CreateSweep(sweepHolder)
 if cooldown.SetSwipeColor then
-    cooldown:SetSwipeColor(0.65, 0.65, 0.65, 0.92)
+    -- Translucent so the arrows underneath stay readable through the sweep.
+    cooldown:SetSwipeColor(0.55, 0.55, 0.55, 0.55)
 end
 if cooldown.SetSwipeTexture then
     cooldown:SetSwipeTexture(CIRCLE_MASK)
 end
+
+-- Draw the green up-arrows above the sweep so the pie-chart darkens the
+-- background behind them rather than masking them out.
+overlayFrame:SetFrameLevel(cooldown:GetFrameLevel() + 1)
 
 -- Timer text frame (above the cooldown overlay, ignores parent alpha)
 local timerFrame = CreateFrame("Frame", nil, frame)
@@ -371,8 +367,10 @@ local function UpdateState()
 
     frame:Show()
 
-    -- "Out of range, swing ready" resting state: green up-arrows on a grey
-    -- circular background. This is the always-on in-combat cue.
+    -- Out-of-range states share the green up-arrows on a grey circular
+    -- background. Idle = swing ready (always-on in-combat cue); on-cooldown
+    -- adds the cooldown sweep + timer.
+    local outOfRangeOnCd = not inRange and onCooldown
     local outOfRangeIdle = inCombat and not inRange and not onCooldown
 
     -- Determine color mode, alpha, and glow
@@ -386,17 +384,14 @@ local function UpdateState()
         else
             frame:SetAlpha(1.0)
         end
-    elseif onCooldown then
-        -- Out of range, swing on cooldown: greyed out
-        SetSwordColors("grey")
-        SetSwordsVisible(true)
-        SetBackgroundMode("normal")
-        frame:SetAlpha(0.5)
-    elseif outOfRangeIdle then
-        -- Out of range, swing ready (in combat): green up-arrows on grey background
+    elseif outOfRangeOnCd or outOfRangeIdle then
+        -- Out of range (swing ready or on cooldown): green up-arrows on grey
+        -- background. The cooldown sweep distinguishes the on-cooldown case;
+        -- the arrows are dimmed slightly while the sweep is up so they blend.
         SetSwordsVisible(false)
         SetBackgroundMode("grey")
         frame:SetAlpha(1.0)
+        overlayFrame:SetAlpha(outOfRangeOnCd and 0.8 or 1.0)
     else
         -- Unlocked edit mode, not in combat scenario
         SetSwordColors("normal")
@@ -405,8 +400,7 @@ local function UpdateState()
         frame:SetAlpha(1.0)
     end
     SetGlowVisible(ready)
-    SetRedXVisible(not inRange and onCooldown)
-    SetArrowsVisible(outOfRangeIdle)
+    SetArrowsVisible(outOfRangeOnCd or outOfRangeIdle)
 
     -- Pulsating border glow ring:
     -- bright white when ready, muted gold when in range + cooldown (move away!)

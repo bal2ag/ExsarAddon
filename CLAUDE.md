@@ -52,7 +52,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `PlayerInfoWidget.lua` | Player portrait/health/auras, always visible (toggleable); low-HP burst warning with optional sound alert |
 | `PetInfoWidget.lua` | Pet portrait/health/auras, shows only when pet exists; low-HP burst warning and damage border with optional sound alerts |
 | `AspectTracker.lua` | Aspect of the Pack warning — pulses red glow + red marching-ants when Pack is active in combat |
-| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating gold glow ring when swing is ready in range; always-on red-X-on-grey cue while in combat and out of range; optional range-change sound effects |
+| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating gold glow ring when swing is ready in range; always-on green-up-arrows-on-grey cue while in combat and out of range; optional range-change sound effects |
 | `GlobalCooldownTracker.lua` | Global cooldown tracker |
 | `RaidTargetWidget.lua` | Compact info for all units marked with raid target icons; click to target; scans nameplates + party/raid targets |
 | `PetAggressiveAlert.lua` | Pulsing red skull + text when pet is on aggressive mode |
@@ -154,9 +154,9 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - Crossed-swords icon with circular mask background; gold/grey sword color modes and warm/grey background color modes (`SetBackgroundMode`)
 - Range check via `IsSpellInRange("Wing Clip", "target")` polled at 0.1s
 - Swing timer from combat log `SWING_DAMAGE`/`SWING_MISSED` + Raptor Strike spell IDs
-- Four visual states: ready (full alpha + gold swords + glow ring + blade glow), in-range on-cooldown (half alpha + gold swords + muted glow + sweep), out-of-range on-cooldown (grey swords + half alpha + sweep + red X), out-of-range idle (green up-arrows on grey background, no swords — the always-on in-combat cue, `outOfRangeIdle`)
+- Four visual states: ready (full alpha + gold swords + glow ring + blade glow), in-range on-cooldown (half alpha + gold swords + muted glow + sweep), out-of-range on-cooldown (green up-arrows on grey background, no swords, full alpha + sweep + countdown timer, `outOfRangeOnCd`), out-of-range idle (green up-arrows on grey background, no swords, no sweep — the always-on in-combat cue, `outOfRangeIdle`). The two out-of-range states look identical except the cooldown sweep distinguishes the on-cooldown case.
 - Visibility (`shouldShow`): shown whenever in combat, or while the swing lingers on cooldown out of combat, or when unlocked; hidden otherwise
-- `SetSwordsVisible` toggles the sword lines (hidden in the out-of-range idle state); `SetRedXVisible` / `SetArrowsVisible` toggle the two mutually-exclusive status overlays (red X = out-of-range on-cooldown, green up-arrows = out-of-range idle), both built on `overlayFrame`
+- `SetSwordsVisible` toggles the sword lines (hidden in both out-of-range states); `SetArrowsVisible` toggles the green up-arrows status overlay (shown in both out-of-range states), built on `overlayFrame`
 - Pulsating gold glow ring (3.0 Hz) behind the icon in ready state only
 - Optional enter/leave range sound effects: enter = FileDataID 567947 (BullWhipHit1) via `PlaySoundFile`; leave = SoundKit ID 1024 (ChickenDeath) via `PlaySound`
 
