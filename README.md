@@ -148,9 +148,9 @@ Icons with animated borders and countdowns for relevant rotation buffs (Quick Sh
 
 Clickable mini action bar for consumables in your bags (health/mana potions, haste potions, drums). Click to use directly.
 
-- **Items tracked:** Dark Rune, Demonic Rune, Super Mana Potion, Super Healing Potion, Drums of Battle, Haste Potion, Heavy Netherweave Bandage, Master Healthstone
+- **Items tracked:** Mana Rune (Demonic Rune, falling back to Dark Rune), Super Mana Potion, Super Healing Potion, Drums of Battle, Haste Potion, Heavy Netherweave Bandage, Master Healthstone
 - **Bag count:** Each icon shows the number of that item in your bags. Drums of Battle shows remaining charges instead of item count. Items you don't have are greyed out and desaturated.
-- **Alternates:** Some items automatically swap to a better option based on context. Mana and healing potions will use zone-specific alternatives in Tempest Keep instances (Bottled Nethergon Energy/Vapor), or Auchenai potions if you have them. The swap happens out of combat when you change zones or your bags update.
+- **Alternates:** Some items automatically swap to a better option based on context. The mana rune slot prefers Demonic Rune and falls back to Dark Rune when you're out of Demonic Runes. For mana and healing potions: inside Tempest Keep instances the zone-specific Bottled Nethergon Energy/Vapor are preferred over everything; everywhere else Crystal Mana/Healing Potions are the top preference, then Auchenai potions, then the Super potion. The swap happens out of combat when you change zones or your bags update.
 - **Healthstones:** Multiple Healthstone variants (from different warlocks) are layered into a single slot. The highest rank you have in your bags is shown; when it's used, the next highest rank takes its place.
 - **Cooldowns:** Drums of Battle cooldown is driven by the Tinnitus debuff timer rather than the item cooldown; Heavy Netherweave Bandage uses the Recently Bandaged debuff. Other items show their normal item cooldown with a sweep and countdown.
 
@@ -205,8 +205,8 @@ Food and drink icons that dim automatically in combat.
 
 Always-visible icons for consumable buffs (scrolls, elixirs, weapon enchants) with bag counts and active timers.
 
-- **Items tracked:** Kibler's Bits (pet), Scroll of Strength (pet), Flask of Relentless Assault, Elixir of Major Agility, Elixir of Demonslaying, Elixir of Major Mageblood, Scroll of Agility, Adamantite Sharpening Stone, Adamantite Weightstone, Grilled Mudfish, Spicy Hot Talbuk
-- **Ranked items:** Scroll of Agility and Scroll of Strength support ranked fallback (V through I). The highest rank you have in your bags is shown; if none are available, the highest rank is shown greyed out. Any rank's buff counts as active.
+- **Items tracked:** Kibler's Bits (pet), Scroll of Strength (pet), Flask of Relentless Assault, Elixir of Major Agility, Elixir of Demonslaying, Elixir of Major Mageblood, Scroll of Agility, Adamantite Sharpening Stone, Adamantite Weightstone, Grilled Mudfish (falls back to Warp Burger), Spicy Hot Talbuk
+- **Ranked / fallback items:** Scroll of Agility and Scroll of Strength support ranked fallback (V through I), and Grilled Mudfish falls back to Warp Burger (equivalent +20 Agility food). The preferred item you have in your bags is shown; if none are available, the preferred item is shown greyed out. Any listed item's buff counts as active.
 - **Weapon enchants:** Adamantite Sharpening Stone and Adamantite Weightstone are tracked via `GetWeaponEnchantInfo()` rather than as buffs, since temporary weapon enchants don't appear in the buff list. Both weapon hands are checked — when a stone is applied to a dual-wield pair, the timer shows whichever hand will expire first. Duration is hardcoded (1 hour) since the API only provides time remaining, not total duration.
 - **When active:** A gold glow border appears, a reverse cooldown sweep fills as the buff expires, and a countdown timer is shown
 - **Click to use:** Click an icon to use the consumable

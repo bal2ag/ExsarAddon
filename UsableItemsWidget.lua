@@ -21,6 +21,11 @@ local uiDB = ExsarUI.MakeDB("usableItems")
 -- alternates: ordered list of substitute items. The first whose conditions are
 --   met (optional `zones` check, count > 0) replaces the primary. Order matters:
 --   zone-restricted alts should come first so they win in-zone.
+-- ranks: ordered list (highest-first) of interchangeable item IDs layered into a
+--   single slot (e.g. Master Healthstone variants). The highest rank in the bags
+--   is shown; falls back to the highest rank (greyed) when none are carried.
+--   Unlike alternates, the primary always loses to a higher-ranked item; selection
+--   is by ExsarLogic.SelectBestRank, not first-in-stock.
 local TK_ZONES = {
     ["The Eye"]      = true,
     ["The Botanica"] = true,
@@ -29,24 +34,31 @@ local TK_ZONES = {
 }
 
 local TRACKED_ITEMS = {
-    { name = "Dark Rune",                  id = 20520, col = 0, row = 0 },
-    { name = "Demonic Rune",               id = 12662, col = 1, row = 0 },
+    { name = "Dark Rune",                  id = 20520, col = 0, row = 0,
+      alternates = {
+          { name = "Demonic Rune", id = 12662 },
+      } },
     { name = "Super Mana Potion",          id = 22832, col = 0, row = 1,
       alternates = {
           { name = "Bottled Nethergon Energy", id = 32902, zones = TK_ZONES },
+          { name = "Crystal Mana Potion",      id = 33935 },
           { name = "Auchenai Mana Potion",     id = 32948 },
       } },
     { name = "Super Healing Potion",       id = 22829, col = 1, row = 1,
       alternates = {
           { name = "Bottled Nethergon Vapor",  id = 32905, zones = TK_ZONES },
+          { name = "Crystal Healing Potion",   id = 33934 },
           { name = "Auchenai Healing Potion",  id = 32947 },
       } },
     { name = "Drums of Battle",            id = 29529, col = 0, row = 2, cdDebuff = "Tinnitus", useCharges = true },
     { name = "Haste Potion",               id = 22838, col = 1, row = 2 },
     { name = "Heavy Netherweave Bandage",  id = 21991, col = 0, row = 3, cdDebuff = "Recently Bandaged" },
-    { name = "Master Healthstone",        id = 22105, col = 1, row = 3, hideWhenEmpty = true, groupFallback = true },
-    { name = "Master Healthstone",        id = 22104, col = 1, row = 3, hideWhenEmpty = true },
-    { name = "Master Healthstone",        id = 22103, col = 1, row = 3, hideWhenEmpty = true },
+    { name = "Master Healthstone",        id = 22105, col = 1, row = 3, hideWhenEmpty = true, groupFallback = true,
+      ranks = {
+          { name = "Master Healthstone", id = 22105 },
+          { name = "Master Healthstone", id = 22104 },
+          { name = "Master Healthstone", id = 22103 },
+      } },
 }
 
 -- Durations at or below this threshold are just the GCD, not a real cooldown.
@@ -94,6 +106,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
         primaryId     = item.id,
         primaryName   = item.name,
         alternates    = item.alternates,
+        ranks         = item.ranks,
         cdDebuff      = item.cdDebuff,
         useCharges    = item.useCharges,
         hideWhenEmpty = item.hideWhenEmpty,
@@ -104,10 +117,13 @@ for i, item in ipairs(TRACKED_ITEMS) do
         known         = false,
     }
 
-    -- Pre-load alternate item data so icons are ready before the swap happens.
-    if item.alternates and C_Item and C_Item.RequestLoadItemDataByID then
-        for _, alt in ipairs(item.alternates) do
+    -- Pre-load alternate / rank item data so icons are ready before a swap.
+    if C_Item and C_Item.RequestLoadItemDataByID then
+        for _, alt in ipairs(item.alternates or {}) do
             C_Item.RequestLoadItemDataByID(alt.id)
+        end
+        for _, rank in ipairs(item.ranks or {}) do
+            C_Item.RequestLoadItemDataByID(rank.id)
         end
     end
 
@@ -232,7 +248,23 @@ local function UpdateActiveItems()
     if InCombatLockdown() then return end
     local zone = GetRealZoneText()
     for _, s in ipairs(slots) do
-        if s.alternates then
+        if s.ranks then
+            -- Layered ranks (e.g. Master Healthstone variants): show the
+            -- highest rank in the bags, falling back to the highest rank as a
+            -- greyed placeholder when none are carried. Single slot, no extra
+            -- rows. Uses item:ID for the secure attribute since all ranks share
+            -- a name.
+            local best = ExsarLogic.SelectBestRank(s.ranks, GetItemCount)
+            if best.id ~= s.itemId then
+                s.itemId   = best.id
+                s.itemName = best.name
+                s.iconFrame:SetAttribute("item",
+                    s.hideWhenEmpty and ("item:" .. best.id) or best.name)
+                local tex = select(10, GetItemInfo(best.id))
+                s.icon:SetTexture(tex or nil)
+                s.count = -1  -- force countText refresh in ScanBags
+            end
+        elseif s.alternates then
             local chosenId, chosenName = s.primaryId, s.primaryName
             for _, alt in ipairs(s.alternates) do
                 local zoneOk = not alt.zones or alt.zones[zone]

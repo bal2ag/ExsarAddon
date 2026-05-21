@@ -41,7 +41,12 @@ local TRACKED_ITEMS = {
     },
     { name = "Adamantite Sharpening Stone",   id = 23529, weaponEnchant = true, enchantId = 2713, buffDuration = 3600 },
     { name = "Adamantite Weightstone",        id = 28421, weaponEnchant = true, enchantId = 2955, buffDuration = 3600 },
-    { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261 },
+    { name = "Grilled Mudfish",               id = 27664, buffName = "Well Fed",                    buffId = 33261,
+      ranks = {
+          { name = "Grilled Mudfish", id = 27664, buffId = 33261 },
+          { name = "Warp Burger",     id = 27659, buffId = 33263 },
+      },
+    },
     { name = "Spicy Hot Talbuk",             id = 33872, buffName = "Well Fed",                    buffId = 43763 },
 }
 
