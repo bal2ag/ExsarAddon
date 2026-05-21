@@ -66,6 +66,7 @@ read_globals = {
     "GetUnitSpeed",
     "GetWeaponEnchantInfo",
     "InCombatLockdown",
+    "IsItemInRange",
     "IsSpellInRange",
     "PlaySound",
     "PlaySoundFile",

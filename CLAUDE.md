@@ -60,6 +60,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `AggroAlert.lua` | Pulsating red text alert when enemy mobs are targeting the player; scans nameplates + party/raid target-of-target; configurable for solo/party/raid contexts; plays raid warning sound on aggro gain |
 | `AmmoTracker.lua` | Equipped ammunition icon with bag-count overlay; red X when no ammo equipped; pulses a red low-ammo warning glow when count is 0 or ≤600 |
 | `RotationHelper.lua` | Shows effective weapon speed and suggested rotation (two stacked text lines); rotation thresholds: >=1.83s→5:6:1:1, [1.22,1.83)→1:1, (0.83,1.22)→2:3, ≤0.83→1:2; updates on haste buff changes and weapon swaps |
+| `RangeToTargetWidget.lua` | Estimated distance bracket to the current target (e.g. "5-8 yd") plus a zone label (MELEE orange ≤5 / WEAVE green 5-8 / IN RANGE blue 8-35 / FAR red 35+). Probes a ladder of harm range checks (Wing Clip spell at 5yd + fixed-range items) and brackets the distance via `ExsarLogic.ComputeRangeBracket`; zone via `ExsarLogic.RangeZone`; degrades gracefully when checkers return nil |
 
 **Keeping CLAUDE.md in sync:** Any change that adds a new widget, removes a widget, renames a module, alters its responsibilities, or changes its persisted settings MUST be accompanied by an update to this file. Before finishing any such change, cross-reference the file table, the SavedVariables list, and any module-specific structure notes against the code, and update whatever is now stale. Treat CLAUDE.md as a first-class deliverable of the change — a code change that leaves CLAUDE.md out of date is incomplete.
 
@@ -193,6 +194,8 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - `PlaySoundFile(fileDataID or path [, channel])` — plays a sound by **FileDataID** (the large 6-digit IDs, e.g. 567947) or file path; use this, not `PlaySound`, when the ID came from a sound-file database
 - `IsInRaid()` / `IsInGroup()` — group context detection; solo = not `IsInGroup()`
 - `UnitIsUnit(unit1, unit2)` — true if both unit tokens refer to the same entity
+- `IsItemInRange(itemID, unit)` — returns `true`/`false` if the item's range to `unit` can be checked, else `nil`. Works with **any** item ID (the item need not be in your bags), but only if the item exists in the current client's DB — IDs from later expansions return `nil`. Querying an **enemy** unit in combat is permitted (Blizzard re-allowed this in Dec 2023 after a brief 2023 protection). Used by `RangeToTargetWidget` for fixed-range distance bracketing. Items with a min range as well as a max would corrupt a `≤range` bracket, so only no-minimum harm items are used.
+- `IsSpellInRange(spellName, unit)` — returns `1`/`0`/`nil`. Works in combat. A spell with a **minimum** range (dead zone, e.g. Auto Shot) returns `0` when too close as well as too far, so such spells are NOT valid as simple `≤range` checkers — `RangeToTargetWidget` only uses Wing Clip (melee, no minimum) as a spell checker. WoW exposes no exact unit distance; bracketing multiple range checks (LibRangeCheck / RangeDisplay approach) is the only way to estimate it.
 - `GetWeaponEnchantInfo()` — returns `hasMainEnchant, mainExpMs, mainCharges, mainEnchantId, hasOffEnchant, ...`; `mainExpMs` is milliseconds remaining; returns only remaining time, NOT total duration — total duration must be hardcoded if needed (e.g. for sweep animation). Returns the off-hand equivalents (`hasOffEnchant, offExpMs, offCharges, offEnchantId`) as returns 5–8. Use the enchant IDs to distinguish between different temporary enchants (e.g. Adamantite Sharpening Stone = 2713, Adamantite Weightstone = 2955, Windfury Weapon = 2636)
 
 ## Hunter Ability Timing Reference (from diziet559/rotationtools)
@@ -296,3 +299,4 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 - `ExsarAddonDB.aggroAlert` — position (x, y), scale, locked, disabled, enableSolo, enableParty, enableRaid
 - `ExsarAddonDB.ammoTracker` — position (x, y), scale, locked
 - `ExsarAddonDB.rotationHelper` — position (x, y), scale, locked
+- `ExsarAddonDB.rangeToTarget` — position (x, y), scale, locked

@@ -1154,3 +1154,115 @@ describe("ApplyHappinessDecay", function()
         assert.is_true(clamped)
     end)
 end)
+
+-- =========================================================
+-- Range-to-target bracketing
+-- =========================================================
+
+local RANGE_CHECKERS = {
+    { range = 5 },
+    { range = 8 },
+    { range = 10 },
+    { range = 15 },
+    { range = 25 },
+}
+
+describe("ComputeRangeBracket", function()
+    it("brackets between the nearest in-range and farthest out-of-range checker", function()
+        -- distance ~7yd: out of 5, in 8/10/15/25
+        local minR, maxR = Logic.ComputeRangeBracket(RANGE_CHECKERS,
+            { false, true, true, true, true })
+        assert.are.equal(5, minR)
+        assert.are.equal(8, maxR)
+    end)
+
+    it("returns nil min when within the closest checker (in melee)", function()
+        local minR, maxR = Logic.ComputeRangeBracket(RANGE_CHECKERS,
+            { true, true, true, true, true })
+        assert.is_nil(minR)
+        assert.are.equal(5, maxR)
+    end)
+
+    it("returns nil max when beyond the furthest checker", function()
+        local minR, maxR = Logic.ComputeRangeBracket(RANGE_CHECKERS,
+            { false, false, false, false, false })
+        assert.are.equal(25, minR)
+        assert.is_nil(maxR)
+    end)
+
+    it("returns both nil when no checker is usable", function()
+        local minR, maxR = Logic.ComputeRangeBracket(RANGE_CHECKERS,
+            { nil, nil, nil, nil, nil })
+        assert.is_nil(minR)
+        assert.is_nil(maxR)
+    end)
+
+    it("skips nil (unusable) checkers and brackets from the rest", function()
+        -- 8 and 15 checks unavailable; out of 5/10, in 25
+        local minR, maxR = Logic.ComputeRangeBracket(RANGE_CHECKERS,
+            { false, nil, false, nil, true })
+        assert.are.equal(10, minR)
+        assert.are.equal(25, maxR)
+    end)
+
+    it("drops a contradictory lower bound (non-monotonic noise)", function()
+        -- near check in-range but a farther check out-of-range: trust the upper bound
+        local minR, maxR = Logic.ComputeRangeBracket(RANGE_CHECKERS,
+            { true, false, true, true, true })
+        assert.is_nil(minR)
+        assert.are.equal(5, maxR)
+    end)
+end)
+
+describe("FormatRangeBracket", function()
+    it("formats a closed bracket", function()
+        assert.are.equal("5-8 yd", Logic.FormatRangeBracket(5, 8))
+    end)
+
+    it("formats an in-melee bracket with a 0 lower bound", function()
+        assert.are.equal("0-5 yd", Logic.FormatRangeBracket(nil, 5))
+    end)
+
+    it("formats an open-ended far bracket", function()
+        assert.are.equal("25+ yd", Logic.FormatRangeBracket(25, nil))
+    end)
+
+    it("formats indeterminate as ?", function()
+        assert.are.equal("?", Logic.FormatRangeBracket(nil, nil))
+    end)
+end)
+
+describe("RangeZone", function()
+    it("classifies within melee reach as melee", function()
+        assert.are.equal("melee", Logic.RangeZone(nil, 5))
+    end)
+
+    it("classifies the 5-8 sweet spot as weave", function()
+        assert.are.equal("weave", Logic.RangeZone(5, 8))
+    end)
+
+    it("classifies between the weave window and shooting range edge as inrange", function()
+        assert.are.equal("inrange", Logic.RangeZone(8, 10))
+        assert.are.equal("inrange", Logic.RangeZone(25, nil))
+        assert.are.equal("inrange", Logic.RangeZone(30, 35))
+    end)
+
+    it("classifies beyond shooting range as far", function()
+        assert.are.equal("far", Logic.RangeZone(35, nil))
+        assert.are.equal("far", Logic.RangeZone(40, nil))
+    end)
+
+    it("treats a coarse bracket overlapping the weave window as weave", function()
+        assert.are.equal("weave", Logic.RangeZone(5, 10))
+    end)
+
+    it("returns ? when indeterminate", function()
+        assert.are.equal("?", Logic.RangeZone(nil, nil))
+    end)
+
+    it("honors custom melee/weave/ranged thresholds", function()
+        assert.are.equal("melee", Logic.RangeZone(nil, 6, 6, 9, 30))
+        assert.are.equal("inrange", Logic.RangeZone(9, 12, 6, 9, 30))
+        assert.are.equal("far", Logic.RangeZone(30, nil, 6, 9, 30))
+    end)
+end)

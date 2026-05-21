@@ -35,6 +35,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Aggro Alert](#aggro-alert)
   - [Ammo Tracker](#ammo-tracker)
   - [Rotation Helper](#rotation-helper)
+  - [Range to Target](#range-to-target)
 
 ## Installation
 
@@ -451,3 +452,16 @@ Shows your effective weapon speed and suggests the matching shot rotation based 
 - **Effective speed:** Read from `UnitRangedDamage("player")`, which accounts for all haste sources (quiver, talents, buffs, haste rating).
 
 <!-- ![Rotation Helper](screenshots/rotation-helper.png) -->
+
+### Range to Target
+
+![Supported](https://img.shields.io/badge/Supported-green)
+
+Shows an estimated distance bracket to your current target (e.g. "5-8 yd") with a weaving zone label.
+
+- **Intent:** Generalizes the Melee Range Indicator's binary in/out check into a distance estimate, so you can position precisely for melee weaving — staying close while reading exactly how far out of melee you are.
+- **Display:** Two stacked text lines — the distance bracket on top (e.g. "5-8 yd", "0-5 yd" when in melee, "35+ yd" when far), and a zone label below: **MELEE** (orange, within melee reach), **WEAVE** (green, the sweet spot just outside melee), **IN RANGE** (blue, within shooting range), or **FAR** (red, beyond shooting range).
+- **How it works:** WoW doesn't expose an exact distance to a unit, so the widget probes a ladder of range checks with known thresholds — Wing Clip (5 yd) plus a series of fixed-range items (8, 10, 15, 20, 25, 30, 35 yd) — and brackets your distance between the nearest in-range and farthest out-of-range check. The estimate is only as fine as the available checks; bounds widen if a check can't be evaluated. This is the same technique used by RangeDisplay and LibRangeCheck.
+- **Shown when:** You have an attackable target (or the widget is unlocked for positioning); hidden otherwise.
+
+<!-- ![Range to Target](screenshots/range-to-target.png) -->

@@ -336,6 +336,80 @@ function ExsarLogic.SuggestRotation(effectiveSpeed)
 end
 
 -- =========================================================
+-- Range-to-target bracketing
+-- =========================================================
+-- WoW does not expose an exact distance to a unit. Instead we probe a set of
+-- "checkers" (spells / items) each with a known range threshold, then bracket
+-- the distance: the smallest threshold still in range is the upper bound, the
+-- largest out-of-range threshold is the lower bound. This is the same approach
+-- LibRangeCheck / RangeDisplay use.
+
+--- Compute a min/max distance bracket from an ordered list of range checks.
+-- @param checkers  array of { range = number, ... } ordered ascending by range
+-- @param results   parallel table: results[i] is true (within checker range),
+--                  false (out of range), or nil (could not be checked — skip)
+-- @return minRange, maxRange
+--   minRange is the tightest lower bound (largest out-of-range threshold), or
+--     nil when the target is within the closest usable checker (effectively 0).
+--   maxRange is the tightest upper bound (smallest in-range threshold), or nil
+--     when the target is beyond the furthest usable checker.
+--   Both nil ⇒ nothing could be determined (no usable checker results).
+function ExsarLogic.ComputeRangeBracket(checkers, results)
+    local minR, maxR
+    for i, checker in ipairs(checkers) do
+        local r = results[i]
+        if r == true then
+            -- within checker.range ⇒ distance <= checker.range (upper bound)
+            if maxR == nil or checker.range < maxR then
+                maxR = checker.range
+            end
+        elseif r == false then
+            -- out of checker.range ⇒ distance > checker.range (lower bound)
+            if minR == nil or checker.range > minR then
+                minR = checker.range
+            end
+        end
+        -- r == nil: checker unusable (e.g. invalid item, combat restriction) — skip
+    end
+    -- Guard against non-monotonic noise (a near check claiming in-range while a
+    -- farther check claims out-of-range). The in-range upper bound is the more
+    -- trustworthy signal, so drop the contradictory lower bound.
+    if minR and maxR and minR >= maxR then
+        minR = nil
+    end
+    return minR, maxR
+end
+
+--- Format a min/max bracket (from ComputeRangeBracket) for display.
+-- nil min ⇒ closer than the nearest checker (shown as 0); nil max ⇒ farther
+-- than the furthest checker (shown as "min+"). Both nil ⇒ "?".
+function ExsarLogic.FormatRangeBracket(minR, maxR)
+    if not minR and not maxR then return "?" end
+    if not maxR then return string.format("%d+ yd", minR) end
+    local lo = minR or 0
+    return string.format("%d-%d yd", lo, maxR)
+end
+
+--- Classify a bracket into a weaving zone label.
+-- "melee": within melee reach (too close); "weave": the sweet spot just outside
+-- melee; "inrange": within shooting range; "far": beyond shooting range;
+-- "?": indeterminate.
+-- @param minR,maxR  bracket from ComputeRangeBracket
+-- @param meleeMax   melee-range threshold (default 5)
+-- @param weaveMax   upper edge of the weave window (default 8)
+-- @param rangedMax  edge of shooting range; beyond it is "far" (default 35)
+function ExsarLogic.RangeZone(minR, maxR, meleeMax, weaveMax, rangedMax)
+    meleeMax = meleeMax or 5
+    weaveMax = weaveMax or 8
+    rangedMax = rangedMax or 35
+    if not minR and not maxR then return "?" end
+    if maxR and maxR <= meleeMax then return "melee" end
+    if minR and minR >= rangedMax then return "far" end
+    if minR and minR >= weaveMax then return "inrange" end
+    return "weave"
+end
+
+-- =========================================================
 -- Pet happiness model
 -- =========================================================
 
