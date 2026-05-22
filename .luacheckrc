@@ -55,6 +55,7 @@ read_globals = {
     "GetItemCount",
     "GetItemInfo",
     "GetItemSpell",
+    "GetBindingKey",
     "GetNetStats",
     "GetPetActionInfo",
     "GetPetHappiness",
@@ -70,6 +71,8 @@ read_globals = {
     "IsSpellInRange",
     "PlaySound",
     "PlaySoundFile",
+    "SetOverrideBindingClick",
+    "ClearOverrideBindings",
     "IsUsableSpell",
     "SetPortraitTexture",
     "UnitAffectingCombat",
@@ -115,6 +118,21 @@ files["tests/test_*.lua"] = {
     ignore = { "21./.+", "311" },
     -- Tests need to write to _G for mocking
     read_globals = { ["_G"] = { other_fields = true, read_only = false } },
+}
+
+-- UsableItemsWidget defines Blizzard binding label globals (read by the Key
+-- Bindings UI; see Bindings.xml).
+files["UsableItemsWidget.lua"] = {
+    globals = {
+        "BINDING_HEADER_EXSARADDON",
+        "BINDING_NAME_EXSAR_USE_ITEM1",
+        "BINDING_NAME_EXSAR_USE_ITEM2",
+        "BINDING_NAME_EXSAR_USE_ITEM3",
+        "BINDING_NAME_EXSAR_USE_ITEM4",
+        "BINDING_NAME_EXSAR_USE_ITEM5",
+        "BINDING_NAME_EXSAR_USE_ITEM6",
+        "BINDING_NAME_EXSAR_USE_ITEM7",
+    },
 }
 
 -- ExsarLogic sets itself as a global via _G

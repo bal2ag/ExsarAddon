@@ -470,6 +470,40 @@ function ExsarLogic.ApplyHappinessDecay(estimate, elapsedSec, decayPerMin, apiTi
     return newEst, clamped
 end
 
+-- =========================================================
+-- Keybinding display
+-- =========================================================
+
+--- Abbreviate a binding key string for compact on-icon display, matching the
+-- default action-bar hotkey style. Modifiers collapse to single lowercase
+-- letters with no separator (SHIFT-1 → "s1", CTRL-SHIFT-F → "csF"); mouse
+-- buttons and wheel, numpad keys, and a few named keys are shortened
+-- (BUTTON4 → "m4", CTRL-BUTTON4 → "cm4", MOUSEWHEELUP → "mwu", NUMPAD3 → "n3").
+-- Returns nil for an unset/empty key so callers can clear the label.
+function ExsarLogic.AbbreviateBindingKey(key)
+    if not key or key == "" then return nil end
+    local s = key:upper()
+    -- Modifiers → single lowercase letter, no separator.
+    s = s:gsub("ALT%-", "a")
+    s = s:gsub("CTRL%-", "c")
+    s = s:gsub("SHIFT%-", "s")
+    -- Mouse wheel (before the generic BUTTON rule).
+    s = s:gsub("MOUSEWHEELUP", "mwu")
+    s = s:gsub("MOUSEWHEELDOWN", "mwd")
+    -- Mouse buttons: BUTTON4 → m4.
+    s = s:gsub("BUTTON", "m")
+    -- Numpad: specific symbols first, then the generic prefix.
+    s = s:gsub("NUMPADDIVIDE", "n/")
+    s = s:gsub("NUMPADMULTIPLY", "n*")
+    s = s:gsub("NUMPADMINUS", "n-")
+    s = s:gsub("NUMPADPLUS", "n+")
+    s = s:gsub("NUMPADDECIMAL", "n.")
+    s = s:gsub("NUMPAD", "n")
+    -- A couple of long named keys.
+    s = s:gsub("SPACE", "Sp")
+    return s
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

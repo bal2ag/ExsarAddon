@@ -171,6 +171,15 @@ for i, item in ipairs(TRACKED_ITEMS) do
     s.countText:SetTextColor(1, 1, 0.8, 1)
     s.countText:SetText("")
 
+    -- Hotkey label (top-right corner; default-UI style). Driven by the keybind
+    -- bridge below; empty when the slot has no key bound.
+    s.keyText = s.iconFrame:CreateFontString(nil, "OVERLAY")
+    s.keyText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    s.keyText:SetPoint("TOPRIGHT", s.iconFrame, "TOPRIGHT", 1, -1)
+    s.keyText:SetJustifyH("RIGHT")
+    s.keyText:SetTextColor(0.9, 0.9, 0.9, 1)
+    s.keyText:SetText("")
+
     -- Cooldown timer (center of icon)
     s.timeText = ExsarUI.CreateCountdownText(s.iconFrame)
 
@@ -449,6 +458,39 @@ end)
 -- =========================================================
 
 ExsarUI.AddSlashReset("itemsreset", frame, uiDB, "Usable items widget", 150, -160)
+
+-- =========================================================
+-- Keybindings
+-- =========================================================
+-- Each slot has a named binding (EXSAR_USE_ITEMn) shown in Blizzard's Key
+-- Bindings UI under the "ExsarAddon" section (see Bindings.xml). Generic labels
+-- are used for slots that swap in alternates, so the label stays accurate when
+-- the displayed item changes. ExsarUI.SetupKeybindBridge reads the assigned key
+-- and bridges it to the secure button so the item is used even in combat, and
+-- drives the on-icon hotkey label.
+
+BINDING_HEADER_EXSARADDON     = "ExsarAddon"
+BINDING_NAME_EXSAR_USE_ITEM1  = "Mana Rune"
+BINDING_NAME_EXSAR_USE_ITEM2  = "Mana Potion"
+BINDING_NAME_EXSAR_USE_ITEM3  = "Health Potion"
+BINDING_NAME_EXSAR_USE_ITEM4  = "Drums of Battle"
+BINDING_NAME_EXSAR_USE_ITEM5  = "Haste Potion"
+BINDING_NAME_EXSAR_USE_ITEM6  = "Heavy Netherweave Bandage"
+BINDING_NAME_EXSAR_USE_ITEM7  = "Healthstone"
+
+local function UpdateHotkeyLabel(index, key)
+    local s = slots[index]
+    if not s then return end
+    s.keyText:SetText(ExsarLogic.AbbreviateBindingKey(key) or "")
+end
+
+ExsarUI.SetupKeybindBridge({
+    owner         = frame,
+    bindingPrefix = "EXSAR_USE_ITEM",
+    buttonPrefix  = ADDON_NAME .. "ItemBtn",
+    count         = #slots,
+    onSlotKey     = UpdateHotkeyLabel,
+})
 
 -- =========================================================
 -- Register with Core

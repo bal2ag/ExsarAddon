@@ -1,0 +1,29 @@
+<Bindings>
+    <!--
+        Named bindings for the Usable Items widget slots. They appear under the
+        "ExsarAddon" category of the Key Bindings UI. On the modern Anniversary
+        client the panel groups by `category`, so each binding carries one
+        (a header-only binding registers but renders no section). The category
+        value is shown literally (the engine does NOT resolve it through a
+        BINDING_CATEGORY_* global), so it is the readable label itself. Per-binding
+        labels resolve via the BINDING_NAME_EXSAR_USE_ITEMN globals set in
+        UsableItemsWidget.lua.
+
+        The bindings have no action body: at runtime ExsarUI.SetupKeybindBridge
+        reads the assigned key via GetBindingKey and bridges it to the matching
+        secure button (ExsarAddonItemBtnN) with SetOverrideBindingClick, so the
+        item is used even in combat. The override intercepts the key before this
+        binding's (empty) body would run.
+
+        NOTE: a file named Bindings.xml is auto-loaded by the client by filename;
+        it must NOT be listed in the .toc (that routes it through the UI XML
+        parser, which errors with "Unrecognized XML: Binding").
+    -->
+    <Binding name="EXSAR_USE_ITEM1" header="EXSARADDON" category="ExsarAddon"/>
+    <Binding name="EXSAR_USE_ITEM2" category="ExsarAddon"/>
+    <Binding name="EXSAR_USE_ITEM3" category="ExsarAddon"/>
+    <Binding name="EXSAR_USE_ITEM4" category="ExsarAddon"/>
+    <Binding name="EXSAR_USE_ITEM5" category="ExsarAddon"/>
+    <Binding name="EXSAR_USE_ITEM6" category="ExsarAddon"/>
+    <Binding name="EXSAR_USE_ITEM7" category="ExsarAddon"/>
+</Bindings>

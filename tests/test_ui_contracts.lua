@@ -606,3 +606,142 @@ describe("CreateUpArrows", function()
         assert.are.equal(17, shaftEnd[5])
     end)
 end)
+
+-- =========================================================
+-- SetupKeybindBridge
+-- =========================================================
+-- Copy of the real implementation (the full ExsarUI.lua can't be loaded under
+-- busted because it calls CreateFrame at file scope). A stub CreateFrame records
+-- the internal watcher frame so we can simulate binding-refresh events.
+
+local lastWatcher
+_G.CreateFrame = function()
+    local f = {}
+    f._events = {}
+    f.RegisterEvent = function(self, e) self._events[e] = true end
+    f.SetScript = function(self, name, fn) self["_script_" .. name] = fn end
+    lastWatcher = f
+    return f
+end
+
+function ExsarUI.SetupKeybindBridge(opts)
+    local owner         = opts.owner
+    local bindingPrefix = opts.bindingPrefix
+    local buttonPrefix  = opts.buttonPrefix
+    local count         = opts.count
+    local onSlotKey     = opts.onSlotKey
+    local deps          = opts.deps or {}
+    local getBindingKey           = deps.GetBindingKey           or GetBindingKey
+    local setOverrideBindingClick = deps.SetOverrideBindingClick or SetOverrideBindingClick
+    local clearOverrideBindings   = deps.ClearOverrideBindings   or ClearOverrideBindings
+    local inCombatLockdown        = deps.InCombatLockdown        or InCombatLockdown
+
+    local function apply()
+        local combat = inCombatLockdown()
+        if not combat then
+            clearOverrideBindings(owner)
+        end
+        for i = 1, count do
+            local key1, key2 = getBindingKey(bindingPrefix .. i)
+            if onSlotKey then onSlotKey(i, key1) end
+            if not combat then
+                local btn = buttonPrefix .. i
+                if key1 then setOverrideBindingClick(owner, true, key1, btn) end
+                if key2 then setOverrideBindingClick(owner, true, key2, btn) end
+            end
+        end
+    end
+
+    local watcher = CreateFrame("Frame")
+    watcher:RegisterEvent("UPDATE_BINDINGS")
+    watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+    watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+    watcher:SetScript("OnEvent", apply)
+    apply()
+    return apply
+end
+
+describe("SetupKeybindBridge", function()
+    -- Build a deps table whose WoW funcs are spies, with a configurable
+    -- key map and combat state.
+    local function makeDeps(keyMap, inCombat)
+        local d = {}
+        d.GetBindingKey = function(name)
+            local k = keyMap[name]
+            if type(k) == "table" then return k[1], k[2] end
+            return k
+        end
+        d.SetOverrideBindingClick, d._override = spy()
+        d.ClearOverrideBindings, d._clear     = spy()
+        d.InCombatLockdown = function() return inCombat and true or false end
+        return d
+    end
+
+    it("bridges each bound key to its matching button when out of combat", function()
+        local deps = makeDeps({ EXSAR_USE_ITEM1 = "SHIFT-1", EXSAR_USE_ITEM3 = "F" }, false)
+        ExsarUI.SetupKeybindBridge({
+            owner = "OWNER", bindingPrefix = "EXSAR_USE_ITEM",
+            buttonPrefix = "Btn", count = 3, deps = deps,
+        })
+        -- Two keys bound → two override calls, with priority=true.
+        assert.are.equal(2, #deps._override)
+        assert.are.same({ "OWNER", true, "SHIFT-1", "Btn1" }, deps._override[1])
+        assert.are.same({ "OWNER", true, "F", "Btn3" }, deps._override[2])
+        -- Overrides cleared once per apply pass.
+        assert.are.equal(1, #deps._clear)
+    end)
+
+    it("binds both primary and secondary keys for a slot", function()
+        local deps = makeDeps({ EXSAR_USE_ITEM1 = { "A", "B" } }, false)
+        ExsarUI.SetupKeybindBridge({
+            owner = "O", bindingPrefix = "EXSAR_USE_ITEM",
+            buttonPrefix = "Btn", count = 1, deps = deps,
+        })
+        assert.are.equal(2, #deps._override)
+        assert.are.same({ "O", true, "A", "Btn1" }, deps._override[1])
+        assert.are.same({ "O", true, "B", "Btn1" }, deps._override[2])
+    end)
+
+    it("calls onSlotKey for every slot with the resolved key (nil when unbound)", function()
+        local deps = makeDeps({ EXSAR_USE_ITEM2 = "C" }, false)
+        local seen = {}
+        ExsarUI.SetupKeybindBridge({
+            owner = "O", bindingPrefix = "EXSAR_USE_ITEM",
+            buttonPrefix = "Btn", count = 3, deps = deps,
+            onSlotKey = function(i, key) seen[i] = key or false end,
+        })
+        assert.are.equal(false, seen[1])
+        assert.are.equal("C", seen[2])
+        assert.are.equal(false, seen[3])
+    end)
+
+    it("skips override binding in combat but still drives labels", function()
+        local deps = makeDeps({ EXSAR_USE_ITEM1 = "SHIFT-1" }, true)
+        local seen = {}
+        ExsarUI.SetupKeybindBridge({
+            owner = "O", bindingPrefix = "EXSAR_USE_ITEM",
+            buttonPrefix = "Btn", count = 1, deps = deps,
+            onSlotKey = function(i, key) seen[i] = key end,
+        })
+        -- Protected calls skipped under combat lockdown.
+        assert.are.equal(0, #deps._override)
+        assert.are.equal(0, #deps._clear)
+        -- Label callback still ran.
+        assert.are.equal("SHIFT-1", seen[1])
+    end)
+
+    it("re-applies when a binding-refresh event fires", function()
+        local deps = makeDeps({ EXSAR_USE_ITEM1 = "SHIFT-1" }, false)
+        ExsarUI.SetupKeybindBridge({
+            owner = "O", bindingPrefix = "EXSAR_USE_ITEM",
+            buttonPrefix = "Btn", count = 1, deps = deps,
+        })
+        assert.are.equal(1, #deps._override)
+        -- The internal watcher registered the refresh events...
+        assert.is_true(lastWatcher._events["UPDATE_BINDINGS"])
+        assert.is_true(lastWatcher._events["PLAYER_REGEN_ENABLED"])
+        -- ...and firing OnEvent runs another apply pass.
+        lastWatcher._script_OnEvent()
+        assert.are.equal(2, #deps._override)
+    end)
+end)

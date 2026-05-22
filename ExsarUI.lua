@@ -1116,3 +1116,69 @@ function ExsarUI.AddResetButton(parent, y, dbFunc, frame, name, defaultX, defaul
     end)
     return y - 30
 end
+
+-- =========================================================
+-- Keybinding bridge
+-- =========================================================
+
+--- Bridge Blizzard named bindings to secure button clicks for a widget's slots.
+-- For each slot i in 1..count it reads the key bound to "<bindingPrefix>"..i
+-- (assigned in Blizzard's Key Bindings UI, which gives native conflict warnings
+-- and syncs across computers) and:
+--   (a) installs a secure override binding so pressing that key clicks
+--       "<buttonPrefix>"..i — the override path is what lets the item be used
+--       even in combat, and
+--   (b) calls onSlotKey(i, key) so the caller can update an on-icon hotkey label.
+-- SetOverrideBindingClick / ClearOverrideBindings are protected and cannot run
+-- in combat lockdown, so the override step is skipped while in combat and
+-- re-applied on PLAYER_REGEN_ENABLED. The onSlotKey callback always runs (label
+-- updates are not protected), so labels stay current even mid-combat.
+-- An internal watcher frame re-applies on UPDATE_BINDINGS / PLAYER_ENTERING_WORLD
+-- / PLAYER_REGEN_ENABLED, so callers only need to call this once after their
+-- secure buttons exist.
+-- @param opts table:
+--   owner          frame used as the override-binding owner (its overrides are
+--                  cleared and rebuilt on each pass)
+--   bindingPrefix  e.g. "EXSAR_USE_ITEM"
+--   buttonPrefix   e.g. "ExsarAddonItemBtn"
+--   count          number of slots
+--   onSlotKey      optional function(index, key) — key is the first bound key or nil
+--   deps           optional injected WoW funcs for testing: GetBindingKey,
+--                  SetOverrideBindingClick, ClearOverrideBindings, InCombatLockdown
+-- @return apply  the single-pass function (also returned for direct/manual calls)
+function ExsarUI.SetupKeybindBridge(opts)
+    local owner         = opts.owner
+    local bindingPrefix = opts.bindingPrefix
+    local buttonPrefix  = opts.buttonPrefix
+    local count         = opts.count
+    local onSlotKey     = opts.onSlotKey
+    local deps          = opts.deps or {}
+    local getBindingKey           = deps.GetBindingKey           or GetBindingKey
+    local setOverrideBindingClick = deps.SetOverrideBindingClick or SetOverrideBindingClick
+    local clearOverrideBindings   = deps.ClearOverrideBindings   or ClearOverrideBindings
+    local inCombatLockdown        = deps.InCombatLockdown        or InCombatLockdown
+
+    local function apply()
+        local combat = inCombatLockdown()
+        if not combat then
+            clearOverrideBindings(owner)
+        end
+        for i = 1, count do
+            local key1, key2 = getBindingKey(bindingPrefix .. i)
+            if onSlotKey then onSlotKey(i, key1) end
+            if not combat then
+                local btn = buttonPrefix .. i
+                if key1 then setOverrideBindingClick(owner, true, key1, btn) end
+                if key2 then setOverrideBindingClick(owner, true, key2, btn) end
+            end
+        end
+    end
+
+    local watcher = CreateFrame("Frame")
+    watcher:RegisterEvent("UPDATE_BINDINGS")
+    watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+    watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+    watcher:SetScript("OnEvent", apply)
+    apply()
+    return apply
+end

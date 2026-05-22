@@ -1266,3 +1266,51 @@ describe("RangeZone", function()
         assert.are.equal("far", Logic.RangeZone(30, nil, 6, 9, 30))
     end)
 end)
+
+-- =========================================================
+-- AbbreviateBindingKey
+-- =========================================================
+
+describe("AbbreviateBindingKey", function()
+    it("returns nil for nil or empty input", function()
+        assert.is_nil(Logic.AbbreviateBindingKey(nil))
+        assert.is_nil(Logic.AbbreviateBindingKey(""))
+    end)
+
+    it("passes through plain keys", function()
+        assert.are.equal("1", Logic.AbbreviateBindingKey("1"))
+        assert.are.equal("F", Logic.AbbreviateBindingKey("F"))
+        assert.are.equal("F5", Logic.AbbreviateBindingKey("F5"))
+    end)
+
+    it("collapses single modifiers to lowercase letters with no separator", function()
+        assert.are.equal("s1", Logic.AbbreviateBindingKey("SHIFT-1"))
+        assert.are.equal("c2", Logic.AbbreviateBindingKey("CTRL-2"))
+        assert.are.equal("aQ", Logic.AbbreviateBindingKey("ALT-Q"))
+    end)
+
+    it("collapses stacked modifiers in order", function()
+        assert.are.equal("csF", Logic.AbbreviateBindingKey("CTRL-SHIFT-F"))
+        assert.are.equal("as1", Logic.AbbreviateBindingKey("ALT-SHIFT-1"))
+    end)
+
+    it("shortens mouse buttons", function()
+        assert.are.equal("m4", Logic.AbbreviateBindingKey("BUTTON4"))
+        assert.are.equal("cm4", Logic.AbbreviateBindingKey("CTRL-BUTTON4"))
+    end)
+
+    it("shortens mouse wheel", function()
+        assert.are.equal("mwu", Logic.AbbreviateBindingKey("MOUSEWHEELUP"))
+        assert.are.equal("mwd", Logic.AbbreviateBindingKey("MOUSEWHEELDOWN"))
+    end)
+
+    it("shortens numpad keys", function()
+        assert.are.equal("n3", Logic.AbbreviateBindingKey("NUMPAD3"))
+        assert.are.equal("n/", Logic.AbbreviateBindingKey("NUMPADDIVIDE"))
+        assert.are.equal("n*", Logic.AbbreviateBindingKey("NUMPADMULTIPLY"))
+    end)
+
+    it("uppercases lowercase input", function()
+        assert.are.equal("sG", Logic.AbbreviateBindingKey("shift-g"))
+    end)
+end)
