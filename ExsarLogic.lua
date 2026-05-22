@@ -504,6 +504,56 @@ function ExsarLogic.AbbreviateBindingKey(key)
     return s
 end
 
+-- Resolve the macro body for an action button: a user override wins over the
+-- built-in default, but only when it actually contains something (a blank or
+-- whitespace-only override falls back to the default). Pure so the
+-- default/override precedence is unit-tested without WoW.
+-- @param defaultMacro  string  the built-in macrotext
+-- @param override      string|nil  the user's saved override (may be "" / nil)
+-- @return string  the macrotext to install on the secure button
+function ExsarLogic.ResolveActionMacro(defaultMacro, override)
+    if type(override) == "string" and override:match("%S") then
+        return override
+    end
+    return defaultMacro
+end
+
+-- Decide whether a pet action is currently usable given the pet's state, so the
+-- widget can grey out actions that can't fire (e.g. Revive when the pet is not
+-- dead, Mend when there is no pet). Pure so the gating is unit-tested without WoW.
+-- @param requires  string|nil  the pet state the action needs:
+--                  nil / "any" → always usable
+--                  "active"    → pet must exist
+--                  "alive"     → pet must exist and be alive
+--                  "dead"      → pet must exist and be dead
+--                  "missing"   → no pet (e.g. Call Pet)
+--                  "notdead"   → anything except an existing dead pet (i.e. alive
+--                                or no pet); greyed only when the pet is dead
+--                  any unknown token fails open (usable) so a typo can't hide a button
+-- @param state     table  { exists = bool, alive = bool }  (alive implies exists)
+-- @return boolean  true if the action should be enabled (not greyed)
+function ExsarLogic.PetActionEnabled(requires, state)
+    state = state or {}
+    if requires == nil or requires == "any" then return true end
+    if requires == "active"  then return state.exists == true end
+    if requires == "alive"   then return state.exists == true and state.alive == true end
+    if requires == "dead"    then return state.exists == true and state.alive ~= true end
+    if requires == "missing" then return state.exists ~= true end
+    if requires == "notdead" then return state.exists ~= true or state.alive == true end
+    return true
+end
+
+-- Classify pet state into a single key for picking a state-dependent icon (e.g.
+-- a "do the right thing" pet button showing Mend / Revive / Call icons). Pure.
+-- @param state  table  { exists = bool, alive = bool }  (alive implies exists)
+-- @return string  "alive" | "dead" | "missing"
+function ExsarLogic.PetStateKey(state)
+    state = state or {}
+    if state.exists ~= true then return "missing" end
+    if state.alive == true then return "alive" end
+    return "dead"
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

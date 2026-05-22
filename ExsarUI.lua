@@ -1117,6 +1117,53 @@ function ExsarUI.AddResetButton(parent, y, dbFunc, frame, name, defaultX, defaul
     return y - 30
 end
 
+--- Add a labelled multi-line macro edit box to a config panel.
+-- Used for editable macrotext overrides (e.g. PetManagementWidget). The box is
+-- non-secure UI; the caller's setter is responsible for pushing the text onto a
+-- secure button out of combat. The box saves on focus loss / Escape, and
+-- refreshes from the getter on show so it always reflects the saved value.
+-- @param parent   config panel frame
+-- @param y        current y offset
+-- @param label    text shown above the box
+-- @param getter   function() -> string  current text (override or default)
+-- @param setter   function(text)        called with the edited text on save
+-- @return new y offset
+function ExsarUI.AddMacroEditBox(parent, y, label, getter, setter)
+    local BOX_W, BOX_H = 360, 44
+
+    local lbl = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    lbl:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
+    lbl:SetText(label)
+
+    local box = CreateFrame("Frame", nil, parent)
+    box:SetSize(BOX_W, BOX_H)
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y - 16)
+
+    -- 1px frame: a grey rectangle 1px larger than the box, with the black fill
+    -- drawn on top so only the outer ring shows.
+    local frameBorder = box:CreateTexture(nil, "BACKGROUND")
+    frameBorder:SetPoint("TOPLEFT", box, "TOPLEFT", -1, 1)
+    frameBorder:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 1, -1)
+    frameBorder:SetColorTexture(0.4, 0.4, 0.4, 0.8)
+    local bg = box:CreateTexture(nil, "BORDER")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.85)
+
+    local eb = CreateFrame("EditBox", nil, box)
+    eb:SetMultiLine(true)
+    eb:SetAutoFocus(false)
+    eb:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+    eb:SetTextColor(1, 1, 1, 1)
+    eb:SetPoint("TOPLEFT", box, "TOPLEFT", 5, -4)
+    eb:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -5, 4)
+    eb:SetText(getter() or "")
+    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText()) end)
+    eb:SetScript("OnShow", function(self) self:SetText(getter() or "") end)
+
+    return y - 16 - BOX_H - 10
+end
+
 -- =========================================================
 -- Keybinding bridge
 -- =========================================================

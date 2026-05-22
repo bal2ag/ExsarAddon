@@ -36,6 +36,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Ammo Tracker](#ammo-tracker)
   - [Rotation Helper](#rotation-helper)
   - [Range to Target](#range-to-target)
+  - [Pet Management](#pet-management)
 
 ## Installation
 
@@ -466,3 +467,19 @@ Shows an estimated distance bracket to your current target (e.g. "5-8 yd") with 
 - **Shown when:** You have an attackable target (or the widget is unlocked for positioning); hidden otherwise.
 
 <!-- ![Range to Target](screenshots/range-to-target.png) -->
+
+### Pet Management
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A compact, keybindable bar of pet-management buttons, so you can keep your pet controls together instead of spreading them across an action bar.
+
+- **What it does:** Each icon runs a macro when clicked — so a single button can be a smart command (for example, one button that calls your pet when you have none, revives it when it's dead, and dismisses it when it's out). The specific actions are still being finalized.
+- **State-aware:** The bar is always visible, but actions that can't be used given your pet's current state are greyed out — for example, a revive button greys out while your pet is alive, and pet-dependent actions grey out when you have no pet.
+- **Smart icons:** A button can change its icon to match your pet's state. For example, the all-in-one pet button shows the Mend Pet icon when your pet is alive, the Revive Pet icon when it's dead, and the Call Pet icon when you have no pet.
+- **Charge counts:** Item-based buttons show how many you have left in the bottom-right corner — for example, the Steam Tonk button shows the net number of Steam Tonk Controller charges in your bags.
+- **Cooldowns:** Item-based buttons show a cooldown sweep and countdown timer when the item is on cooldown — for example, the Steam Tonk button reflects the Steam Tonk Controller's 30-second cooldown. Buttons whose macros cast a global-cooldown spell (Mend Pet, Dismiss Pet, Call Pet) also show a brief sweep during the global cooldown, so you can see when the action is momentarily blocked.
+- **Editable macros:** Every button has a built-in default macro that you can override in the config panel (Interface → AddOns → ExsarAddon → Pet Management). Type your own macro into a button's box to customize it; clear the box to go back to the default. Your overrides are saved between sessions.
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Pet* section). Pressing the key runs that slot's macro, including in combat. The bound key is shown in the top-right corner of the icon.
+
+<!-- ![Pet Management](screenshots/pet-management.png) -->

@@ -32,3 +32,4 @@ AggroAlert.lua
 AmmoTracker.lua
 RotationHelper.lua
 RangeToTargetWidget.lua
+PetManagementWidget.lua

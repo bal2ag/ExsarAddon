@@ -1314,3 +1314,107 @@ describe("AbbreviateBindingKey", function()
         assert.are.equal("sG", Logic.AbbreviateBindingKey("shift-g"))
     end)
 end)
+
+-- =========================================================
+-- ResolveActionMacro
+-- =========================================================
+
+describe("ResolveActionMacro", function()
+    it("returns the default when there is no override", function()
+        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", nil))
+    end)
+
+    it("returns the default for a blank or whitespace-only override", function()
+        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", ""))
+        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", "   \n\t "))
+    end)
+
+    it("returns the override when it has content", function()
+        assert.are.equal("/cast Revive Pet",
+            Logic.ResolveActionMacro("/cast Mend Pet", "/cast Revive Pet"))
+    end)
+
+    it("preserves a multi-line override verbatim", function()
+        local override = "/cast [nopet] Call Pet\n/cast [@pet,dead] Revive Pet"
+        assert.are.equal(override, Logic.ResolveActionMacro("/cast Mend Pet", override))
+    end)
+
+    it("ignores a non-string override", function()
+        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", 42))
+    end)
+end)
+
+-- =========================================================
+-- PetActionEnabled
+-- =========================================================
+
+describe("PetActionEnabled", function()
+    local function state(exists, alive)
+        return { exists = exists, alive = alive }
+    end
+
+    it("is always enabled with no requirement or 'any'", function()
+        assert.is_true(Logic.PetActionEnabled(nil, state(false, false)))
+        assert.is_true(Logic.PetActionEnabled("any", state(false, false)))
+    end)
+
+    it("'active' requires the pet to exist", function()
+        assert.is_true(Logic.PetActionEnabled("active", state(true, true)))
+        assert.is_true(Logic.PetActionEnabled("active", state(true, false)))
+        assert.is_false(Logic.PetActionEnabled("active", state(false, false)))
+    end)
+
+    it("'alive' requires an existing, living pet", function()
+        assert.is_true(Logic.PetActionEnabled("alive", state(true, true)))
+        assert.is_false(Logic.PetActionEnabled("alive", state(true, false)))
+        assert.is_false(Logic.PetActionEnabled("alive", state(false, false)))
+    end)
+
+    it("'dead' requires an existing, dead pet", function()
+        assert.is_true(Logic.PetActionEnabled("dead", state(true, false)))
+        assert.is_false(Logic.PetActionEnabled("dead", state(true, true)))
+        assert.is_false(Logic.PetActionEnabled("dead", state(false, false)))
+    end)
+
+    it("'missing' requires no pet", function()
+        assert.is_true(Logic.PetActionEnabled("missing", state(false, false)))
+        assert.is_false(Logic.PetActionEnabled("missing", state(true, true)))
+    end)
+
+    it("'notdead' is enabled unless an existing pet is dead", function()
+        assert.is_true(Logic.PetActionEnabled("notdead", state(true, true)))   -- alive
+        assert.is_true(Logic.PetActionEnabled("notdead", state(false, false))) -- no pet
+        assert.is_false(Logic.PetActionEnabled("notdead", state(true, false))) -- dead
+    end)
+
+    it("fails open for an unknown token", function()
+        assert.is_true(Logic.PetActionEnabled("bogus", state(false, false)))
+    end)
+
+    it("tolerates a nil state table", function()
+        assert.is_true(Logic.PetActionEnabled(nil, nil))
+        assert.is_false(Logic.PetActionEnabled("active", nil))
+    end)
+end)
+
+-- =========================================================
+-- PetStateKey
+-- =========================================================
+
+describe("PetStateKey", function()
+    it("returns 'alive' for an existing, living pet", function()
+        assert.are.equal("alive", Logic.PetStateKey({ exists = true, alive = true }))
+    end)
+
+    it("returns 'dead' for an existing, dead pet", function()
+        assert.are.equal("dead", Logic.PetStateKey({ exists = true, alive = false }))
+    end)
+
+    it("returns 'missing' when there is no pet", function()
+        assert.are.equal("missing", Logic.PetStateKey({ exists = false, alive = false }))
+    end)
+
+    it("returns 'missing' for a nil state", function()
+        assert.are.equal("missing", Logic.PetStateKey(nil))
+    end)
+end)

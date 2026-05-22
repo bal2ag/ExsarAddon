@@ -54,6 +54,7 @@ read_globals = {
     "GetInventoryItemTexture",
     "GetItemCount",
     "GetItemInfo",
+    "GetItemInfoInstant",
     "GetItemSpell",
     "GetBindingKey",
     "GetNetStats",
@@ -63,6 +64,7 @@ read_globals = {
     "GetRealZoneText",
     "GetSpellCooldown",
     "GetSpellInfo",
+    "GetSpellTexture",
     "GetTime",
     "GetUnitSpeed",
     "GetWeaponEnchantInfo",
@@ -132,6 +134,15 @@ files["UsableItemsWidget.lua"] = {
         "BINDING_NAME_EXSAR_USE_ITEM5",
         "BINDING_NAME_EXSAR_USE_ITEM6",
         "BINDING_NAME_EXSAR_USE_ITEM7",
+    },
+}
+
+-- PetManagementWidget defines Blizzard binding label globals; the per-slot
+-- BINDING_NAME_EXSAR_PET_ACTIONn names are set dynamically via _G in a loop.
+files["PetManagementWidget.lua"] = {
+    globals = {
+        "_G",
+        "BINDING_HEADER_EXSARADDONPET",
     },
 }
 

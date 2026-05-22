@@ -26,4 +26,19 @@
     <Binding name="EXSAR_USE_ITEM5" category="ExsarAddon"/>
     <Binding name="EXSAR_USE_ITEM6" category="ExsarAddon"/>
     <Binding name="EXSAR_USE_ITEM7" category="ExsarAddon"/>
+
+    <!--
+        Pet Management widget slots. Grouped under their own "ExsarAddon Pet"
+        category (literal label). The first carries header="EXSARADDONPET"
+        (resolves via BINDING_HEADER_EXSARADDONPET set in PetManagementWidget.lua);
+        the rest only need the category. Bindings are positional: the key fires
+        whatever action occupies ExsarAddonPetActionN. Surplus slots (beyond the
+        number of defined actions) are bindable but drive nothing until filled.
+        Labels resolve via BINDING_NAME_EXSAR_PET_ACTIONN globals set in the widget.
+    -->
+    <Binding name="EXSAR_PET_ACTION1" header="EXSARADDONPET" category="ExsarAddon Pet"/>
+    <Binding name="EXSAR_PET_ACTION2" category="ExsarAddon Pet"/>
+    <Binding name="EXSAR_PET_ACTION3" category="ExsarAddon Pet"/>
+    <Binding name="EXSAR_PET_ACTION4" category="ExsarAddon Pet"/>
+    <Binding name="EXSAR_PET_ACTION5" category="ExsarAddon Pet"/>
 </Bindings>
