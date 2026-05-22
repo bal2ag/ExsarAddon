@@ -15,6 +15,7 @@ KillCommandAlert.lua
 ActiveEffectsTracker.lua
 UsableItemsWidget.lua
 TargetDebuffTracker.lua
+RaidDebuffTracker.lua
 MendPetTracker.lua
 FoodAndDrinkWidget.lua
 ConsumableBuffWidget.lua

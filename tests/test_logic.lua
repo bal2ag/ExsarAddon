@@ -1418,3 +1418,197 @@ describe("PetStateKey", function()
         assert.are.equal("missing", Logic.PetStateKey(nil))
     end)
 end)
+
+-- =========================================================
+-- ComputeMissingDebuffs
+-- =========================================================
+
+describe("ComputeMissingDebuffs", function()
+    local tracked = {
+        { key = "ff",   name = "Faerie Fire",   auras = { "Faerie Fire", "Faerie Fire (Feral)" } },
+        { key = "mark", name = "Hunter's Mark", auras = { "Hunter's Mark" } },
+        { key = "armor", name = "Armor reduction", auras = { "Sunder Armor", "Expose Armor" } },
+    }
+    local allOn = function() return true end
+
+    it("returns entries with none of their auras present", function()
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, { ["Hunter's Mark"] = true })
+        assert.are.equal(2, #missing)
+        assert.are.equal("ff", missing[1].key)
+        assert.are.equal("armor", missing[2].key)
+    end)
+
+    it("treats an entry as present if ANY alias aura is up", function()
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, { ["Expose Armor"] = true })
+        for _, d in ipairs(missing) do
+            assert.are_not.equal("armor", d.key)
+        end
+    end)
+
+    it("preserves input order in the result", function()
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, {})
+        assert.are.equal("ff", missing[1].key)
+        assert.are.equal("mark", missing[2].key)
+        assert.are.equal("armor", missing[3].key)
+    end)
+
+    it("skips disabled debuffs entirely", function()
+        local onlyMark = function(key) return key == "mark" end
+        local missing = Logic.ComputeMissingDebuffs(tracked, onlyMark, {})
+        assert.are.equal(1, #missing)
+        assert.are.equal("mark", missing[1].key)
+    end)
+
+    it("returns nothing when everything is present", function()
+        local present = { ["Faerie Fire"] = true, ["Hunter's Mark"] = true, ["Sunder Armor"] = true }
+        assert.are.equal(0, #Logic.ComputeMissingDebuffs(tracked, allOn, present))
+    end)
+
+    it("handles nil tracked / nil present gracefully", function()
+        assert.are.equal(0, #Logic.ComputeMissingDebuffs(nil, allOn, nil))
+        assert.are.equal(3, #Logic.ComputeMissingDebuffs(tracked, allOn, nil))
+    end)
+end)
+
+-- =========================================================
+-- RaidDebuffsShouldShow
+-- =========================================================
+
+describe("RaidDebuffsShouldShow", function()
+    local function base(over)
+        local o = { enabled = true, inCombat = true, inRaid = true, hasTarget = true, unlocked = false }
+        for k, v in pairs(over or {}) do o[k] = v end
+        return o
+    end
+
+    it("shows when enabled, in combat, in raid, with a target", function()
+        assert.is_true(Logic.RaidDebuffsShouldShow(base()))
+    end)
+
+    it("always shows when unlocked, regardless of other state", function()
+        assert.is_true(Logic.RaidDebuffsShouldShow({ unlocked = true }))
+    end)
+
+    it("hides when the feature is disabled", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(base({ enabled = false })))
+    end)
+
+    it("hides when out of combat", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(base({ inCombat = false })))
+    end)
+
+    it("hides when not in a raid", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(base({ inRaid = false })))
+    end)
+
+    it("hides when there is no target", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(base({ hasTarget = false })))
+    end)
+
+    it("handles nil opts", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(nil))
+    end)
+end)
+
+-- =========================================================
+-- ComputeMissingDebuffs — caster matching
+-- =========================================================
+
+describe("ComputeMissingDebuffs caster matching", function()
+    local tracked = {
+        { key = "ff",   name = "Improved Faerie Fire", auras = { "Faerie Fire", "Faerie Fire (Feral)" } },
+        { key = "mark", name = "Hunter's Mark",        auras = { "Hunter's Mark" } },
+    }
+    local allOn = function() return true end
+    local BOOMKIN = "Player-1234-DEADBEEF"
+    -- Only the FF entry requires the boomkin caster.
+    local reqFor = function(key) if key == "ff" then return BOOMKIN end end
+
+    it("satisfies FF when cast by the required caster", function()
+        local present = { ["Faerie Fire"] = BOOMKIN }
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, present, reqFor)
+        for _, d in ipairs(missing) do assert.are_not.equal("ff", d.key) end
+    end)
+
+    it("flags FF missing when cast by a known different player", function()
+        local present = { ["Faerie Fire"] = "Player-1234-FEEDFACE" }
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, present, reqFor)
+        assert.are.equal("ff", missing[1].key)
+    end)
+
+    it("leniently satisfies FF when the caster is unknown", function()
+        local present = { ["Faerie Fire"] = true }
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, present, reqFor)
+        for _, d in ipairs(missing) do assert.are_not.equal("ff", d.key) end
+    end)
+
+    it("flags FF missing when no FF aura is present at all", function()
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, {}, reqFor)
+        assert.are.equal("ff", missing[1].key)
+    end)
+
+    it("ignores caster requirement for entries that have none", function()
+        -- Hunter's Mark from any caster still counts (reqFor returns nil for it).
+        local present = { ["Hunter's Mark"] = "Player-1234-SOMEONE" }
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, present, reqFor)
+        for _, d in ipairs(missing) do assert.are_not.equal("mark", d.key) end
+    end)
+
+    it("treats a present GUID like presence when no requiredCasterFor is given", function()
+        local present = { ["Faerie Fire"] = "Player-1234-ANYONE", ["Hunter's Mark"] = true }
+        assert.are.equal(0, #Logic.ComputeMissingDebuffs(tracked, allOn, present))
+    end)
+end)
+
+-- =========================================================
+-- ComputeMissingDebuffs — caster set (auto-detected druids)
+-- =========================================================
+
+describe("ComputeMissingDebuffs caster set", function()
+    local tracked = { { key = "ff", name = "Improved Faerie Fire", auras = { "Faerie Fire" } } }
+    local allOn = function() return true end
+    local A, B, C = "Player-A", "Player-B", "Player-C"
+    -- Accept either of two specced druids.
+    local reqFor = function(key) if key == "ff" then return { [A] = true, [B] = true } end end
+
+    it("satisfies when FF is cast by any caster in the set", function()
+        assert.are.equal(0, #Logic.ComputeMissingDebuffs(tracked, allOn, { ["Faerie Fire"] = B }, reqFor))
+    end)
+
+    it("flags missing when cast by someone outside the set", function()
+        local missing = Logic.ComputeMissingDebuffs(tracked, allOn, { ["Faerie Fire"] = C }, reqFor)
+        assert.are.equal("ff", missing[1].key)
+    end)
+
+    it("is lenient when the caster is unknown", function()
+        assert.are.equal(0, #Logic.ComputeMissingDebuffs(tracked, allOn, { ["Faerie Fire"] = true }, reqFor))
+    end)
+end)
+
+-- =========================================================
+-- FindTalentRank
+-- =========================================================
+
+describe("FindTalentRank", function()
+    local talents = {
+        { name = "Improved Aspect of the Hawk", rank = 5 },
+        { name = "Improved Faerie Fire", rank = 3 },
+        { name = "Moonfury", rank = 0 },
+    }
+
+    it("returns the rank of a present talent", function()
+        assert.are.equal(3, Logic.FindTalentRank(talents, "Improved Faerie Fire"))
+    end)
+
+    it("returns 0 for a talent not in the list", function()
+        assert.are.equal(0, Logic.FindTalentRank(talents, "Misery"))
+    end)
+
+    it("returns 0 (untalented) for a present-but-unspent talent", function()
+        assert.are.equal(0, Logic.FindTalentRank(talents, "Moonfury"))
+    end)
+
+    it("handles a nil list", function()
+        assert.are.equal(0, Logic.FindTalentRank(nil, "Anything"))
+    end)
+end)

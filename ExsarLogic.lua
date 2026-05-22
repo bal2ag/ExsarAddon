@@ -554,6 +554,90 @@ function ExsarLogic.PetStateKey(state)
     return "dead"
 end
 
+-- =========================================================
+-- Raid debuff tracker (missing critical debuffs)
+-- =========================================================
+
+--- Determine which tracked raid debuffs are missing from the target.
+-- A debuff counts as present if ANY of its alias aura names is on the target,
+-- so a single entry (e.g. "Armor reduction") can be satisfied by several spells.
+-- Disabled debuffs (per raid composition) are skipped entirely.
+--
+-- Optional caster matching: some entries (e.g. "Improved Faerie Fire") only
+-- "count" when applied by a specific player, because the relevant property
+-- (the +hit talent) is unreadable from the aura — the user supplies that
+-- knowledge by designating the caster. When `requiredCasterFor(key)` returns a
+-- GUID, an aura satisfies the entry only if its caster matches that GUID, OR
+-- the caster is unknown (lenient: avoids false alarms when the API doesn't
+-- report a caster). A present aura cast by a *known different* player does NOT
+-- satisfy the entry.
+--
+-- @param tracked    array of { key, name, auras = { auraName, ... } }
+-- @param isEnabled  function(key) -> bool  whether this debuff is tracked
+-- @param present    table { [auraName] = v } of auras on the target, where v is:
+--                     nil       — absent
+--                     true      — present, caster unknown
+--                     "<guid>"  — present, applied by this caster GUID
+-- @param requiredCasterFor  optional function(key) -> req  where req is nil
+--                           (no requirement), a single GUID string, or a set
+--                           table `{ [guid] = true }` of acceptable casters
+--                           (e.g. several specced druids).
+-- @return array of the missing tracked entries, in input order
+function ExsarLogic.ComputeMissingDebuffs(tracked, isEnabled, present, requiredCasterFor)
+    -- Does a present aura's caster `p` satisfy the requirement `req`?
+    local function casterOk(req, p)
+        if not req then return true end       -- no caster requirement
+        if p == true then return true end     -- present, caster unknown → lenient
+        if type(req) == "table" then return req[p] == true end
+        return p == req
+    end
+
+    local missing = {}
+    present = present or {}
+    for _, d in ipairs(tracked or {}) do
+        if isEnabled(d.key) then
+            local req = requiredCasterFor and requiredCasterFor(d.key) or nil
+            local found = false
+            for _, aura in ipairs(d.auras or {}) do
+                local p = present[aura]
+                if p ~= nil and casterOk(req, p) then
+                    found = true
+                    break
+                end
+            end
+            if not found then missing[#missing + 1] = d end
+        end
+    end
+    return missing
+end
+
+--- Find the rank of a named talent in an inspected talent list. Pure.
+-- Used by RaidDebuffTracker to confirm a druid is specced into Improved Faerie
+-- Fire from inspect data (the +hit talent is otherwise unreadable from auras).
+-- @param talents  array of { name = string, rank = number }
+-- @param name     exact talent name to look for
+-- @return number  the rank (0 if not present)
+function ExsarLogic.FindTalentRank(talents, name)
+    for _, t in ipairs(talents or {}) do
+        if t.name == name then return t.rank or 0 end
+    end
+    return 0
+end
+
+--- Decide whether the raid-debuff tracker frame should be visible.
+-- The real callout display requires the feature enabled, the player in combat,
+-- in a raid, and with a target to inspect. When unlocked (config preview) it
+-- always shows so the user can position it. Whether any debuffs are actually
+-- missing is decided separately by the layout step.
+-- @param o table { enabled, inCombat, inRaid, hasTarget, unlocked }
+-- @return bool
+function ExsarLogic.RaidDebuffsShouldShow(o)
+    o = o or {}
+    if o.unlocked then return true end
+    return o.enabled == true and o.inCombat == true
+        and o.inRaid == true and o.hasTarget == true
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic
