@@ -58,12 +58,17 @@ local TRACKED_DEBUFFS = {
 }
 
 -- =========================================================
--- Layout constants  (horizontal row of "missing" icons)
+-- Layout constants  (vertical list: title + [icon] colored-name rows)
 -- =========================================================
 
-local ICON_SIZE = 30
-local ICON_GAP  = 5
+local ICON_SIZE = 20    -- per-row icon
+local ROW_GAP   = 3     -- vertical gap between rows
+local TEXT_GAP  = 5     -- icon → name gap
+local TITLE_GAP = 4     -- title → first row gap
 local PADDING   = 6
+
+local TITLE_TEXT  = "Debuffs missing:"
+local MISSING_COLOR = { 1, 0.4, 0.4 }  -- default name color; per-entry `color` overrides
 
 -- =========================================================
 -- Main frame
@@ -72,7 +77,13 @@ local PADDING   = 6
 local frame = CreateFrame("Frame", ADDON_NAME .. "RaidDebuffFrame", UIParent)
 ExsarUI.SetupMovableFrame(frame, rDB)
 
-local placeholderText = ExsarUI.CreatePlaceholder(frame, "Missing Debuffs")
+-- Persistent title; its visibility is the "widget is active" cue (shown whenever
+-- unlocked, or in-combat+in-raid+has-target when locked).
+local titleText = frame:CreateFontString(nil, "OVERLAY")
+titleText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+titleText:SetTextColor(1, 0.82, 0, 1)
+titleText:SetText(TITLE_TEXT)
+titleText:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -PADDING)
 
 frame:Hide()
 
@@ -149,30 +160,25 @@ end
 -- =========================================================
 
 local function MakeSlot(debuff)
-    local s = { def = debuff, missing = false }
+    local s = { def = debuff }
 
-    s.iconFrame = CreateFrame("Frame", nil, frame)
-    s.iconFrame:SetSize(ICON_SIZE, ICON_SIZE)
+    -- Row container holds the icon (left) + name text (right of icon).
+    s.row = CreateFrame("Frame", nil, frame)
+    s.row:SetHeight(ICON_SIZE)
 
-    -- Red 1px border ring marks an alert/missing state.
-    s.glow = ExsarUI.CreateGlow(s.iconFrame, 0.9, 0.15, 0.15, 1, 1)
-    s.icon = ExsarUI.CreateIcon(s.iconFrame)
-    -- Red X: standard "inactive / missing" effect. Permanent on the slot, which
-    -- is only shown when the debuff is actually missing.
-    s.redX = { ExsarUI.CreateRedX(s.iconFrame, 4, 3) }
+    local holder = CreateFrame("Frame", nil, s.row)
+    holder:SetSize(ICON_SIZE, ICON_SIZE)
+    holder:SetPoint("TOPLEFT", s.row, "TOPLEFT", 0, 0)
+    s.icon = ExsarUI.CreateIcon(holder)
 
-    s.iconFrame:EnableMouse(true)
-    s.iconFrame:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if s.def.iconSpell then
-            GameTooltip:SetSpellByID(s.def.iconSpell)
-        end
-        GameTooltip:AddLine("MISSING from target", 0.9, 0.3, 0.3)
-        GameTooltip:Show()
-    end)
-    s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    s.name = s.row:CreateFontString(nil, "OVERLAY")
+    s.name:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    s.name:SetPoint("LEFT", holder, "RIGHT", TEXT_GAP, 0)
+    local c = debuff.color or MISSING_COLOR
+    s.name:SetTextColor(c[1], c[2], c[3], 1)
+    s.name:SetText(debuff.name)
 
-    s.iconFrame:Hide()
+    s.row:Hide()
     return s
 end
 
@@ -201,32 +207,31 @@ end
 -- Layout
 -- =========================================================
 
-local function ApplyLayout(missing, showPreview)
-    local xOffset = PADDING
+-- Lay out the title + one row per missing debuff (vertical). Only called when
+-- the widget is active, so the title is always shown — its presence tells the
+-- user the widget is live even when nothing is missing (empty list under title).
+local function ApplyLayout(missing)
+    for _, s in ipairs(slots) do s.row:Hide() end
 
-    -- Hide all first, then place the missing ones left to right.
-    for _, s in ipairs(slots) do s.iconFrame:Hide() end
+    local maxRowW = titleText:GetStringWidth()
+    local yOffset = PADDING + titleText:GetStringHeight() + TITLE_GAP
 
     for _, def in ipairs(missing) do
         local s = slots[def._slotIndex]
-        s.iconFrame:ClearAllPoints()
-        s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", xOffset, -PADDING)
-        s.iconFrame:Show()
-        xOffset = xOffset + ICON_SIZE + ICON_GAP
+        s.row:ClearAllPoints()
+        s.row:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -yOffset)
+        local rowW = ICON_SIZE + TEXT_GAP + s.name:GetStringWidth()
+        s.row:SetWidth(rowW)
+        maxRowW = math.max(maxRowW, rowW)
+        s.row:Show()
+        yOffset = yOffset + ICON_SIZE + ROW_GAP
     end
 
-    if #missing > 0 then
-        frame:SetSize(xOffset - ICON_GAP + PADDING, ICON_SIZE + PADDING * 2)
-        placeholderText:Hide()
-        frame:Show()
-    elseif showPreview then
-        frame:SetSize(120, ICON_SIZE + PADDING * 2)
-        placeholderText:Show()
-        frame:Show()
-    else
-        placeholderText:Hide()
-        frame:Hide()
-    end
+    -- Trim the trailing row gap (none added when the list is empty).
+    if #missing > 0 then yOffset = yOffset - ROW_GAP end
+
+    frame:SetSize(maxRowW + PADDING * 2, yOffset + PADDING)
+    frame:Show()
 end
 
 -- =========================================================
@@ -246,7 +251,7 @@ local function UpdateMissing()
     })
 
     if not show then
-        ApplyLayout({}, false)
+        frame:Hide()
         return
     end
 
@@ -254,8 +259,11 @@ local function UpdateMissing()
     -- return of UnitDebuff is the caster unit token; resolve it to a GUID so
     -- entries with a required caster (Faerie Fire) can be matched. A nil token
     -- (caster out of range / unreported) stores `true` = present-but-unknown.
+    -- While unlocked we skip the scan entirely (present stays empty) so EVERY
+    -- enabled debuff lists as missing — a deterministic positioning/testing
+    -- preview that doesn't depend on what the current target happens to have.
     local present = {}
-    if hasTarget then
+    if hasTarget and not unlocked then
         for i = 1, 40 do
             local bName, _, _, _, _, _, bCaster = UnitDebuff("target", i)
             if not bName then break end
@@ -269,7 +277,7 @@ local function UpdateMissing()
     -- Tag each entry with its slot index for the layout step.
     for idx, def in ipairs(TRACKED_DEBUFFS) do def._slotIndex = idx end
 
-    ApplyLayout(missing, unlocked)
+    ApplyLayout(missing)
 end
 
 -- =========================================================
