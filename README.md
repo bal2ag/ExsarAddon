@@ -19,6 +19,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Active Effects Tracker](#active-effects-tracker)
   - [Usable Items](#usable-items)
   - [Target Debuff Tracker](#target-debuff-tracker)
+  - [Raid Debuff Tracker](#raid-debuff-tracker)
   - [Mend Pet Tracker](#mend-pet-tracker)
   - [Food & Drink Widget](#food--drink-widget)
   - [Consumable Buff Widget](#consumable-buff-widget)
@@ -167,6 +168,20 @@ Shows your Hunter's Mark and Serpent Sting on the current target with countdowns
 - **Player-only:** Only shows debuffs you cast, not those from other hunters
 
 <!-- ![Target Debuff Tracker](screenshots/target-debuff-tracker.png) -->
+
+### Raid Debuff Tracker
+
+![Supported](https://img.shields.io/badge/Supported-green)
+
+Calls out critical raid debuffs that are **missing** from your target, so you can ask the raid to reapply them on Discord.
+
+- **Shows what's absent:** Lists an icon (marked with a red X) for each tracked debuff that is *not* currently on your target — the opposite of the Target Debuff Tracker.
+- **All casters counted:** Detects debuffs applied by anyone in the raid, not just you.
+- **Only when it matters:** Visible only while in combat, in a raid, with a target — and only when something is actually missing.
+- **Per-debuff toggles:** Each tracked debuff can be turned off in config so you only watch for the ones your raid composition can actually provide. The whole widget can also be disabled.
+- **Talent-gated debuffs (Faerie Fire & Judgement of the Crusader):** Some debuffs only give their bonus when the caster is talented — Improved Faerie Fire's +hit, and Judgement of the Crusader's +crit (from a paladin's Improved Seal of the Crusader). That talent is invisible on the target, so the widget identifies *which* druid/paladin provides it and only counts *their* version (a feral's armor-only Faerie Fire, or an untalented paladin's Judgement, still shows as missing). It finds them two ways: **automatically**, by inspecting nearby raid druids/paladins' talents (a one-time catch is enough — it remembers them for the session), and **manually**, by targeting the player and clicking **Set from target** in config. With nobody identified yet, the debuff from anyone counts.
+
+<!-- ![Raid Debuff Tracker](screenshots/raid-debuff-tracker.png) -->
 
 ### Mend Pet Tracker
 
