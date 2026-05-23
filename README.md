@@ -364,16 +364,14 @@ Sweep effect for the current GCD.
 
 ![Experimental](https://img.shields.io/badge/Experimental-yellow)
 
-Compact info for all units marked with raid target icons. Click a row to target that unit.
+Compact info for all units marked with raid target icons (click a row to target that mob), plus a tank-assist row (click a tank to assist them).
 
-- **Display:** Each marked unit gets a row showing its portrait, raid target icon, name (colored by reaction), and a health bar with percentage. Sorted by raid icon index (skull first, star last). Your current target is highlighted with a pulsating gold glow border.
-- **Unit discovery:** Scans multiple sources to find marked units: your target and focus, party/raid members, party/raid member targets, visible nameplates, and boss frames. Units are deduplicated by GUID.
-- **Click to target:** GUID-verified, three-tier targeting at click time:
-  1. Scan every queryable unit token (nameplates, `raidNtarget`, `partyNtarget`, boss frames, target/focus/mouseover) and use the first one whose `UnitGUID` still matches the intended mob — secure `type=target`
-  2. `/assist [@memberN]` for any group member whose target matches the intended GUID (or icon, if the client can't resolve their target's GUID locally)
-  3. `/targetexact Name` as a last resort
-- **Click-failure logging:** When a click fails to swap your target to the intended mob, a `CLICK MISSED` entry is both printed to chat and appended to a persistent ring buffer (last 20 misses, survives `/reload`). Each entry captures timestamp, combat state, group kind/size, nameplate count, latency, intended mob, resolver path, Tier 1 and Tier 2 scan stats, before/after target, and all currently marked mobs — enough to diagnose the failure mode after the fight ends. Default ON; toggle with `/exsar rtdebug`. `/exsar rtdump` opens the log in a copy-paste window (Ctrl+A, Ctrl+C, Esc to close). `/exsar rtclear` wipes the buffer.
-- **Hidden when:** No marked units are found (and widget is locked)
+- **Icon rows:** Each marked unit gets a row showing its portrait, raid target icon, name (colored by reaction), and a health bar with percentage. Sorted by raid icon index (skull first, star last). Your current target is highlighted with a pulsating gold glow border. Discovery scans your target/focus, party/raid members and their targets, visible nameplates, and boss frames, deduplicated by GUID.
+- **Tank-assist row:** A row of buttons (3 per row), one per tank, shown above the icon list. Clicking a tank button **assists that tank** — you target whatever they are currently tanking, resolved live, so it keeps working through mid-combat re-marks (you follow the tank, not the icon). Each button shows the tank's current target's raid mark and the tank's class-colored name. Tanks are detected from each member's **assigned group role** (anyone flagged as Tank), falling back to Main Tank assignments; if your group uses neither, type tank names into the **Manual tanks** box in the config. Toggle the row on/off in config.
+- **How targeting works:** Each button is a secure click bound *ahead of time* (out of combat) to a live unit token (e.g. "raid member 3's target"); the game resolves it fresh on every click. This is what makes targeting work in combat — including for marked mobs a groupmate is already on.
+- **Mid-combat re-marks:** A button's binding can't be changed once combat starts. If a mark is moved onto a different mob mid-fight, that icon row is greyed out with a red X (its binding is stale) — use the tank-assist row instead, which is unaffected.
+- **Click-failure logging:** When a click fails to swap your target to the intended mob, a `CLICK MISSED` entry is printed to chat and appended to a persistent ring buffer (last 20 misses, survives `/reload`), capturing intended mob, the bound token, combat/stale state, and before/after target. Default ON; toggle with `/exsar rtdebug`. `/exsar rtdump` opens the log in a copy-paste window (Ctrl+A, Ctrl+C, Esc to close). `/exsar rtclear` wipes the buffer.
+- **Hidden when:** No marked units and no tanks are found (and widget is locked)
 
 <!-- ![Raid Target Widget](screenshots/raid-targets.png) -->
 

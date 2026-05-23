@@ -1612,3 +1612,111 @@ describe("FindTalentRank", function()
         assert.are.equal(0, Logic.FindTalentRank(nil, "Anything"))
     end)
 end)
+
+-- =========================================================
+-- ComputeTankList
+-- =========================================================
+
+describe("ComputeTankList", function()
+    it("returns role-flagged tanks, preserving order", function()
+        local roster = {
+            { name = "Healer",  role = "MAINASSIST", unit = "raid1target" },
+            { name = "Tankone", role = "TANK",   unit = "raid2target" },
+            { name = "Dps",     role = nil,          unit = "raid3target" },
+            { name = "Tanktwo", role = "TANK",   unit = "raid4target" },
+        }
+        local out = Logic.ComputeTankList(roster, nil)
+        assert.are.equal(2, #out)
+        assert.are.equal("Tankone", out[1].name)
+        assert.are.equal("raid2target", out[1].unit)
+        assert.are.equal("Tanktwo", out[2].name)
+    end)
+
+    it("falls back to the manual name set when no MT is assigned", function()
+        local roster = {
+            { name = "Bob",   role = nil, unit = "raid1target" },
+            { name = "Alice", role = nil, unit = "raid2target" },
+            { name = "Carol", role = nil, unit = "raid3target" },
+        }
+        local manual = Logic.ParseNameSet("alice, carol")
+        local out = Logic.ComputeTankList(roster, manual)
+        assert.are.equal(2, #out)
+        assert.are.equal("Alice", out[1].name)
+        assert.are.equal("Carol", out[2].name)
+    end)
+
+    it("prefers role assignment over the manual set when both exist", function()
+        local roster = {
+            { name = "Mt",     role = "TANK", unit = "raid1target" },
+            { name = "Manual", role = nil,        unit = "raid2target" },
+        }
+        local out = Logic.ComputeTankList(roster, Logic.ParseNameSet("manual"))
+        assert.are.equal(1, #out)
+        assert.are.equal("Mt", out[1].name)
+    end)
+
+    it("returns empty when nothing matches", function()
+        local roster = { { name = "Dps", role = nil, unit = "raid1target" } }
+        assert.are.equal(0, #Logic.ComputeTankList(roster, Logic.ParseNameSet("nobody")))
+        assert.are.equal(0, #Logic.ComputeTankList(roster, nil))
+        assert.are.equal(0, #Logic.ComputeTankList(nil, nil))
+    end)
+end)
+
+-- =========================================================
+-- ParseNameSet
+-- =========================================================
+
+describe("ParseNameSet", function()
+    it("splits on commas and whitespace, lowercasing", function()
+        local s = Logic.ParseNameSet("Bob, Alice   Carol")
+        assert.is_true(s["bob"])
+        assert.is_true(s["alice"])
+        assert.is_true(s["carol"])
+    end)
+
+    it("keeps realm suffixes intact", function()
+        local s = Logic.ParseNameSet("Bob-Whitemane")
+        assert.is_true(s["bob-whitemane"])
+        assert.is_nil(s["bob"])
+    end)
+
+    it("returns an empty set for nil/empty input", function()
+        assert.are.same({}, Logic.ParseNameSet(nil))
+        assert.are.same({}, Logic.ParseNameSet(""))
+        assert.are.same({}, Logic.ParseNameSet("   "))
+    end)
+end)
+
+-- =========================================================
+-- DetectStaleIcons
+-- =========================================================
+
+describe("DetectStaleIcons", function()
+    it("flags an icon whose GUID changed", function()
+        local base = { [8] = "GUID-A", [6] = "GUID-B" }
+        local cur  = { [8] = "GUID-C", [6] = "GUID-B" }
+        local stale = Logic.DetectStaleIcons(base, cur)
+        assert.is_true(stale[8])
+        assert.is_nil(stale[6])
+    end)
+
+    it("flags an icon whose mob disappeared", function()
+        local stale = Logic.DetectStaleIcons({ [7] = "GUID-X" }, {})
+        assert.is_true(stale[7])
+    end)
+
+    it("does not flag a brand-new icon absent from the baseline", function()
+        local stale = Logic.DetectStaleIcons({}, { [5] = "GUID-NEW" })
+        assert.is_nil(stale[5])
+    end)
+
+    it("flags nothing when baseline matches current", function()
+        local m = { [8] = "G1", [4] = "G2" }
+        assert.are.same({}, Logic.DetectStaleIcons(m, m))
+    end)
+
+    it("handles nil inputs", function()
+        assert.are.same({}, Logic.DetectStaleIcons(nil, nil))
+    end)
+end)

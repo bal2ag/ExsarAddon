@@ -1229,3 +1229,34 @@ function ExsarUI.SetupKeybindBridge(opts)
     apply()
     return apply
 end
+
+--- Combat-deferred secure attribute setter.
+-- `SetAttribute` on a protected (secure) frame is blocked during combat
+-- lockdown, but the binding for a click-to-target button often needs to change
+-- as marks/targets move. This mirrors the classic SecureActionQueue pattern:
+-- out of combat the attribute is written immediately; in combat the write is
+-- stashed (deduplicated by frame+key, so only the latest value per key is kept)
+-- and flushed on PLAYER_REGEN_ENABLED. The secure engine still resolves
+-- *live* tokens (e.g. "raid3target") at click time, so a static binding set
+-- this way tracks that unit's current target without further writes.
+local secureAttrQueue = {}
+local secureAttrWatcher
+function ExsarUI.SecureSetAttribute(frame, key, value)
+    if not frame then return end
+    if not InCombatLockdown() then
+        frame:SetAttribute(key, value)
+        return
+    end
+    if not secureAttrWatcher then
+        secureAttrWatcher = CreateFrame("Frame")
+        secureAttrWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+        secureAttrWatcher:SetScript("OnEvent", function()
+            for _, q in pairs(secureAttrQueue) do
+                q.frame:SetAttribute(q.key, q.value)
+            end
+            secureAttrQueue = {}
+        end)
+    end
+    local id = (frame:GetName() or tostring(frame)) .. "#" .. key
+    secureAttrQueue[id] = { frame = frame, key = key, value = value }
+end

@@ -638,6 +638,74 @@ function ExsarLogic.RaidDebuffsShouldShow(o)
         and o.inRaid == true and o.hasTarget == true
 end
 
+--- Choose which raid/party members the tank-assist row should show.
+-- Primary source is the assigned group role (entries with role == "TANK", from
+-- UnitGroupRolesAssigned / Main Tank assignment); when nobody is flagged a tank
+-- we fall back to a manual name set so the row still works for groups that
+-- don't assign roles. Order is preserved (callers pass roster in display order).
+-- @param roster array of { name=, role=, unit=, online= } (unit = the assist
+--               token, e.g. "raid3target"; role is "TANK" for tanks; online optional)
+-- @param manualSet table mapping lowercased name -> true (optional)
+-- @return array of the selected roster entries, in input order
+function ExsarLogic.ComputeTankList(roster, manualSet)
+    roster = roster or {}
+    local tanks = {}
+    for _, m in ipairs(roster) do
+        if m.role == "TANK" then
+            tanks[#tanks + 1] = m
+        end
+    end
+    if #tanks > 0 then
+        return tanks
+    end
+    if not manualSet then
+        return {}
+    end
+    local manual = {}
+    for _, m in ipairs(roster) do
+        local n = m.name and string.lower(m.name)
+        if n and manualSet[n] then
+            manual[#manual + 1] = m
+        end
+    end
+    return manual
+end
+
+--- Parse a free-text list of tank names (comma / whitespace separated) into a
+-- lookup set keyed by lowercased name. Realm suffixes ("Name-Realm") are kept
+-- as written; callers compare against the same form.
+-- @param text string (may be nil/empty)
+-- @return table mapping lowercased name -> true (empty when no names)
+function ExsarLogic.ParseNameSet(text)
+    local set = {}
+    if not text then return set end
+    for token in string.gmatch(text, "[^%s,]+") do
+        set[string.lower(token)] = true
+    end
+    return set
+end
+
+--- Detect raid icons whose underlying mob changed since a baseline snapshot.
+-- Used to flag icon buttons "stale" mid-combat: their secure binding was frozen
+-- at the baseline (we can't rebind in combat), so if the mark moved to a
+-- different GUID the button now points at the wrong mob. A brand-new icon
+-- (absent from baseline) is NOT stale; a removed mob (present in baseline,
+-- gone now) IS stale.
+-- @param baseline table iconIndex -> guid (snapshot when bindings were written)
+-- @param current  table iconIndex -> guid (current scan)
+-- @return table iconIndex -> true for every changed/removed icon
+function ExsarLogic.DetectStaleIcons(baseline, current)
+    local stale = {}
+    baseline = baseline or {}
+    current = current or {}
+    for idx, guid in pairs(baseline) do
+        if current[idx] ~= guid then
+            stale[idx] = true
+        end
+    end
+    return stale
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic
