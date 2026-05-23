@@ -71,6 +71,8 @@ read_globals = {
     "NotifyInspect",
     "CanInspect",
     "ClearInspectPlayer",
+    "CheckInteractDistance",
+    "InspectFrame",
     "GetTalentInfo",
     "GetNumTalentTabs",
     "GetNumTalents",

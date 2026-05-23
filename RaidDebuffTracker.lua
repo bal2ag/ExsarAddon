@@ -109,6 +109,10 @@ local function IsWidgetEnabled()
     return rDB().enabled ~= false
 end
 
+local function IsAutoDetectEnabled()
+    return rDB().autoDetect ~= false
+end
+
 -- Caster-matched debuffs. Some debuffs only deliver their hunter-relevant bonus
 -- when the caster is talented (the bonus is invisible from the aura itself):
 --   * Improved Faerie Fire (druid talent) — +hit on the FF debuff
@@ -285,15 +289,23 @@ end
 -- Crusader) via talent inspect
 -- =========================================================
 -- We can't read talents off a debuff, so we inspect raid members of the relevant
--- classes: when one comes back specced, cache their GUID for that key. Inspect is
--- range-limited (~28yd + LoS) and one-at-a-time/throttled, but we only need to
--- catch a player in range ONCE — the cached GUID then matches their debuff
+-- classes: when one comes back specced, cache their GUID for that key. We only
+-- need to catch a player ONCE — the cached GUID then matches their debuff
 -- anywhere. A config callback refreshes the panel labels on detection.
+--
+-- NOTE on the "unknown unit / out of range" spam (why this is gated the way it
+-- is): `NotifyInspect` errors loudly when the unit is out of inspect range, and
+-- the error path never fires `INSPECT_READY`, so a naive retry loop hammers the
+-- same far-away raider. `CanInspect` does NOT check range. The fix is to gate on
+-- `CheckInteractDistance(unit, 1)` (real ~28yd inspect range) and a per-GUID
+-- backoff, so we only ever inspect someone actually in range and never spam.
 local OnAutoDetect  -- forward declaration; set by BuildConfig
 
 local inspectWanted = {}   -- [guid] = unit   raid members not yet inspected
 local inspectPending = nil -- guid currently being inspected
 local inspectSentAt  = 0   -- GetTime() when the pending request was sent
+local inspectBackoff = {}  -- [guid] = GetTime() of last attempt (range/error skip)
+local INSPECT_BACKOFF = 10 -- seconds before retrying a given GUID
 
 -- Read the inspected unit's talents into a pure { name, rank } list.
 local function ReadInspectTalents()
@@ -319,7 +331,7 @@ end
 
 -- Refresh the set of raid members (of inspectable classes) we still want to check.
 local function RefreshInspectQueue()
-    if not IsInRaid() then
+    if not IsAutoDetectEnabled() or not IsInRaid() then
         for k in pairs(inspectWanted) do inspectWanted[k] = nil end
         return
     end
@@ -343,19 +355,30 @@ local function RefreshInspectQueue()
     end
 end
 
--- Kick off the next inspect if one isn't already in flight.
+-- Kick off the next inspect if one isn't already in flight. Only inspects units
+-- actually within inspect range (CheckInteractDistance), never the whole roster —
+-- this is what prevents the out-of-range error spam.
 local function ProcessInspectQueue()
+    if not IsAutoDetectEnabled() then return end
     if InCombatLockdown() then return end  -- avoid inspect churn mid-fight
+    -- Don't fight Blizzard's own inspect window for the single inspect channel.
+    if InspectFrame and InspectFrame:IsShown() then return end
     -- Clear a stale pending request that never got an INSPECT_READY.
     if inspectPending and GetTime() - inspectSentAt > 3 then
         inspectPending = nil
     end
     if inspectPending then return end
+    local now = GetTime()
     for guid, unit in pairs(inspectWanted) do
-        -- Re-verify the token still maps to this GUID and is reachable.
-        if UnitGUID(unit) == guid and CanInspect(unit) then
+        -- Re-verify the token still maps to this GUID, is reachable, IN RANGE,
+        -- and not in backoff from a recent attempt.
+        if UnitGUID(unit) == guid
+           and CanInspect(unit)
+           and CheckInteractDistance(unit, 1)   -- 1 = inspect range (~28yd)
+           and (not inspectBackoff[guid] or now - inspectBackoff[guid] > INSPECT_BACKOFF) then
             inspectPending = guid
-            inspectSentAt  = GetTime()
+            inspectSentAt  = now
+            inspectBackoff[guid] = now
             NotifyInspect(unit)
             return
         end
@@ -385,6 +408,7 @@ local function OnInspectReady(guid)
         if OnAutoDetect then OnAutoDetect() end
     end
     inspectWanted[guid] = nil            -- resolved either way
+    inspectBackoff[guid] = nil
     ClearInspectPlayer(guid)
 end
 
@@ -496,6 +520,15 @@ ExsarAddon.RegisterModule({
         -- talent inspect; the user can also manually pin the known caster (the
         -- talent bonus is unreadable from the aura, so the debuff only counts when
         -- applied by a designated/specced player). Rendered in tracked-list order.
+        y = y - 8
+        ExsarAddon.CreateCheckbox(parent, "Auto-detect talented casters (inspect)", 16, y,
+            function() return IsAutoDetectEnabled() end,
+            function(v)
+                rDB().autoDetect = v
+                if v then RefreshInspectQueue() end
+            end)
+        y = y - 28
+
         local refreshers = {}
         for _, def in ipairs(TRACKED_DEBUFFS) do
             local cfg = CASTER_MATCHED[def.key]
