@@ -27,6 +27,7 @@ local uiDB = ExsarUI.MakeDB("usableItems")
 --   Unlike alternates, the primary always loses to a higher-ranked item; selection
 --   is by ExsarLogic.SelectBestRank, not first-in-stock.
 local TK_ZONES = {
+    ["Tempest Keep"] = true,  -- the raid; GetRealZoneText() returns this, not "The Eye"
     ["The Eye"]      = true,
     ["The Botanica"] = true,
     ["The Arcatraz"] = true,
