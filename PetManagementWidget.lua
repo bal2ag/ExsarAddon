@@ -70,11 +70,11 @@ local PET_ACTIONS = {
           missing = { spell = "Call Pet" },
       },
       gcd = true,
-      macro = [[#showtooltip
-/use [@pet,nodead,exists] Mend Pet
+      macro = [[/use [@pet,nodead,exists] Mend Pet
 /stopmacro [@pet,nodead,exists]
 /use [@pet,dead,exists] Revive Pet
-/castsequence reset=2 Call Pet, Revive Pet]] },
+/stopmacro [@pet,exists]
+/use [nopet] Call Pet]] },
 
     -- Send the pet in: Dash for the speed boost, then command the attack.
     -- Needs a living pet, so greyed when the pet is missing or dead.
