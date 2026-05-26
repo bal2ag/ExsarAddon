@@ -1316,35 +1316,6 @@ describe("AbbreviateBindingKey", function()
 end)
 
 -- =========================================================
--- ResolveActionMacro
--- =========================================================
-
-describe("ResolveActionMacro", function()
-    it("returns the default when there is no override", function()
-        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", nil))
-    end)
-
-    it("returns the default for a blank or whitespace-only override", function()
-        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", ""))
-        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", "   \n\t "))
-    end)
-
-    it("returns the override when it has content", function()
-        assert.are.equal("/cast Revive Pet",
-            Logic.ResolveActionMacro("/cast Mend Pet", "/cast Revive Pet"))
-    end)
-
-    it("preserves a multi-line override verbatim", function()
-        local override = "/cast [nopet] Call Pet\n/cast [@pet,dead] Revive Pet"
-        assert.are.equal(override, Logic.ResolveActionMacro("/cast Mend Pet", override))
-    end)
-
-    it("ignores a non-string override", function()
-        assert.are.equal("/cast Mend Pet", Logic.ResolveActionMacro("/cast Mend Pet", 42))
-    end)
-end)
-
--- =========================================================
 -- PetActionEnabled
 -- =========================================================
 

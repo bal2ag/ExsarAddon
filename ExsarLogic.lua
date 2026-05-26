@@ -504,20 +504,6 @@ function ExsarLogic.AbbreviateBindingKey(key)
     return s
 end
 
--- Resolve the macro body for an action button: a user override wins over the
--- built-in default, but only when it actually contains something (a blank or
--- whitespace-only override falls back to the default). Pure so the
--- default/override precedence is unit-tested without WoW.
--- @param defaultMacro  string  the built-in macrotext
--- @param override      string|nil  the user's saved override (may be "" / nil)
--- @return string  the macrotext to install on the secure button
-function ExsarLogic.ResolveActionMacro(defaultMacro, override)
-    if type(override) == "string" and override:match("%S") then
-        return override
-    end
-    return defaultMacro
-end
-
 -- Decide whether a pet action is currently usable given the pet's state, so the
 -- widget can grey out actions that can't fire (e.g. Revive when the pet is not
 -- dead, Mend when there is no pet). Pure so the gating is unit-tested without WoW.

@@ -3,13 +3,10 @@
 -- a SecureActionButtonTemplate button driven by macrotext (type="macro"), so a
 -- single button can carry a conditional smart-macro (e.g. Call/Revive/Dismiss).
 --
--- Macro source model ("inline + editable override"):
---   * PET_ACTIONS below holds the built-in default macrotext for each action.
---   * The user may override any action's macro in the config panel; overrides are
---     persisted to ExsarAddonDB.petManagement.macros[<key>] and pushed onto the
---     secure button out of combat. A blank override falls back to the default.
---   * Overrides are keyed by the stable `key` field, so reordering PET_ACTIONS
---     does not scramble saved overrides.
+-- Macro source model:
+--   * PET_ACTIONS below holds the macrotext for each action. Macros are fully
+--     addon-controlled -- there is no user override; whatever PET_ACTIONS
+--     specifies is pushed onto the secure button (out of combat).
 --
 -- Each slot is keybindable via Blizzard's Key Bindings UI (see Bindings.xml,
 -- EXSAR_PET_ACTION1..MAX_SLOTS) under the "ExsarAddon Pet" category; the bound
@@ -26,7 +23,7 @@ local pmDB = ExsarUI.MakeDB("petManagement")
 -- Action definitions
 -- =========================================================
 -- The real actions/icons/macros are supplied here. Each entry:
---   key      = stable id for the macro-override map in SavedVariables
+--   key      = stable id for the action (handy if keyed lookups are ever needed)
 --   name     = label (Key Bindings UI row + tooltip)
 --   icon     = texture path or fileID (use one of icon/iconItem/iconSpell/dynamicIcon)
 --   iconItem = item ID or name; the icon is resolved from the item via
@@ -46,7 +43,7 @@ local pmDB = ExsarUI.MakeDB("petManagement")
 --              via C_Container.GetContainerItemCooldown — TBC has no GetItemCooldown)
 --   gcd      = if true, the macro casts a GCD-triggering spell (Mend/Dismiss/Call
 --              Pet), so show the global cooldown sweep while it would be blocked
---   macro    = default macrotext (overridable in the config panel)
+--   macro    = the macrotext pushed onto the secure button (addon-controlled)
 --   requires = optional pet-state token gating availability (see
 --              ExsarLogic.PetActionEnabled): nil/"any", "active", "alive",
 --              "dead", "missing", "notdead". Actions whose requirement isn't met
@@ -100,18 +97,31 @@ local PET_ACTIONS = {
       gcd = true,
       requires = "alive" },
 
-    -- Calls a pet when none is out, so usable while dismissed; only greyed when
-    -- the pet is dead (the macro can't help a dead pet). Shows the net Steam Tonk
-    -- Controller charges in bags (countCharges sums charges across stacks, like
-    -- Drums of Battle in UsableItemsWidget).
+    -- The classic TBC hunter "save your pet" trick. Using the Steam Tonk
+    -- Controller instantly puts your active pet away (no Dismiss Pet channel),
+    -- so a living pet is yanked out of lethal damage (boss AoE / wipe) and comes
+    -- back unharmed instead of dead. CASING MATTERS: the /cancelaura name must
+    -- exactly match the buff ("Steam Tonk Controller") or you stay trapped in
+    -- the tonk. Worked as THREE deliberate clicks, not a fast mash (mashing can
+    -- leave you movement-locked): click 1 (have a living pet) uses the
+    -- controller -> pet saved + you transform (the /cancelaura no-ops because the
+    -- buff hasn't applied server-side yet, and Call Pet skips since you still
+    -- have a pet); click 2 (now pet-less + still the tonk) drops the tonk via
+    -- /cancelaura -- the Call Pet on the next line fails this press because the
+    -- cancel hasn't resolved server-side yet, so you're still a tonk; click 3
+    -- (untransformed, pet-less) finally fires Call Pet to resummon. The same
+    -- round-trip latency that forces the cancel onto its own click also forces
+    -- the resummon onto a third. Greyed when the pet is dead (requires="notdead"
+    -- -- the trick can't help a corpse, and we don't tonk-dismiss a dead pet).
+    -- Shows net Steam Tonk Controller charges in bags (countCharges sums charges
+    -- across stacks, like Drums of Battle in UsableItemsWidget).
     { key = "steamtonk", name = "Steam Tonk",
       iconItem = "Steam Tonk Controller",
       countItem = "Steam Tonk Controller", countCharges = true,
       cooldownItem = "Steam Tonk Controller",
       gcd = true,  -- macro's Call Pet branch triggers the GCD
-      macro = [[/use [nopet] Call Pet
-/cast [pet]Steam Tonk Controller
-/cancelaura Steam tonk Controller
+      macro = [[/use [@pet,exists,nodead] Steam Tonk Controller
+/cancelaura Steam Tonk Controller
 /use [nopet] Call Pet]],
       requires = "notdead" },
 }
@@ -137,20 +147,6 @@ local placeholderText = ExsarUI.CreatePlaceholder(frame, "Pet")
 frame:Hide()
 
 -- =========================================================
--- Macro override resolution
--- =========================================================
-
-local function macroOverrides()
-    local db = pmDB()
-    db.macros = db.macros or {}
-    return db.macros
-end
-
-local function ResolveMacro(action)
-    return ExsarLogic.ResolveActionMacro(action.macro, macroOverrides()[action.key])
-end
-
--- =========================================================
 -- Slot construction
 -- =========================================================
 -- Each icon is a SecureActionButtonTemplate button so the secure system can run
@@ -168,14 +164,11 @@ for i, action in ipairs(PET_ACTIONS) do
     s.btn:SetSize(ICON_SIZE, ICON_SIZE)
     s.btn:RegisterForClicks("AnyUp", "AnyDown")
     s.btn:SetAttribute("type", "macro")
-    -- Default macro only at construction: ExsarAddonDB (holding overrides) isn't
-    -- initialized until ADDON_LOADED, so don't touch the override DB here.
-    -- ApplyMacros() on ADDON_LOADED overlays any saved override.
     s.btn:SetAttribute("macrotext", action.macro)
     s.btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(action.name, 1, 1, 1)
-        GameTooltip:AddLine(ResolveMacro(action), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(action.macro, 0.7, 0.7, 0.7, true)
         GameTooltip:Show()
     end)
     s.btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -415,7 +408,7 @@ end
 local function ApplyMacros()
     if InCombatLockdown() then return end
     for _, s in ipairs(slots) do
-        s.btn:SetAttribute("macrotext", ResolveMacro(s.action))
+        s.btn:SetAttribute("macrotext", s.action.macro)
     end
 end
 
@@ -523,21 +516,6 @@ ExsarAddon.RegisterModule({
         end)
 
         y = ExsarUI.AddResetButton(parent, y, pmDB, frame, "Pet management", 200, -200)
-
-        -- Editable macro overrides: one box per action. The box shows the
-        -- effective macro (override if set, else default). Clearing it (or
-        -- restoring the default text) drops the override; any other text is
-        -- saved and pushed onto the secure button out of combat.
-        for _, action in ipairs(PET_ACTIONS) do
-            y = ExsarUI.AddMacroEditBox(parent, y, action.name .. " macro",
-                function() return ResolveMacro(action) end,
-                function(text)
-                    local trimmed = text and text:match("%S") and text or nil
-                    if trimmed == action.macro then trimmed = nil end
-                    macroOverrides()[action.key] = trimmed
-                    ApplyMacros()
-                end)
-        end
 
         return y
     end,

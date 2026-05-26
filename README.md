@@ -493,7 +493,7 @@ A compact, keybindable bar of pet-management buttons, so you can keep your pet c
 - **Smart icons:** A button can change its icon to match your pet's state. For example, the all-in-one pet button shows the Mend Pet icon when your pet is alive, the Revive Pet icon when it's dead, and the Call Pet icon when you have no pet.
 - **Charge counts:** Item-based buttons show how many you have left in the bottom-right corner — for example, the Steam Tonk button shows the net number of Steam Tonk Controller charges in your bags.
 - **Cooldowns:** Item-based buttons show a cooldown sweep and countdown timer when the item is on cooldown — for example, the Steam Tonk button reflects the Steam Tonk Controller's 30-second cooldown. Buttons whose macros cast a global-cooldown spell (Mend Pet, Dismiss Pet, Call Pet) also show a brief sweep during the global cooldown, so you can see when the action is momentarily blocked.
-- **Editable macros:** Every button has a built-in default macro that you can override in the config panel (Interface → AddOns → ExsarAddon → Pet Management). Type your own macro into a button's box to customize it; clear the box to go back to the default. Your overrides are saved between sessions.
+- **Built-in macros:** Each button runs a macro built into the addon and tuned for hunters; the macros aren't user-editable.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Pet* section). Pressing the key runs that slot's macro, including in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Pet Management](screenshots/pet-management.png) -->
