@@ -41,4 +41,5 @@
     <Binding name="EXSAR_PET_ACTION3" category="ExsarAddon Pet"/>
     <Binding name="EXSAR_PET_ACTION4" category="ExsarAddon Pet"/>
     <Binding name="EXSAR_PET_ACTION5" category="ExsarAddon Pet"/>
+    <Binding name="EXSAR_PET_ACTION6" category="ExsarAddon Pet"/>
 </Bindings>

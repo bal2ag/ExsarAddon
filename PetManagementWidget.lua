@@ -54,7 +54,7 @@ local pmDB = ExsarUI.MakeDB("petManagement")
 -- Bindings.xml — currently kept equal to the number of actions for a clean Key
 -- Bindings menu. When adding actions, grow PET_ACTIONS, MAX_SLOTS, and the
 -- Bindings.xml entries together.
-local MAX_SLOTS = 5
+local MAX_SLOTS = 6
 
 local PET_ACTIONS = {
     -- "Do the right thing" pet button: heals a living pet, revives a dead one,
@@ -124,6 +124,17 @@ local PET_ACTIONS = {
 /cancelaura Steam Tonk Controller
 /use [nopet] Call Pet]],
       requires = "notdead" },
+
+    -- Feed the pet to keep it happy: /cast Feed Pet enters feed mode, then
+    -- /use consumes the food. Needs a living pet, so greyed otherwise. Shows
+    -- the Clefthoof Ribs bag count so you can see when you're running low.
+    { key = "feedpet", name = "Feed Pet",
+      iconItem = "Clefthoof Ribs",
+      countItem = "Clefthoof Ribs",
+      gcd = true,  -- /cast Feed Pet triggers the GCD
+      macro = [[/cast [pet,nodead] Feed Pet
+/use Clefthoof Ribs]],
+      requires = "alive" },
 }
 
 -- =========================================================
