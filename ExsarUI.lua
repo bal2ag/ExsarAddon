@@ -1311,6 +1311,13 @@ end
 --                    and CD from GetInventoryItemCooldown (for a cooldowns bar)
 --   gcd              show the GCD sweep (macro kind)
 --   requires         pet-state grey-out token (PetActionEnabled)
+--   tooltipSpell     override for the hover tooltip's spell. By default a
+--                    macro/spell slot shows the tooltip of its associated spell
+--                    (the resolved `spells` entry, else `spell`, else `iconSpell`);
+--                    set this to a spell name to force that one, or to `false` to
+--                    force the name + macrotext tooltip (e.g. combo macros that
+--                    also fire a trinket). Slots with no single spell fall back
+--                    to name + macrotext anyway.
 --   activeBuff       player buff name; glows the border only while it is up
 --                    (action kind + opts.border; e.g. the active aspect)
 --   bindingLabel     override for the Key Bindings UI row label
@@ -1373,6 +1380,17 @@ local function AB_PlayerHasBuff(buffName)
         if name == buffName then return true end
     end
     return false
+end
+
+-- Show a spell's tooltip (by name or id) on GameTooltip via its hyperlink.
+-- Returns true if a tooltip was shown (false if the spell can't be linked, e.g.
+-- not known), so the caller can fall back to macro text.
+local function AB_ShowSpellTooltip(spell)
+    if not spell then return false end
+    local link = GetSpellLink(spell)
+    if not link then return false end
+    GameTooltip:SetHyperlink(link)
+    return true
 end
 
 -- Build "/cast <name>" macrotext for a spells list. The first known spell
@@ -1501,9 +1519,22 @@ function ExsarUI.CreateActionBar(opts)
             elseif s.kind == "item" then
                 GameTooltip:SetItemByID(s.itemId)
             else
-                GameTooltip:SetText(action.name, 1, 1, 1)
-                if s.macrotext then
-                    GameTooltip:AddLine(s.macrotext, 0.7, 0.7, 0.7, true)
+                -- Macro/spell slots: show the associated spell's tooltip when
+                -- there is one (the resolved spells entry, a spell-kind spell, or
+                -- the icon spell). tooltipSpell overrides: a name forces that
+                -- spell, or `false` forces the macro-text tooltip (combo macros).
+                -- Anything with no single spell falls back to name + macrotext.
+                local spell
+                if action.tooltipSpell ~= nil then
+                    spell = action.tooltipSpell
+                else
+                    spell = s.activeSpell or action.spell or action.iconSpell
+                end
+                if not (spell and AB_ShowSpellTooltip(spell)) then
+                    GameTooltip:SetText(action.name, 1, 1, 1)
+                    if s.macrotext then
+                        GameTooltip:AddLine(s.macrotext, 0.7, 0.7, 0.7, true)
+                    end
                 end
             end
             GameTooltip:Show()

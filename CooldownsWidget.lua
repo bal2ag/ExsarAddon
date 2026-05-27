@@ -52,18 +52,18 @@ local COOLDOWNS = {
     -- the spell (#showtooltip is ignored by our secure buttons). Kept alongside
     -- the standalone slots above so each can be bound to its own key.
     { key = "bw_trinket", name = "Bestial Wrath + Trinket",
-      macro = [[#showtooltip Bestial Wrath
-/cast Bestial Wrath
+      macro = [[/cast Bestial Wrath
 /use 14]],
       iconSpell       = "Bestial Wrath",
+      tooltipSpell    = false,  -- combo macro: show the macro text, not just the spell
       cooldownSpell   = "Bestial Wrath",
       cooldownTrinket = 14 },
 
     { key = "rf_trinket", name = "Rapid Fire + Trinket",
-      macro = [[#showtooltip Rapid Fire
-/cast Rapid Fire
+      macro = [[/cast Rapid Fire
 /use 13]],
       iconSpell       = "Rapid Fire",
+      tooltipSpell    = false,  -- combo macro: show the macro text, not just the spell
       cooldownSpell   = "Rapid Fire",
       cooldownTrinket = 13 },
 }
