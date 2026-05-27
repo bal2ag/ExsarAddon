@@ -129,7 +129,7 @@ local PET_ACTIONS = {
     -- /use consumes the food. Needs a living pet, so greyed otherwise. Shows
     -- the Clefthoof Ribs bag count so you can see when you're running low.
     { key = "feedpet", name = "Feed Pet",
-      iconItem = "Clefthoof Ribs",
+      iconSpell = "Feed Pet",
       countItem = "Clefthoof Ribs",
       gcd = true,  -- /cast Feed Pet triggers the GCD
       macro = [[/cast [pet,nodead] Feed Pet
