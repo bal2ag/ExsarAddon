@@ -42,4 +42,19 @@
     <Binding name="EXSAR_PET_ACTION4" category="ExsarAddon Pet"/>
     <Binding name="EXSAR_PET_ACTION5" category="ExsarAddon Pet"/>
     <Binding name="EXSAR_PET_ACTION6" category="ExsarAddon Pet"/>
+
+    <!--
+        Aspects widget slots. Grouped under their own "ExsarAddon Aspects"
+        category (literal label). The first carries header="EXSARADDONASPECTS"
+        (resolves via BINDING_HEADER_EXSARADDONASPECTS set by the action-bar
+        engine); the rest only need the category. Bindings are positional: the
+        key fires whatever aspect occupies ExsarAddonAspectBtnN. Labels resolve
+        via BINDING_NAME_EXSAR_ASPECTN globals set by ExsarUI.CreateActionBar.
+    -->
+    <Binding name="EXSAR_ASPECT1" header="EXSARADDONASPECTS" category="ExsarAddon Aspects"/>
+    <Binding name="EXSAR_ASPECT2" category="ExsarAddon Aspects"/>
+    <Binding name="EXSAR_ASPECT3" category="ExsarAddon Aspects"/>
+    <Binding name="EXSAR_ASPECT4" category="ExsarAddon Aspects"/>
+    <Binding name="EXSAR_ASPECT5" category="ExsarAddon Aspects"/>
+    <Binding name="EXSAR_ASPECT6" category="ExsarAddon Aspects"/>
 </Bindings>

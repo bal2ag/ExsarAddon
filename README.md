@@ -38,6 +38,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Rotation Helper](#rotation-helper)
   - [Range to Target](#range-to-target)
   - [Pet Management](#pet-management)
+  - [Aspects](#aspects)
 
 ## Installation
 
@@ -498,3 +499,15 @@ A compact, keybindable bar of pet-management buttons, so you can keep your pet c
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Pet* section). Pressing the key runs that slot's macro, including in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Pet Management](screenshots/pet-management.png) -->
+
+### Aspects
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A compact, keybindable vertical bar of your Hunter aspects, so you can swap aspects quickly without hunting through your spellbook or action bars.
+
+- **What it does:** One button per aspect — Aspect of the Hawk, Viper, Cheetah, Pack, Wild, and Monkey. Click or press its key to cast that aspect.
+- **Active aspect highlighted:** The aspect you currently have active shows an animated marching-ants border, so you can see at a glance which one is up.
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Aspects* section). Pressing the key casts that aspect, including in combat. The bound key is shown in the top-right corner of the icon.
+
+<!-- ![Aspects](screenshots/aspects.png) -->

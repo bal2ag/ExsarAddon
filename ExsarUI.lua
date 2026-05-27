@@ -1298,6 +1298,8 @@ end
 --   cooldownDebuff   player debuff name driving the CD (e.g. Tinnitus)
 --   gcd              show the GCD sweep (macro kind)
 --   requires         pet-state grey-out token (PetActionEnabled)
+--   activeBuff       player buff name; glows the border only while it is up
+--                    (action kind + opts.border; e.g. the active aspect)
 --   bindingLabel     override for the Key Bindings UI row label
 -- Escape hooks (called on the poll tick; consume returns):
 --   resolveActive(s)        -> { id, name, icon } current item (item kind)
@@ -1305,10 +1307,12 @@ end
 --   getCount(s)             -> number
 --   resolveIcon(s, petState)-> texture
 --   isEnabled(s, petState)  -> bool
+--   isActive(s, petState)   -> bool (drives the border; overrides activeBuff)
 --   tooltip(s, GameTooltip) -> custom tooltip
 --
 -- opts: name (DB namespace), frameName, buttonPrefix, placeholder, actions,
---   layout ("horizontal"|"vertical"|"grid"), gridCols, border, moduleName,
+--   layout ("horizontal"|"vertical"|"grid"), gridCols, border (gold 1px ring
+--   active indicator) / activeAnts (marching-ants active indicator), moduleName,
 --   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
 --   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval.
 -- Returns a handle { frame, slots, Refresh, ApplyLayout, dbFunc }.
@@ -1317,6 +1321,12 @@ local AB_ICON_SIZE = 29
 local AB_ICON_GAP  = 4
 local AB_PADDING   = 6
 local AB_GCD_PROBE = "Wing Clip"  -- no CD of its own -> GetSpellCooldown = GCD only
+
+-- Marching-ants active indicator (opts.activeAnts) -- standard params.
+local AB_DASH_BORDER_W = 2
+local AB_DASH_COUNT    = 16
+local AB_DASH_SPEED    = 1.5
+local AB_DASH_TAIL     = 5
 
 -- Resolve an icon spec (string path, { spell=name }, or { item=id|name }) to a
 -- texture, or nil if not yet resolvable (e.g. uncached item).
@@ -1339,6 +1349,16 @@ local function AB_DebuffCooldown(debuffName)
         end
     end
     return nil, nil
+end
+
+-- True if the player currently has a buff with the given name (any rank).
+local function AB_PlayerHasBuff(buffName)
+    for i = 1, 40 do
+        local name = UnitBuff("player", i)
+        if not name then break end
+        if name == buffName then return true end
+    end
+    return false
 end
 
 -- start,duration for an item's cooldown, read from whichever bag slot holds it
@@ -1463,6 +1483,11 @@ function ExsarUI.CreateActionBar(opts)
         s.cooldown = ExsarUI.CreateSweep(btn)
         s.cooldown:EnableMouse(false)
         s.timeText = ExsarUI.CreateCountdownText(btn)
+
+        -- Marching-ants active indicator (alternative to the glow border).
+        if opts.activeAnts then
+            s.dashes = ExsarUI.BuildDashes(btn, AB_ICON_SIZE, AB_DASH_COUNT, AB_DASH_BORDER_W)
+        end
 
         s.keyText = btn:CreateFontString(nil, "OVERLAY")
         s.keyText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
@@ -1681,6 +1706,7 @@ function ExsarUI.CreateActionBar(opts)
                     s.icon:SetAlpha(0.35)
                     s.cooldown:SetCooldown(0, 0)
                     s.timeText:SetText("")
+                    s.active = false
                     if s.border then s.border:Hide() end
                 else
                     local start, duration
@@ -1702,7 +1728,8 @@ function ExsarUI.CreateActionBar(opts)
                         s.cooldown:SetCooldown(0, 0)
                         s.timeText:SetText("")
                     end
-                    if s.border then s.border:SetShown(s.known and true or false) end
+                    s.active = s.known and true or false
+                    if s.border then s.border:SetShown(s.active) end
                 end
 
             else  -- macro / spell: greyed by a predicate, sweep from item/debuff/GCD
@@ -1753,7 +1780,15 @@ function ExsarUI.CreateActionBar(opts)
                 end
                 s.icon:SetDesaturated(not enabled)
                 s.icon:SetAlpha(enabled and 1.0 or 0.35)
-                if s.border then s.border:SetShown(true) end
+                -- Active indicator: glow the slot if it defines an "active"
+                -- predicate (e.g. the aspect whose buff is up), else always on.
+                -- Drives both the glow border and the marching-ants (s.active).
+                local active
+                if a.isActive then active = a.isActive(s, petState) and true or false
+                elseif a.activeBuff then active = AB_PlayerHasBuff(a.activeBuff)
+                else active = true end
+                s.active = active
+                if s.border then s.border:SetShown(active) end
             end
         end
     end
@@ -1766,6 +1801,21 @@ function ExsarUI.CreateActionBar(opts)
     end
 
     ExsarUI.CreatePoller(frame, opts.pollInterval or 0.1, Refresh)
+
+    -- Marching-ants active indicator: smooth per-frame animation on a dedicated
+    -- always-on ticker (each slot's s.active is refreshed by the poll/UNIT_AURA;
+    -- inactive slots get their dashes zeroed since the button stays shown).
+    if opts.activeAnts then
+        local antTicker = CreateFrame("Frame")
+        antTicker:SetScript("OnUpdate", function()
+            ExsarUI.AnimateDashes(slots, GetTime(), AB_DASH_SPEED, AB_DASH_COUNT, AB_DASH_TAIL)
+            for _, s in ipairs(slots) do
+                if not s.active then
+                    for _, d in ipairs(s.dashes) do d:SetAlpha(0) end
+                end
+            end
+        end)
+    end
 
     -- ---------- events ----------
     frame:RegisterEvent("ADDON_LOADED")

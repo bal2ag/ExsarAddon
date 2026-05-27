@@ -34,3 +34,4 @@ AmmoTracker.lua
 RotationHelper.lua
 RangeToTargetWidget.lua
 PetManagementWidget.lua
+AspectsWidget.lua
