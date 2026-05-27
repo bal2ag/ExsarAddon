@@ -1260,3 +1260,591 @@ function ExsarUI.SecureSetAttribute(frame, key, value)
     local id = (frame:GetName() or tostring(frame)) .. "#" .. key
     secureAttrQueue[id] = { frame = frame, key = key, value = value }
 end
+
+-- =========================================================
+-- Bindable icon action bar engine
+-- =========================================================
+-- Shared engine behind the keybindable mini action bars (UsableItemsWidget,
+-- PetManagementWidget, and future themed bars). It owns the common chassis -- a
+-- movable frame, secure SecureActionButtonTemplate slots, layout, cooldown
+-- sweep / count / hotkey-label rendering, the keybind bridge, slash reset,
+-- config rows and module registration -- while each slot's behavior is
+-- described by a declarative action spec, with optional resolver-callback
+-- escape hatches for the genuinely bespoke cases.
+--
+-- Pure selection logic lives in ExsarLogic (SelectBestRank, SelectFirstInStock,
+-- CooldownState, PetActionEnabled, PetStateKey); only mechanism lives here.
+--
+-- A slot has a kind: "item" (UsableItems behavior -- tracks bag stock, dims
+-- when out of stock or on cooldown, optional rank/alternate swapping, gold
+-- border ring) or "macro"/"spell" (PetManagement behavior -- always present,
+-- greyed by a pet-state/`requires` predicate, drives a GCD/item/debuff sweep).
+-- Kind is `action.type` or inferred (macro field -> "macro", spell -> "spell",
+-- else "item").
+--
+-- Action spec (declarative defaults):
+--   key, name        stable id / display label (binding row + tooltip)
+--   type             "item" | "macro" | "spell" (optional; inferred otherwise)
+--   macro / spell    secure payload for macro/spell kinds
+--   id, name         item id + name for item kind (name doubles as the label)
+--   icon/iconItem/iconSpell  static icon source (path / item / spell), retried
+--   dynamicIcon      pet-state map { alive=, dead=, missing= } of icon specs
+--   ranks            highest-first interchangeable item ids (SelectBestRank)
+--   alternates       first-in-stock substitutes ({id,name,zones=}) for item kind
+--   hideWhenEmpty / groupFallback   grid reflow (item kind, grid layout)
+--   countItem        bag-count item (true = "the active item"); useCharges/
+--                    countCharges sum charges across stacks
+--   cooldownItem     item whose CD drives the sweep (macro kind)
+--   cooldownDebuff   player debuff name driving the CD (e.g. Tinnitus)
+--   gcd              show the GCD sweep (macro kind)
+--   requires         pet-state grey-out token (PetActionEnabled)
+--   bindingLabel     override for the Key Bindings UI row label
+-- Escape hooks (called on the poll tick; consume returns):
+--   resolveActive(s)        -> { id, name, icon } current item (item kind)
+--   getCooldown(s)          -> start, duration, isRealCD
+--   getCount(s)             -> number
+--   resolveIcon(s, petState)-> texture
+--   isEnabled(s, petState)  -> bool
+--   tooltip(s, GameTooltip) -> custom tooltip
+--
+-- opts: name (DB namespace), frameName, buttonPrefix, placeholder, actions,
+--   layout ("horizontal"|"vertical"|"grid"), gridCols, border, moduleName,
+--   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
+--   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval.
+-- Returns a handle { frame, slots, Refresh, ApplyLayout, dbFunc }.
+
+local AB_ICON_SIZE = 29
+local AB_ICON_GAP  = 4
+local AB_PADDING   = 6
+local AB_GCD_PROBE = "Wing Clip"  -- no CD of its own -> GetSpellCooldown = GCD only
+
+-- Resolve an icon spec (string path, { spell=name }, or { item=id|name }) to a
+-- texture, or nil if not yet resolvable (e.g. uncached item).
+local function AB_ResolveIconSpec(spec)
+    if type(spec) == "string" then return spec end
+    if type(spec) == "table" then
+        if spec.spell then return GetSpellTexture(spec.spell) end
+        if spec.item  then return select(10, GetItemInfo(spec.item)) end
+    end
+    return nil
+end
+
+-- start,duration for a named player debuff currently active (else nil,nil).
+local function AB_DebuffCooldown(debuffName)
+    for i = 1, 40 do
+        local name, _, _, _, duration, expTime = UnitDebuff("player", i)
+        if not name then break end
+        if name == debuffName and duration and duration > 0 then
+            return expTime - duration, duration
+        end
+    end
+    return nil, nil
+end
+
+-- start,duration for an item's cooldown, read from whichever bag slot holds it
+-- (TBC has no GetItemCooldown; GetContainerItemCooldown also reflects shared
+-- category cooldowns). Returns nil,nil if the item isn't in bags.
+local function AB_ItemCooldown(itemId)
+    if not itemId then return nil, nil end
+    for bag = 0, 4 do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
+            if C_Container.GetContainerItemID(bag, slot) == itemId then
+                return C_Container.GetContainerItemCooldown(bag, slot)
+            end
+        end
+    end
+    return nil, nil
+end
+
+function ExsarUI.CreateActionBar(opts)
+    local dbFunc         = ExsarUI.MakeDB(opts.name)
+    local actions        = opts.actions
+    local layout         = opts.layout or "horizontal"
+    local buttonPrefix   = opts.buttonPrefix
+    local defaultX       = opts.defaultX or 0
+    local defaultY       = opts.defaultY or 0
+    local FormatCooldown = ExsarLogic.FormatCooldown
+    local MIN_CD         = ExsarLogic.MIN_COOLDOWN_DURATION
+
+    local frame = CreateFrame("Frame", opts.frameName, UIParent)
+    ExsarUI.SetupMovableFrame(frame, dbFunc)
+    local placeholderText = ExsarUI.CreatePlaceholder(frame, opts.placeholder or "Bar")
+    frame:Hide()
+
+    -- Fixed grid width = widest column + 1 (or explicit opts.gridCols).
+    local gridCols = opts.gridCols
+    if layout == "grid" and not gridCols then
+        gridCols = 1
+        for _, a in ipairs(actions) do
+            if a.col and (a.col + 1) > gridCols then gridCols = a.col + 1 end
+        end
+    end
+
+    -- ---------- slot construction ----------
+    local slots = {}
+    for i, action in ipairs(actions) do
+        local kind = action.type
+        if not kind then
+            if action.macro then kind = "macro"
+            elseif action.spell then kind = "spell"
+            else kind = "item" end
+        end
+
+        local s = {
+            action = action, kind = kind,
+            col = action.col, row = action.row,
+            count = -1, known = false,
+        }
+
+        local btn = CreateFrame("Button", buttonPrefix .. i, frame,
+                                "SecureActionButtonTemplate")
+        btn:SetSize(AB_ICON_SIZE, AB_ICON_SIZE)
+        btn:RegisterForClicks("AnyUp", "AnyDown")  -- both required on Anniversary
+        s.btn = btn
+
+        -- Initial secure attributes (we are out of combat at file load).
+        if kind == "macro" then
+            btn:SetAttribute("type", "macro")
+            btn:SetAttribute("macrotext", action.macro)
+        elseif kind == "spell" then
+            btn:SetAttribute("type", "spell")
+            btn:SetAttribute("spell", action.spell)
+        else  -- item
+            s.itemId   = action.id
+            s.itemName = action.name
+            btn:SetAttribute("type", "item")
+            btn:SetAttribute("item",
+                action.hideWhenEmpty and ("item:" .. (action.id or 0)) or action.name)
+            if C_Item and C_Item.RequestLoadItemDataByID then
+                for _, alt in ipairs(action.alternates or {}) do
+                    C_Item.RequestLoadItemDataByID(alt.id)
+                end
+                for _, rk in ipairs(action.ranks or {}) do
+                    C_Item.RequestLoadItemDataByID(rk.id)
+                end
+            end
+        end
+
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if action.tooltip then
+                action.tooltip(s, GameTooltip)
+            elseif s.kind == "item" then
+                GameTooltip:SetItemByID(s.itemId)
+            else
+                GameTooltip:SetText(action.name, 1, 1, 1)
+                if action.macro then
+                    GameTooltip:AddLine(action.macro, 0.7, 0.7, 0.7, true)
+                end
+            end
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        -- Optional gold 1px border ring (created before slotBg so only the
+        -- outer ring shows once the opaque backing covers the center).
+        if opts.border then
+            s.border = ExsarUI.CreateGlow(btn, 1, 0.82, 0.25, 0.85, 1)
+        end
+        local slotBg = btn:CreateTexture(nil, "BACKGROUND")
+        slotBg:SetAllPoints()
+        slotBg:SetColorTexture(0, 0, 0, 1.0)
+
+        s.icon = ExsarUI.CreateIcon(btn)
+        if action.icon then
+            s.icon:SetTexture(action.icon)
+        elseif kind == "item" then
+            s.icon:SetTexture(select(10, GetItemInfo(s.itemId))
+                or "Interface\\Icons\\INV_Misc_QuestionMark")
+        else
+            s.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        end
+
+        s.cooldown = ExsarUI.CreateSweep(btn)
+        s.cooldown:EnableMouse(false)
+        s.timeText = ExsarUI.CreateCountdownText(btn)
+
+        s.keyText = btn:CreateFontString(nil, "OVERLAY")
+        s.keyText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        s.keyText:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 1, -1)
+        s.keyText:SetJustifyH("RIGHT")
+        s.keyText:SetTextColor(0.9, 0.9, 0.9, 1)
+        s.keyText:SetText("")
+
+        s.countText = btn:CreateFontString(nil, "OVERLAY")
+        s.countText:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+        s.countText:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 1, 1)
+        s.countText:SetTextColor(1, 1, 0.8, 1)
+        s.countText:SetText("")
+
+        btn:Hide()  -- ApplyLayout shows/positions
+        slots[i] = s
+    end
+
+    -- ---------- layout (protected: out of combat only) ----------
+    local function ApplyLayout()
+        if InCombatLockdown() then return end
+        local n = #slots
+        if n == 0 then
+            placeholderText:Show()
+            frame:SetSize(AB_ICON_SIZE + AB_PADDING * 2, AB_ICON_SIZE + AB_PADDING * 2)
+            frame:Show()
+            return
+        end
+        placeholderText:Hide()
+
+        if layout == "horizontal" then
+            for i, s in ipairs(slots) do
+                s.btn:ClearAllPoints()
+                s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                    AB_PADDING + (i - 1) * (AB_ICON_SIZE + AB_ICON_GAP), -AB_PADDING)
+                s.btn:Show()
+            end
+            frame:SetSize(AB_PADDING * 2 + n * AB_ICON_SIZE + (n - 1) * AB_ICON_GAP,
+                          AB_ICON_SIZE + AB_PADDING * 2)
+
+        elseif layout == "vertical" then
+            for i, s in ipairs(slots) do
+                s.btn:ClearAllPoints()
+                s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                    AB_PADDING, -(AB_PADDING + (i - 1) * (AB_ICON_SIZE + AB_ICON_GAP)))
+                s.btn:Show()
+            end
+            frame:SetSize(AB_ICON_SIZE + AB_PADDING * 2,
+                          AB_PADDING * 2 + n * AB_ICON_SIZE + (n - 1) * AB_ICON_GAP)
+
+        else  -- grid, with hideWhenEmpty / groupFallback dynamic-row reflow
+            local groupHasAny = {}
+            for _, s in ipairs(slots) do
+                if s.action.hideWhenEmpty and s.known then
+                    groupHasAny[s.col .. "," .. s.row] = true
+                end
+            end
+            local dynRow = {}
+            local maxRow = 0
+            for _, s in ipairs(slots) do
+                if s.row and s.row > maxRow then maxRow = s.row end
+            end
+            for _, s in ipairs(slots) do
+                local a = s.action
+                if a.hideWhenEmpty and not s.known then
+                    local key = s.col .. "," .. s.row
+                    if a.groupFallback and not groupHasAny[key] then
+                        s.btn:ClearAllPoints()
+                        s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                            AB_PADDING + s.col * (AB_ICON_SIZE + AB_ICON_GAP),
+                            -(AB_PADDING + s.row * (AB_ICON_SIZE + AB_ICON_GAP)))
+                        s.btn:Show()
+                    else
+                        s.btn:Hide()
+                    end
+                else
+                    local row = s.row
+                    if a.hideWhenEmpty then
+                        local key = s.col .. "," .. s.row
+                        row = dynRow[key] or s.row
+                        dynRow[key] = row + 1
+                    end
+                    if row > maxRow then maxRow = row end
+                    s.btn:ClearAllPoints()
+                    s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                        AB_PADDING + s.col * (AB_ICON_SIZE + AB_ICON_GAP),
+                        -(AB_PADDING + row * (AB_ICON_SIZE + AB_ICON_GAP)))
+                    s.btn:Show()
+                end
+            end
+            local rows = maxRow + 1
+            local gw = gridCols * AB_ICON_SIZE + (gridCols - 1) * AB_ICON_GAP + AB_PADDING * 2
+            frame:SetSize(gw, rows * AB_ICON_SIZE + (rows - 1) * AB_ICON_GAP + AB_PADDING * 2)
+        end
+        frame:Show()
+    end
+
+    -- ---------- static icon resolution (retried until item/spell data cached) ----------
+    local function ResolveStaticIcons()
+        for _, s in ipairs(slots) do
+            local a = s.action
+            if not s.iconResolved and (a.iconItem or a.iconSpell) then
+                local tex = a.iconItem and select(10, GetItemInfo(a.iconItem))
+                    or (a.iconSpell and GetSpellTexture(a.iconSpell))
+                if tex then s.icon:SetTexture(tex); s.iconResolved = true end
+            end
+            if s.kind == "item" and not s.icon:GetTexture() then
+                local tex = select(10, GetItemInfo(s.itemId))
+                if tex then s.icon:SetTexture(tex) end
+            end
+        end
+    end
+
+    -- ---------- active-item swap (rank/alternate, protected: out of combat) ----------
+    local function ResolveActiveAll()
+        if InCombatLockdown() then return end
+        local zone = GetRealZoneText()
+        for _, s in ipairs(slots) do
+            if s.kind == "item" then
+                local a = s.action
+                local chosen
+                if a.resolveActive then
+                    chosen = a.resolveActive(s)
+                elseif a.ranks then
+                    chosen = ExsarLogic.SelectBestRank(a.ranks, GetItemCount)
+                elseif a.alternates then
+                    chosen = ExsarLogic.SelectFirstInStock(
+                        { id = a.id, name = a.name }, a.alternates, zone, GetItemCount)
+                end
+                if chosen and chosen.id ~= s.itemId then
+                    s.itemId, s.itemName = chosen.id, chosen.name
+                    s.btn:SetAttribute("item",
+                        a.hideWhenEmpty and ("item:" .. chosen.id) or chosen.name)
+                    s.icon:SetTexture(chosen.icon or select(10, GetItemInfo(chosen.id)) or nil)
+                    s.count = -1  -- force countText refresh
+                end
+            end
+        end
+    end
+
+    -- ---------- re-apply protected secure attributes (on PLAYER_REGEN_ENABLED) ----------
+    local function ApplyAttributes()
+        if InCombatLockdown() then return end
+        for _, s in ipairs(slots) do
+            if s.kind == "macro" then
+                s.btn:SetAttribute("macrotext", s.action.macro)
+            elseif s.kind == "spell" then
+                s.btn:SetAttribute("spell", s.action.spell)
+            else
+                s.btn:SetAttribute("item",
+                    s.action.hideWhenEmpty and ("item:" .. (s.itemId or 0)) or s.itemName)
+            end
+        end
+    end
+
+    -- ---------- bag counts + in-stock state ----------
+    local function ScanCounts()
+        local needLayout = false
+        for _, s in ipairs(slots) do
+            local a = s.action
+            local nval
+            if a.getCount then
+                nval = a.getCount(s) or 0
+            else
+                local countItem
+                if a.countItem == true then countItem = s.itemId
+                elseif a.countItem ~= nil then countItem = a.countItem
+                elseif s.kind == "item" then countItem = s.itemId end
+                if countItem then
+                    local charges = a.countCharges or a.useCharges
+                    nval = GetItemCount(countItem, false, charges and true or false)
+                end
+            end
+            if nval ~= nil then
+                local wasKnown = s.known
+                if s.kind == "item" then s.known = nval > 0 end
+                if a.hideWhenEmpty and wasKnown ~= s.known then needLayout = true end
+                if nval ~= s.count then
+                    s.count = nval
+                    s.countText:SetText(tostring(nval))
+                end
+            end
+        end
+        if needLayout then ApplyLayout() end
+    end
+
+    -- ---------- per-slot visuals (icons / cooldown / grey-out / border) ----------
+    local function UpdateVisuals()
+        local now = GetTime()
+        local exists = UnitExists("pet")
+        local petState = {
+            exists = exists and true or false,
+            alive  = (exists and not UnitIsDead("pet")) and true or false,
+        }
+        local stateKey = ExsarLogic.PetStateKey(petState)
+
+        local gcdStart, gcdDuration = GetSpellCooldown(AB_GCD_PROBE)
+        local gcdActive = gcdStart and gcdStart > 0 and gcdDuration and gcdDuration > 0
+
+        for _, s in ipairs(slots) do
+            local a = s.action
+
+            -- Dynamic / hook icon (e.g. all-in-one pet button).
+            if a.resolveIcon then
+                local tex = a.resolveIcon(s, petState)
+                if tex then s.icon:SetTexture(tex) end
+            elseif a.dynamicIcon then
+                local tex = AB_ResolveIconSpec(a.dynamicIcon[stateKey])
+                if tex then s.icon:SetTexture(tex) end
+            end
+
+            if s.kind == "item" then
+                -- Out of stock with no debuff CD: greyed, no cooldown.
+                if not s.known and not a.cooldownDebuff then
+                    s.icon:SetDesaturated(true)
+                    s.icon:SetAlpha(0.35)
+                    s.cooldown:SetCooldown(0, 0)
+                    s.timeText:SetText("")
+                    if s.border then s.border:Hide() end
+                else
+                    local start, duration
+                    if a.cooldownDebuff then
+                        start, duration = AB_DebuffCooldown(a.cooldownDebuff)
+                    else
+                        start, duration = AB_ItemCooldown(s.itemId)
+                    end
+                    local onCD = start and start > 0 and duration and duration > MIN_CD
+                    if onCD then
+                        s.icon:SetDesaturated(true)
+                        s.icon:SetAlpha(0.4)
+                        s.cooldown:SetCooldown(start, duration)
+                        local remaining = (start + duration) - now
+                        s.timeText:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+                    else
+                        s.icon:SetDesaturated(not s.known)
+                        s.icon:SetAlpha(s.known and 1.0 or 0.35)
+                        s.cooldown:SetCooldown(0, 0)
+                        s.timeText:SetText("")
+                    end
+                    if s.border then s.border:SetShown(s.known and true or false) end
+                end
+
+            else  -- macro / spell: greyed by a predicate, sweep from item/debuff/GCD
+                local start, duration, isRealCD
+                if a.getCooldown then
+                    start, duration, isRealCD = a.getCooldown(s)
+                else
+                    if a.cooldownItem then
+                        if not s.cooldownItemId then
+                            s.cooldownItemId = select(1, GetItemInfoInstant(a.cooldownItem))
+                        end
+                        local st, dur = AB_ItemCooldown(s.cooldownItemId)
+                        if ExsarLogic.CooldownState(st, dur) == "cooldown" then
+                            start, duration, isRealCD = st, dur, true
+                        end
+                    end
+                    if a.cooldownDebuff then
+                        local st, dur = AB_DebuffCooldown(a.cooldownDebuff)
+                        if st and dur and dur > MIN_CD
+                           and (not start or (st + dur) > (start + duration)) then
+                            start, duration, isRealCD = st, dur, true
+                        end
+                    end
+                    if a.gcd and gcdActive
+                       and (not start or (gcdStart + gcdDuration) > (start + duration)) then
+                        start, duration, isRealCD = gcdStart, gcdDuration, false
+                    end
+                end
+
+                if start then
+                    s.cooldown:SetCooldown(start, duration)
+                    if isRealCD then
+                        local remaining = (start + duration) - now
+                        s.timeText:SetText(remaining > 0 and FormatCooldown(remaining) or "")
+                    else
+                        s.timeText:SetText("")  -- brief GCD: sweep only, no number
+                    end
+                else
+                    s.cooldown:SetCooldown(0, 0)
+                    s.timeText:SetText("")
+                end
+
+                local enabled
+                if a.isEnabled then
+                    enabled = a.isEnabled(s, petState) and true or false
+                else
+                    enabled = ExsarLogic.PetActionEnabled(a.requires, petState)
+                end
+                s.icon:SetDesaturated(not enabled)
+                s.icon:SetAlpha(enabled and 1.0 or 0.35)
+                if s.border then s.border:SetShown(true) end
+            end
+        end
+    end
+
+    local function Refresh()
+        ResolveStaticIcons()
+        ResolveActiveAll()
+        ScanCounts()
+        UpdateVisuals()
+    end
+
+    ExsarUI.CreatePoller(frame, opts.pollInterval or 0.1, Refresh)
+
+    -- ---------- events ----------
+    frame:RegisterEvent("ADDON_LOADED")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    frame:RegisterEvent("SPELLS_CHANGED")
+    frame:RegisterEvent("BAG_UPDATE")
+    frame:RegisterEvent("BAG_UPDATE_COOLDOWN")
+    frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    frame:RegisterEvent("UNIT_PET")
+    frame:RegisterEvent("UNIT_AURA")
+    frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    for _, ev in ipairs(opts.extraEvents or {}) do frame:RegisterEvent(ev) end
+
+    frame:SetScript("OnEvent", function(self, event, arg1)
+        if event == "ADDON_LOADED" then
+            if arg1 ~= ADDON_NAME then return end
+            ExsarUI.RestorePosition(self, dbFunc, defaultX, defaultY)
+            ApplyAttributes()
+            ApplyLayout()
+            Refresh()
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            ApplyLayout()
+            Refresh()
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            ApplyAttributes()
+            ResolveActiveAll()
+            ApplyLayout()
+            Refresh()
+        elseif event == "UNIT_PET" or event == "UNIT_AURA" then
+            if arg1 == "player" then Refresh() end
+        else
+            Refresh()
+        end
+    end)
+
+    -- ---------- keybindings ----------
+    if opts.bindingHeaderGlobal and opts.bindingHeaderText then
+        _G[opts.bindingHeaderGlobal] = opts.bindingHeaderText
+    end
+    if opts.bindingPrefix then
+        local bindingCount = opts.bindingCount or #actions
+        for i = 1, bindingCount do
+            local a = actions[i]
+            _G["BINDING_NAME_" .. opts.bindingPrefix .. i] =
+                (a and (a.bindingLabel or a.name))
+                or ((opts.placeholder or "Bar") .. " Action " .. i)
+        end
+
+        ExsarUI.SetupKeybindBridge({
+            owner         = frame,
+            bindingPrefix = opts.bindingPrefix,
+            buttonPrefix  = buttonPrefix,
+            count         = #slots,
+            onSlotKey     = function(index, key)
+                local s = slots[index]
+                if s then s.keyText:SetText(ExsarLogic.AbbreviateBindingKey(key) or "") end
+            end,
+        })
+    end
+
+    -- ---------- slash reset + config + module registration ----------
+    if opts.slashReset then
+        ExsarUI.AddSlashReset(opts.slashReset, frame, dbFunc,
+            opts.configName or opts.moduleName or opts.name, defaultX, defaultY)
+    end
+
+    ExsarAddon.RegisterModule({
+        name = opts.moduleName or opts.name,
+        BuildConfig = function(parent, y)
+            y = ExsarUI.AddScaleSlider(parent, y, dbFunc, frame)
+            y = ExsarUI.AddLockCheckbox(parent, y, dbFunc, frame, function() ApplyLayout() end)
+            y = ExsarUI.AddResetButton(parent, y, dbFunc, frame,
+                opts.configName or opts.moduleName or opts.name, defaultX, defaultY)
+            return y
+        end,
+    })
+
+    return { frame = frame, slots = slots, Refresh = Refresh,
+             ApplyLayout = ApplyLayout, dbFunc = dbFunc }
+end

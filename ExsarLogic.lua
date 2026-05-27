@@ -297,6 +297,27 @@ function ExsarLogic.SelectBestRank(ranks, getCount)
     return best or ranks[1]
 end
 
+--- Select the first in-stock alternate item, falling back to the primary.
+-- Mirrors the UsableItemsWidget swap rule: walk the ordered alternates and
+-- return the first one whose optional zone gate passes and which the player
+-- carries (count > 0); if none qualify, return the primary. Unlike
+-- SelectBestRank, order is "first match wins" (so zone-restricted alternates
+-- should come first), and the primary is the default rather than a ranked top.
+-- @param primary     table  { id, name, ... } — the default when no alt qualifies
+-- @param alternates  array of { id, name, zones = { [zoneName]=true } | nil }
+-- @param zone        string  current zone name (matched against alt.zones)
+-- @param getCount    function(id) → number (bag count for that item ID)
+-- @return the chosen entry (an alternate, or the primary)
+function ExsarLogic.SelectFirstInStock(primary, alternates, zone, getCount)
+    for _, alt in ipairs(alternates or {}) do
+        local zoneOk = not alt.zones or alt.zones[zone]
+        if zoneOk and getCount(alt.id) > 0 then
+            return alt
+        end
+    end
+    return primary
+end
+
 --- Pick the soonest-to-expire weapon enchant matching a target enchant ID.
 -- Temporary weapon enchants (sharpening / weightstones) can be applied to both
 -- weapons at once; the widget tracks whichever hand will run out first so the

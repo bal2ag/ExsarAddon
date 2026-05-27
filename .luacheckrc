@@ -136,28 +136,11 @@ files["tests/test_*.lua"] = {
     read_globals = { ["_G"] = { other_fields = true, read_only = false } },
 }
 
--- UsableItemsWidget defines Blizzard binding label globals (read by the Key
--- Bindings UI; see Bindings.xml).
-files["UsableItemsWidget.lua"] = {
-    globals = {
-        "BINDING_HEADER_EXSARADDON",
-        "BINDING_NAME_EXSAR_USE_ITEM1",
-        "BINDING_NAME_EXSAR_USE_ITEM2",
-        "BINDING_NAME_EXSAR_USE_ITEM3",
-        "BINDING_NAME_EXSAR_USE_ITEM4",
-        "BINDING_NAME_EXSAR_USE_ITEM5",
-        "BINDING_NAME_EXSAR_USE_ITEM6",
-        "BINDING_NAME_EXSAR_USE_ITEM7",
-    },
-}
-
--- PetManagementWidget defines Blizzard binding label globals; the per-slot
--- BINDING_NAME_EXSAR_PET_ACTIONn names are set dynamically via _G in a loop.
-files["PetManagementWidget.lua"] = {
-    globals = {
-        "_G",
-        "BINDING_HEADER_EXSARADDONPET",
-    },
+-- ExsarUI.CreateActionBar sets the Blizzard binding label/header globals
+-- (BINDING_NAME_*, BINDING_HEADER_*) dynamically via _G for every action bar it
+-- builds; read by the Key Bindings UI (see Bindings.xml).
+files["ExsarUI.lua"] = {
+    globals = { "_G" },
 }
 
 -- ExsarLogic sets itself as a global via _G

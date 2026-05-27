@@ -907,6 +907,61 @@ describe("SelectBestRank", function()
 end)
 
 -- =========================================================
+-- SelectFirstInStock
+-- =========================================================
+
+describe("SelectFirstInStock", function()
+    local primary = { id = 100, name = "Primary" }
+    local TK = { ["Tempest Keep"] = true }
+    local alternates = {
+        { id = 1, name = "Zone Alt", zones = TK },
+        { id = 2, name = "Plain Alt" },
+        { id = 3, name = "Other Alt" },
+    }
+
+    it("returns the primary when no alternates are in stock", function()
+        local result = Logic.SelectFirstInStock(primary, alternates, "Orgrimmar",
+            function() return 0 end)
+        assert.are.equal(100, result.id)
+    end)
+
+    it("returns the primary when alternates list is nil", function()
+        local result = Logic.SelectFirstInStock(primary, nil, "Orgrimmar",
+            function() return 5 end)
+        assert.are.equal(100, result.id)
+    end)
+
+    it("returns the first in-stock non-zoned alternate", function()
+        local counts = { [2] = 3, [3] = 5 }
+        local result = Logic.SelectFirstInStock(primary, alternates, "Orgrimmar",
+            function(id) return counts[id] or 0 end)
+        assert.are.equal(2, result.id)
+    end)
+
+    it("skips a zone-restricted alternate when out of zone even if in stock", function()
+        local counts = { [1] = 5, [2] = 5 }
+        local result = Logic.SelectFirstInStock(primary, alternates, "Orgrimmar",
+            function(id) return counts[id] or 0 end)
+        assert.are.equal(2, result.id)
+    end)
+
+    it("prefers a zone-restricted alternate when in zone and in stock", function()
+        local counts = { [1] = 5, [2] = 5 }
+        local result = Logic.SelectFirstInStock(primary, alternates, "Tempest Keep",
+            function(id) return counts[id] or 0 end)
+        assert.are.equal(1, result.id)
+    end)
+
+    it("returns full entry table (id and name)", function()
+        local counts = { [3] = 1 }
+        local result = Logic.SelectFirstInStock(primary, alternates, "Orgrimmar",
+            function(id) return counts[id] or 0 end)
+        assert.are.equal(3, result.id)
+        assert.are.equal("Other Alt", result.name)
+    end)
+end)
+
+-- =========================================================
 -- MinWeaponEnchantRemaining
 -- =========================================================
 
