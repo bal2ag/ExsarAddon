@@ -624,37 +624,30 @@ function ExsarLogic.RaidDebuffsShouldShow(o)
         and o.inRaid == true and o.hasTarget == true
 end
 
---- Choose which raid/party members the tank-assist row should show.
--- Primary source is the assigned group role (entries with role == "TANK", from
--- UnitGroupRolesAssigned / Main Tank assignment); when nobody is flagged a tank
--- we fall back to a manual name set so the row still works for groups that
--- don't assign roles. Order is preserved (callers pass roster in display order).
+--- Choose which raid/party members the assist widget should track and show.
+-- Returns the UNION of (a) members flagged as tanks (role == "TANK", from
+-- UnitGroupRolesAssigned / Main Tank assignment) and (b) members whose name is
+-- in the manual tracked-name set -- so auto-detected tanks and manually added
+-- members both appear. Order follows the roster (display order); a member who
+-- is both a tank and in the manual set appears once.
 -- @param roster array of { name=, role=, unit=, online= } (unit = the assist
 --               token, e.g. "raid3target"; role is "TANK" for tanks; online optional)
 -- @param manualSet table mapping lowercased name -> true (optional)
 -- @return array of the selected roster entries, in input order
-function ExsarLogic.ComputeTankList(roster, manualSet)
+function ExsarLogic.ComputeAssistList(roster, manualSet)
     roster = roster or {}
-    local tanks = {}
-    for _, m in ipairs(roster) do
-        if m.role == "TANK" then
-            tanks[#tanks + 1] = m
-        end
-    end
-    if #tanks > 0 then
-        return tanks
-    end
-    if not manualSet then
-        return {}
-    end
-    local manual = {}
+    manualSet = manualSet or {}
+    local out = {}
+    local seen = {}
     for _, m in ipairs(roster) do
         local n = m.name and string.lower(m.name)
-        if n and manualSet[n] then
-            manual[#manual + 1] = m
+        local include = (m.role == "TANK") or (n and manualSet[n] and true) or false
+        if include and not (n and seen[n]) then
+            out[#out + 1] = m
+            if n then seen[n] = true end
         end
     end
-    return manual
+    return out
 end
 
 --- Parse a free-text list of tank names (comma / whitespace separated) into a
@@ -669,27 +662,6 @@ function ExsarLogic.ParseNameSet(text)
         set[string.lower(token)] = true
     end
     return set
-end
-
---- Detect raid icons whose underlying mob changed since a baseline snapshot.
--- Used to flag icon buttons "stale" mid-combat: their secure binding was frozen
--- at the baseline (we can't rebind in combat), so if the mark moved to a
--- different GUID the button now points at the wrong mob. A brand-new icon
--- (absent from baseline) is NOT stale; a removed mob (present in baseline,
--- gone now) IS stale.
--- @param baseline table iconIndex -> guid (snapshot when bindings were written)
--- @param current  table iconIndex -> guid (current scan)
--- @return table iconIndex -> true for every changed/removed icon
-function ExsarLogic.DetectStaleIcons(baseline, current)
-    local stale = {}
-    baseline = baseline or {}
-    current = current or {}
-    for idx, guid in pairs(baseline) do
-        if current[idx] ~= guid then
-            stale[idx] = true
-        end
-    end
-    return stale
 end
 
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).

@@ -364,14 +364,15 @@ Sweep effect for the current GCD.
 
 ![Experimental](https://img.shields.io/badge/Experimental-yellow)
 
-Compact info for all units marked with raid target icons (click a row to target that mob), plus a tank-assist row (click a tank to assist them).
+A tank/assist roster: a vertical list of the people you want to follow, one per row. Click a row to **assist** that person — you target whatever they're currently on, resolved live.
 
-- **Icon rows:** Each marked unit gets a row showing its portrait, raid target icon, name (colored by reaction), and a health bar with percentage. Sorted by raid icon index (skull first, star last). Your current target is highlighted with a pulsating gold glow border. Discovery scans your target/focus, party/raid members and their targets, visible nameplates, and boss frames, deduplicated by GUID.
-- **Tank-assist row:** A row of buttons (3 per row), one per tank, shown above the icon list. Clicking a tank button **assists that tank** — you target whatever they are currently tanking, resolved live, so it keeps working through mid-combat re-marks (you follow the tank, not the icon). Each button shows the tank's current target's raid mark and the tank's class-colored name. Tanks are detected from each member's **assigned group role** (anyone flagged as Tank), falling back to Main Tank assignments; if your group uses neither, type tank names into the **Manual tanks** box in the config. Toggle the row on/off in config.
-- **How targeting works:** Each button is a secure click bound *ahead of time* (out of combat) to a live unit token (e.g. "raid member 3's target"); the game resolves it fresh on every click. This is what makes targeting work in combat — including for marked mobs a groupmate is already on.
-- **Mid-combat re-marks:** A button's binding can't be changed once combat starts. If a mark is moved onto a different mob mid-fight, that icon row is greyed out with a red X (its binding is stale) — use the tank-assist row instead, which is unaffected.
-- **Click-failure logging:** When a click fails to swap your target to the intended mob, a `CLICK MISSED` entry is printed to chat and appended to a persistent ring buffer (last 20 misses, survives `/reload`), capturing intended mob, the bound token, combat/stale state, and before/after target. Default ON; toggle with `/exsar rtdebug`. `/exsar rtdump` opens the log in a copy-paste window (Ctrl+A, Ctrl+C, Esc to close). `/exsar rtclear` wipes the buffer.
-- **Hidden when:** No marked units and no tanks are found (and widget is locked)
+- **Tracked rows:** Auto-detected tanks **plus** anyone you name manually, one member per row. Each row shows the member's portrait and class-colored name, the raid mark on whatever they're currently targeting, that target's name (colored by reaction), and the target's health bar with percentage. The gold pulsing border lights up the row whose member is on **your** current target.
+- **Assist on click:** Clicking a row targets whatever that member is on, resolved fresh each click — so it keeps working in combat and through mid-combat re-marks (you follow the *person*, not a mark).
+- **Who gets tracked:** Tanks are detected from each member's **assigned group role** (anyone flagged as Tank), falling back to Main Tank assignments. To watch additional people (off-tanks the game didn't flag, a CC'er, a kill-target caller), add their names in the **Additional tracked members** box in the config — they're always added on top of the auto-detected tanks.
+- **Group reshuffles:** Tracked members are matched by name and re-resolved as the raid moves people between groups (out of combat), so assisting always follows the right person.
+- **Why assist-only (no mark-targeting):** WoW does not allow an addon to target an *arbitrary marked mob* in combat — targeting must be pre-decided before combat, and there's no game-side way to express "the unit with the square." The only reliably combat-stable target is a *person* who stays on their mob (a tank), which is why this widget assists people rather than icons.
+- **Hidden when:** No tracked members are found (and the widget is locked).
+- **Commands:** `/exsar rtreset` resets the widget's position.
 
 <!-- ![Raid Target Widget](screenshots/raid-targets.png) -->
 
