@@ -57,4 +57,18 @@
     <Binding name="EXSAR_ASPECT4" category="ExsarAddon Aspects"/>
     <Binding name="EXSAR_ASPECT5" category="ExsarAddon Aspects"/>
     <Binding name="EXSAR_ASPECT6" category="ExsarAddon Aspects"/>
+
+    <!--
+        Traps widget slots. Grouped under their own "ExsarAddon Traps" category
+        (literal label). The first carries header="EXSARADDONTRAPS" (resolves via
+        BINDING_HEADER_EXSARADDONTRAPS set by the action-bar engine); the rest
+        only need the category. Bindings are positional: the key lays whatever
+        trap occupies ExsarAddonTrapBtnN. Labels resolve via BINDING_NAME_EXSAR_TRAPN
+        globals set by ExsarUI.CreateActionBar.
+    -->
+    <Binding name="EXSAR_TRAP1" header="EXSARADDONTRAPS" category="ExsarAddon Traps"/>
+    <Binding name="EXSAR_TRAP2" category="ExsarAddon Traps"/>
+    <Binding name="EXSAR_TRAP3" category="ExsarAddon Traps"/>
+    <Binding name="EXSAR_TRAP4" category="ExsarAddon Traps"/>
+    <Binding name="EXSAR_TRAP5" category="ExsarAddon Traps"/>
 </Bindings>

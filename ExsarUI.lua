@@ -1295,6 +1295,8 @@ end
 --   countItem        bag-count item (true = "the active item"); useCharges/
 --                    countCharges sum charges across stacks
 --   cooldownItem     item whose CD drives the sweep (macro kind)
+--   cooldownSpell    spell name whose CD drives the sweep (GetSpellCooldown;
+--                    macro/spell kind, e.g. a trap's cooldown)
 --   cooldownDebuff   player debuff name driving the CD (e.g. Tinnitus)
 --   gcd              show the GCD sweep (macro kind)
 --   requires         pet-state grey-out token (PetActionEnabled)
@@ -1743,6 +1745,13 @@ function ExsarUI.CreateActionBar(opts)
                         end
                         local st, dur = AB_ItemCooldown(s.cooldownItemId)
                         if ExsarLogic.CooldownState(st, dur) == "cooldown" then
+                            start, duration, isRealCD = st, dur, true
+                        end
+                    end
+                    if a.cooldownSpell then
+                        local st, dur = GetSpellCooldown(a.cooldownSpell)
+                        if ExsarLogic.CooldownState(st, dur) == "cooldown"
+                           and (not start or (st + dur) > (start + duration)) then
                             start, duration, isRealCD = st, dur, true
                         end
                     end

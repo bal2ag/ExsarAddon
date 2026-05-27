@@ -39,6 +39,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Range to Target](#range-to-target)
   - [Pet Management](#pet-management)
   - [Aspects](#aspects)
+  - [Traps](#traps)
 
 ## Installation
 
@@ -511,3 +512,15 @@ A compact, keybindable vertical bar of your Hunter aspects, so you can swap aspe
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Aspects* section). Pressing the key casts that aspect, including in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Aspects](screenshots/aspects.png) -->
+
+### Traps
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A compact, keybindable bar of your Hunter traps, so you can lay any trap with one click or key instead of digging through your spellbook.
+
+- **What it does:** One button per trap — Frost, Freezing, Immolation, Explosive, and Snake. Click or press its key to lay that trap (always the highest rank you know).
+- **Cooldowns:** Each trap shows a cooldown sweep and countdown timer while it's on cooldown, so you can see at a glance which traps are ready.
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Traps* section). Pressing the key lays that trap, including in combat. The bound key is shown in the top-right corner of the icon.
+
+<!-- ![Traps](screenshots/traps.png) -->
