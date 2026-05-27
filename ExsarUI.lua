@@ -1313,11 +1313,11 @@ end
 --   requires         pet-state grey-out token (PetActionEnabled)
 --   tooltipSpell     override for the hover tooltip's spell. By default a
 --                    macro/spell slot shows the tooltip of its associated spell
---                    (the resolved `spells` entry, else `spell`, else `iconSpell`);
---                    set this to a spell name to force that one, or to `false` to
---                    force the name + macrotext tooltip (e.g. combo macros that
---                    also fire a trinket). Slots with no single spell fall back
---                    to name + macrotext anyway.
+--                    (the resolved `spells` entry, else `spell`, else `iconSpell`)
+--                    -- UNLESS it has a hand-written `macro` that is not a single
+--                    /cast (ExsarLogic.IsSimpleCastMacro), in which case it shows
+--                    its macro text. Set this to a spell name to force that spell,
+--                    or to `false` to force the macro-text tooltip.
 --   activeBuff       player buff name; glows the border only while it is up
 --                    (action kind + opts.border; e.g. the active aspect)
 --   bindingLabel     override for the Key Bindings UI row label
@@ -1521,12 +1521,15 @@ function ExsarUI.CreateActionBar(opts)
             else
                 -- Macro/spell slots: show the associated spell's tooltip when
                 -- there is one (the resolved spells entry, a spell-kind spell, or
-                -- the icon spell). tooltipSpell overrides: a name forces that
-                -- spell, or `false` forces the macro-text tooltip (combo macros).
-                -- Anything with no single spell falls back to name + macrotext.
+                -- the icon spell). A hand-written macro that is NOT just a single
+                -- /cast (extra /use, /startattack, /targetenemy, ...) shows its
+                -- macro text instead. tooltipSpell overrides either way: a name
+                -- forces that spell, `false` forces the macro-text tooltip.
                 local spell
                 if action.tooltipSpell ~= nil then
                     spell = action.tooltipSpell
+                elseif action.macro and not ExsarLogic.IsSimpleCastMacro(action.macro) then
+                    spell = nil
                 else
                     spell = s.activeSpell or action.spell or action.iconSpell
                 end
@@ -1929,13 +1932,15 @@ function ExsarUI.CreateActionBar(opts)
                     s.icon:SetDesaturated(false)
                     s.icon:SetAlpha(1.0)
                 end
-                -- Active indicator: glow the slot if it defines an "active"
-                -- predicate (e.g. the aspect whose buff is up), else always on.
-                -- Drives both the glow border and the marching-ants (s.active).
+                -- Active indicator: highlight the slot only when it defines an
+                -- "active" predicate -- a player buff is up (activeBuff, e.g. the
+                -- current aspect) or isActive(s) returns true (e.g. the equipped
+                -- weapon). Slots with no predicate never highlight. Drives both
+                -- the glow border and the marching-ants (s.active).
                 local active
                 if a.isActive then active = a.isActive(s, petState) and true or false
                 elseif a.activeBuff then active = AB_PlayerHasBuff(a.activeBuff)
-                else active = true end
+                else active = false end
                 s.active = active
                 if s.border then s.border:SetShown(active) end
             end

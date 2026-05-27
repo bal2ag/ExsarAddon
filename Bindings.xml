@@ -89,4 +89,48 @@
     <Binding name="EXSAR_COOLDOWN5" category="ExsarAddon Cooldowns"/>
     <Binding name="EXSAR_COOLDOWN6" category="ExsarAddon Cooldowns"/>
     <Binding name="EXSAR_COOLDOWN7" category="ExsarAddon Cooldowns"/>
+
+    <!--
+        Core Combat widget slots. Grouped under their own "ExsarAddon Combat"
+        category (literal label). The first carries header="EXSARADDONCOMBAT"
+        (resolves via BINDING_HEADER_EXSARADDONCOMBAT set by the action-bar
+        engine); the rest only need the category. Bindings are positional: the
+        key fires whatever ability/macro occupies ExsarAddonCombatBtnN (a slot may
+        be hidden when its spell is unknown, in which case its key no-ops). Labels
+        resolve via BINDING_NAME_EXSAR_COMBATN globals set by ExsarUI.CreateActionBar.
+    -->
+    <Binding name="EXSAR_COMBAT1" header="EXSARADDONCOMBAT" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT2" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT3" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT4" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT5" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT6" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT7" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT8" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT9" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT10" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT11" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT12" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT13" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT14" category="ExsarAddon Combat"/>
+    <Binding name="EXSAR_COMBAT15" category="ExsarAddon Combat"/>
+
+    <!--
+        Utilities widget slots. Grouped under their own "ExsarAddon Utility"
+        category (literal label). The first carries header="EXSARADDONUTILITY"
+        (resolves via BINDING_HEADER_EXSARADDONUTILITY set by the action-bar
+        engine); the rest only need the category. Bindings are positional: the
+        key fires whatever occupies ExsarAddonUtilityBtnN (a slot may be hidden
+        when its spell is unknown, in which case its key no-ops). Labels resolve
+        via BINDING_NAME_EXSAR_UTILITYN globals set by ExsarUI.CreateActionBar.
+    -->
+    <Binding name="EXSAR_UTILITY1" header="EXSARADDONUTILITY" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY2" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY3" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY4" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY5" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY6" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY7" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY8" category="ExsarAddon Utility"/>
+    <Binding name="EXSAR_UTILITY9" category="ExsarAddon Utility"/>
 </Bindings>

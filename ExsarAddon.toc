@@ -37,3 +37,5 @@ PetManagementWidget.lua
 AspectsWidget.lua
 TrapsWidget.lua
 CooldownsWidget.lua
+CoreCombatWidget.lua
+UtilitiesWidget.lua

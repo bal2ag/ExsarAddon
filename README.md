@@ -41,6 +41,8 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Aspects](#aspects)
   - [Traps](#traps)
   - [Cooldowns](#cooldowns)
+  - [Core Combat](#core-combat)
+  - [Utilities](#utilities)
 
 ## Installation
 
@@ -540,3 +542,32 @@ A compact, keybindable bar of your major cooldowns in one place — a mix of tri
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Cooldowns* section), usable in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Cooldowns](screenshots/cooldowns.png) -->
+
+### Core Combat
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A compact, keybindable bar of your main combat abilities and a couple of handy combat macros, all in one place.
+
+- **What it does:** One button per core ability (Steady Shot, Multi-Shot, Arcane Shot, Kill Command, Aimed Shot, stings, traps-of-the-trade like Concussive/Wing Clip, …) plus two macros — a start-attack button (targets the nearest enemy and turns on Auto Shot) and a Raptor Strike melee-weave button.
+- **Casts the right rank:** Ability buttons always use the highest rank you know, and show that spell's tooltip on hover.
+- **Adapts to your spec:** Abilities you don't know simply don't appear — so Aimed Shot only shows up when you're Marksmanship.
+- **Cooldown feedback:** Abilities with a real cooldown (Multi-Shot, Arcane Shot, Kill Command, …) show a sweep + countdown and dim while down; instant/GCD-only shots stay bright so the bar doesn't flicker as you spam.
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Combat* section), usable in combat. The bound key is shown in the top-right corner of the icon.
+
+<!-- ![Core Combat](screenshots/core-combat.png) -->
+
+### Utilities
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A compact, keybindable bar for your situational utility — abilities you reach for occasionally plus a few quality-of-life macros.
+
+- **What it does:** Utility abilities (Misdirection, Feign Death, Tranquilizing Shot, Eyes of the Beast, Shadowmeld, Flare, …) alongside handy macros.
+- **Adapts to your character:** Abilities you don't have simply don't appear — Misdirection only shows for Marksmanship, Shadowmeld only for Night Elves.
+- **Fishing setup in one button:** Equips your fishing pole and applies your Sharpened Fish Hook to it.
+- **Weapon swapping:** One-press buttons to switch between your 2H weapon and your dual 1H setup — works in combat. The button for whatever you currently have equipped is highlighted with a gold ring (the dual-1H button lights up only when both weapons are equipped), and the fishing button highlights while your fishing pole is out.
+- **Cooldown feedback:** Abilities with a real cooldown show a sweep + countdown and dim while down.
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Utility* section). The bound key is shown in the top-right corner of the icon.
+
+<!-- ![Utilities](screenshots/utilities.png) -->

@@ -49,13 +49,12 @@ local COOLDOWNS = {
     -- Burst macros: a cooldown spell fired together with a trinket. The sweep
     -- takes the longest-remaining of the spell and the trinket slot (cooldownSpell
     -- + cooldownTrinket), so the slot only reads "ready" when BOTH are. Icon is
-    -- the spell (#showtooltip is ignored by our secure buttons). Kept alongside
-    -- the standalone slots above so each can be bound to its own key.
+    -- the spell; the multi-action macro auto-shows its macro text on hover. Kept
+    -- alongside the standalone slots above so each can be bound to its own key.
     { key = "bw_trinket", name = "Bestial Wrath + Trinket",
       macro = [[/cast Bestial Wrath
 /use 14]],
       iconSpell       = "Bestial Wrath",
-      tooltipSpell    = false,  -- combo macro: show the macro text, not just the spell
       cooldownSpell   = "Bestial Wrath",
       cooldownTrinket = 14 },
 
@@ -63,7 +62,6 @@ local COOLDOWNS = {
       macro = [[/cast Rapid Fire
 /use 13]],
       iconSpell       = "Rapid Fire",
-      tooltipSpell    = false,  -- combo macro: show the macro text, not just the spell
       cooldownSpell   = "Rapid Fire",
       cooldownTrinket = 13 },
 }

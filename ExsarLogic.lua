@@ -561,6 +561,24 @@ function ExsarLogic.PetStateKey(state)
     return "dead"
 end
 
+-- True if a macro body is "just a single /cast" -- exactly one meaningful line
+-- (ignoring blank lines and #directives like #showtooltip) and that line is a
+-- /cast. Used to decide the hover tooltip: a simple-cast macro can show its
+-- spell's tooltip, while a multi-action macro (extra /use, /startattack,
+-- /targetenemy, ...) shows its macro text instead. Pure.
+function ExsarLogic.IsSimpleCastMacro(macro)
+    if not macro then return false end
+    local count, isCast = 0, false
+    for line in (macro .. "\n"):gmatch("(.-)\n") do
+        local t = line:gsub("^%s*(.-)%s*$", "%1")
+        if t ~= "" and t:sub(1, 1) ~= "#" then
+            count = count + 1
+            isCast = t:lower():match("^/cast%s") ~= nil
+        end
+    end
+    return count == 1 and isCast
+end
+
 -- =========================================================
 -- Raid debuff tracker (missing critical debuffs)
 -- =========================================================

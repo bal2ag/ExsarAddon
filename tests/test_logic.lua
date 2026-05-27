@@ -962,6 +962,44 @@ describe("SelectFirstInStock", function()
 end)
 
 -- =========================================================
+-- IsSimpleCastMacro
+-- =========================================================
+
+describe("IsSimpleCastMacro", function()
+    it("is true for a single /cast line", function()
+        assert.is_true(Logic.IsSimpleCastMacro("/cast Frost Trap"))
+    end)
+
+    it("is true for /cast with a rank/bang and trailing spaces", function()
+        assert.is_true(Logic.IsSimpleCastMacro("  /cast Aspect of the Hawk  "))
+        assert.is_true(Logic.IsSimpleCastMacro("/cast !Auto Shot"))
+    end)
+
+    it("ignores #showtooltip / #directive and blank lines", function()
+        assert.is_true(Logic.IsSimpleCastMacro("#showtooltip Bestial Wrath\n\n/cast Bestial Wrath"))
+    end)
+
+    it("is false for a /cast plus another action line", function()
+        assert.is_false(Logic.IsSimpleCastMacro("/cast Raptor Strike\n/startattack"))
+        assert.is_false(Logic.IsSimpleCastMacro("/cast Bestial Wrath\n/use 14"))
+    end)
+
+    it("is false when a non-cast line precedes the cast", function()
+        assert.is_false(Logic.IsSimpleCastMacro("/targetenemy [noexists][dead][help]\n/cast !Auto Shot"))
+    end)
+
+    it("is false for a single non-cast line", function()
+        assert.is_false(Logic.IsSimpleCastMacro("/use 13"))
+        assert.is_false(Logic.IsSimpleCastMacro("/startattack"))
+    end)
+
+    it("is false for nil or empty", function()
+        assert.is_false(Logic.IsSimpleCastMacro(nil))
+        assert.is_false(Logic.IsSimpleCastMacro(""))
+    end)
+end)
+
+-- =========================================================
 -- MinWeaponEnchantRemaining
 -- =========================================================
 
