@@ -71,4 +71,22 @@
     <Binding name="EXSAR_TRAP3" category="ExsarAddon Traps"/>
     <Binding name="EXSAR_TRAP4" category="ExsarAddon Traps"/>
     <Binding name="EXSAR_TRAP5" category="ExsarAddon Traps"/>
+
+    <!--
+        Cooldowns widget slots. Grouped under their own "ExsarAddon Cooldowns"
+        category (literal label). The first carries header="EXSARADDONCOOLDOWNS"
+        (resolves via BINDING_HEADER_EXSARADDONCOOLDOWNS set by the action-bar
+        engine); the rest only need the category. Bindings are positional: the
+        key fires whatever cooldown occupies ExsarAddonCooldownBtnN (a slot may be
+        hidden when its spell is talent-irrelevant, in which case its key no-ops).
+        Labels resolve via BINDING_NAME_EXSAR_COOLDOWNN globals set by
+        ExsarUI.CreateActionBar.
+    -->
+    <Binding name="EXSAR_COOLDOWN1" header="EXSARADDONCOOLDOWNS" category="ExsarAddon Cooldowns"/>
+    <Binding name="EXSAR_COOLDOWN2" category="ExsarAddon Cooldowns"/>
+    <Binding name="EXSAR_COOLDOWN3" category="ExsarAddon Cooldowns"/>
+    <Binding name="EXSAR_COOLDOWN4" category="ExsarAddon Cooldowns"/>
+    <Binding name="EXSAR_COOLDOWN5" category="ExsarAddon Cooldowns"/>
+    <Binding name="EXSAR_COOLDOWN6" category="ExsarAddon Cooldowns"/>
+    <Binding name="EXSAR_COOLDOWN7" category="ExsarAddon Cooldowns"/>
 </Bindings>

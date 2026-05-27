@@ -1286,6 +1286,11 @@ end
 --   key, name        stable id / display label (binding row + tooltip)
 --   type             "item" | "macro" | "spell" (optional; inferred otherwise)
 --   macro / spell    secure payload for macro/spell kinds
+--   spells           talent-gated spell list (names or { name, id }, preference
+--                    order): macro kind that /casts each (first known fires);
+--                    icon + CD follow the first KNOWN spell; the slot HIDES when
+--                    none are known (e.g. Bestial Wrath sub Readiness; Intimidation
+--                    only when BM). Known via IsSpellKnown(id), name-lookup fallback.
 --   id, name         item id + name for item kind (name doubles as the label)
 --   icon/iconItem/iconSpell  static icon source (path / item / spell), retried
 --   dynamicIcon      pet-state map { alive=, dead=, missing= } of icon specs
@@ -1298,6 +1303,12 @@ end
 --   cooldownSpell    spell name whose CD drives the sweep (GetSpellCooldown;
 --                    macro/spell kind, e.g. a trap's cooldown)
 --   cooldownDebuff   player debuff name driving the CD (e.g. Tinnitus)
+--   cooldownTrinket  equipped inventory slot (13/14) whose CD feeds the sweep,
+--                    WITHOUT taking over icon/macro (unlike trinketSlot) -- for a
+--                    macro that fires a trinket + a spell (show "both ready")
+--   trinketSlot      equipped inventory slot (13/14): macro kind that defaults
+--                    to "/use <slot>", with icon from GetInventoryItemTexture
+--                    and CD from GetInventoryItemCooldown (for a cooldowns bar)
 --   gcd              show the GCD sweep (macro kind)
 --   requires         pet-state grey-out token (PetActionEnabled)
 --   activeBuff       player buff name; glows the border only while it is up
@@ -1314,7 +1325,8 @@ end
 --
 -- opts: name (DB namespace), frameName, buttonPrefix, placeholder, actions,
 --   layout ("horizontal"|"vertical"|"grid"), gridCols, border (gold 1px ring
---   active indicator) / activeAnts (marching-ants active indicator), moduleName,
+--   active indicator) / activeAnts (marching-ants active indicator),
+--   dimOnCooldown (dim macro/spell slots while a real CD runs), moduleName,
 --   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
 --   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval.
 -- Returns a handle { frame, slots, Refresh, ApplyLayout, dbFunc }.
@@ -1363,6 +1375,35 @@ local function AB_PlayerHasBuff(buffName)
     return false
 end
 
+-- Build "/cast <name>" macrotext for a spells list. The first known spell
+-- fires; an unknown /cast line silently no-ops, so spec substitutes work
+-- automatically (e.g. Bestial Wrath for BM, Readiness for Survival).
+local function AB_SpellsMacro(spells)
+    local lines = {}
+    for _, e in ipairs(spells) do
+        lines[#lines + 1] = "/cast " .. (type(e) == "table" and e.name or e)
+    end
+    return table.concat(lines, "\n")
+end
+
+-- Resolve the first known spell in a list to its name, or nil if none known
+-- (the slot is then talent-irrelevant and hidden). Prefers IsSpellKnown(id),
+-- authoritative for talent spells; falls back to a name lookup when an entry
+-- carries no id (or on clients without IsSpellKnown). Entry = name string or
+-- { name = , id = }.
+local function AB_FirstKnownSpell(spells)
+    local isKnown = _G.IsSpellKnown
+    for _, e in ipairs(spells) do
+        local name = type(e) == "table" and e.name or e
+        local id   = type(e) == "table" and e.id or nil
+        local known
+        if id and isKnown then known = isKnown(id) and true or false
+        else known = GetSpellInfo(name) ~= nil end
+        if known then return name end
+    end
+    return nil
+end
+
 -- start,duration for an item's cooldown, read from whichever bag slot holds it
 -- (TBC has no GetItemCooldown; GetContainerItemCooldown also reflects shared
 -- category cooldowns). Returns nil,nil if the item isn't in bags.
@@ -1407,7 +1448,7 @@ function ExsarUI.CreateActionBar(opts)
     for i, action in ipairs(actions) do
         local kind = action.type
         if not kind then
-            if action.macro then kind = "macro"
+            if action.macro or action.trinketSlot or action.spells then kind = "macro"
             elseif action.spell then kind = "spell"
             else kind = "item" end
         end
@@ -1424,10 +1465,14 @@ function ExsarUI.CreateActionBar(opts)
         btn:RegisterForClicks("AnyUp", "AnyDown")  -- both required on Anniversary
         s.btn = btn
 
-        -- Initial secure attributes (we are out of combat at file load).
+        -- Initial secure attributes (we are out of combat at file load). A
+        -- trinketSlot with no explicit macro defaults to "/use <slot>".
         if kind == "macro" then
+            s.macrotext = action.macro
+                or (action.trinketSlot and ("/use " .. action.trinketSlot))
+                or (action.spells and AB_SpellsMacro(action.spells))
             btn:SetAttribute("type", "macro")
-            btn:SetAttribute("macrotext", action.macro)
+            btn:SetAttribute("macrotext", s.macrotext)
         elseif kind == "spell" then
             btn:SetAttribute("type", "spell")
             btn:SetAttribute("spell", action.spell)
@@ -1451,12 +1496,14 @@ function ExsarUI.CreateActionBar(opts)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if action.tooltip then
                 action.tooltip(s, GameTooltip)
+            elseif action.trinketSlot then
+                GameTooltip:SetInventoryItem("player", action.trinketSlot)
             elseif s.kind == "item" then
                 GameTooltip:SetItemByID(s.itemId)
             else
                 GameTooltip:SetText(action.name, 1, 1, 1)
-                if action.macro then
-                    GameTooltip:AddLine(action.macro, 0.7, 0.7, 0.7, true)
+                if s.macrotext then
+                    GameTooltip:AddLine(s.macrotext, 0.7, 0.7, 0.7, true)
                 end
             end
             GameTooltip:Show()
@@ -1520,25 +1567,31 @@ function ExsarUI.CreateActionBar(opts)
         end
         placeholderText:Hide()
 
-        if layout == "horizontal" then
-            for i, s in ipairs(slots) do
-                s.btn:ClearAllPoints()
-                s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                    AB_PADDING + (i - 1) * (AB_ICON_SIZE + AB_ICON_GAP), -AB_PADDING)
-                s.btn:Show()
+        if layout == "horizontal" or layout == "vertical" then
+            -- Single row/column; hidden slots (e.g. talent-irrelevant `spells`)
+            -- are skipped and the remaining slots pack together.
+            local vis = 0
+            for _, s in ipairs(slots) do
+                if s.hidden then
+                    s.btn:Hide()
+                else
+                    s.btn:ClearAllPoints()
+                    if layout == "horizontal" then
+                        s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                            AB_PADDING + vis * (AB_ICON_SIZE + AB_ICON_GAP), -AB_PADDING)
+                    else
+                        s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
+                            AB_PADDING, -(AB_PADDING + vis * (AB_ICON_SIZE + AB_ICON_GAP)))
+                    end
+                    s.btn:Show()
+                    vis = vis + 1
+                end
             end
-            frame:SetSize(AB_PADDING * 2 + n * AB_ICON_SIZE + (n - 1) * AB_ICON_GAP,
-                          AB_ICON_SIZE + AB_PADDING * 2)
-
-        elseif layout == "vertical" then
-            for i, s in ipairs(slots) do
-                s.btn:ClearAllPoints()
-                s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                    AB_PADDING, -(AB_PADDING + (i - 1) * (AB_ICON_SIZE + AB_ICON_GAP)))
-                s.btn:Show()
-            end
-            frame:SetSize(AB_ICON_SIZE + AB_PADDING * 2,
-                          AB_PADDING * 2 + n * AB_ICON_SIZE + (n - 1) * AB_ICON_GAP)
+            if vis == 0 then placeholderText:Show(); vis = 1 end
+            local long  = AB_PADDING * 2 + vis * AB_ICON_SIZE + (vis - 1) * AB_ICON_GAP
+            local short = AB_ICON_SIZE + AB_PADDING * 2
+            frame:SetSize(layout == "horizontal" and long or short,
+                          layout == "horizontal" and short or long)
 
         else  -- grid, with hideWhenEmpty / groupFallback dynamic-row reflow
             local groupHasAny = {}
@@ -1603,6 +1656,24 @@ function ExsarUI.CreateActionBar(opts)
         end
     end
 
+    -- ---------- talent-gated spell resolution (spells list) ----------
+    -- For each `spells` slot, pick the first known spell (its icon/cooldown
+    -- follow it) and hide the slot when none are known (talent-irrelevant).
+    -- Spec is stable mid-session, but this is cheap and self-correcting as the
+    -- spellbook loads; a hidden-state change reflows (out of combat).
+    local function ResolveSpells()
+        local needLayout = false
+        for _, s in ipairs(slots) do
+            if s.action.spells then
+                local active = AB_FirstKnownSpell(s.action.spells)
+                local hidden = active == nil
+                if hidden ~= (s.hidden == true) then needLayout = true end
+                s.hidden, s.activeSpell = hidden, active
+            end
+        end
+        if needLayout then ApplyLayout() end
+    end
+
     -- ---------- active-item swap (rank/alternate, protected: out of combat) ----------
     local function ResolveActiveAll()
         if InCombatLockdown() then return end
@@ -1635,7 +1706,7 @@ function ExsarUI.CreateActionBar(opts)
         if InCombatLockdown() then return end
         for _, s in ipairs(slots) do
             if s.kind == "macro" then
-                s.btn:SetAttribute("macrotext", s.action.macro)
+                s.btn:SetAttribute("macrotext", s.macrotext)
             elseif s.kind == "spell" then
                 s.btn:SetAttribute("spell", s.action.spell)
             else
@@ -1692,12 +1763,19 @@ function ExsarUI.CreateActionBar(opts)
         for _, s in ipairs(slots) do
             local a = s.action
 
-            -- Dynamic / hook icon (e.g. all-in-one pet button).
+            -- Dynamic / hook icon (e.g. all-in-one pet button, or the trinket
+            -- currently equipped in a tracked inventory slot).
             if a.resolveIcon then
                 local tex = a.resolveIcon(s, petState)
                 if tex then s.icon:SetTexture(tex) end
             elseif a.dynamicIcon then
                 local tex = AB_ResolveIconSpec(a.dynamicIcon[stateKey])
+                if tex then s.icon:SetTexture(tex) end
+            elseif a.trinketSlot then
+                local tex = GetInventoryItemTexture("player", a.trinketSlot)
+                if tex then s.icon:SetTexture(tex) end
+            elseif a.spells and s.activeSpell then
+                local tex = GetSpellTexture(s.activeSpell)
                 if tex then s.icon:SetTexture(tex) end
             end
 
@@ -1755,6 +1833,27 @@ function ExsarUI.CreateActionBar(opts)
                             start, duration, isRealCD = st, dur, true
                         end
                     end
+                    if a.trinketSlot then
+                        local st, dur = GetInventoryItemCooldown("player", a.trinketSlot)
+                        if ExsarLogic.CooldownState(st, dur) == "cooldown"
+                           and (not start or (st + dur) > (start + duration)) then
+                            start, duration, isRealCD = st, dur, true
+                        end
+                    end
+                    if a.cooldownTrinket then
+                        local st, dur = GetInventoryItemCooldown("player", a.cooldownTrinket)
+                        if ExsarLogic.CooldownState(st, dur) == "cooldown"
+                           and (not start or (st + dur) > (start + duration)) then
+                            start, duration, isRealCD = st, dur, true
+                        end
+                    end
+                    if a.spells and s.activeSpell then
+                        local st, dur = GetSpellCooldown(s.activeSpell)
+                        if ExsarLogic.CooldownState(st, dur) == "cooldown"
+                           and (not start or (st + dur) > (start + duration)) then
+                            start, duration, isRealCD = st, dur, true
+                        end
+                    end
                     if a.cooldownDebuff then
                         local st, dur = AB_DebuffCooldown(a.cooldownDebuff)
                         if st and dur and dur > MIN_CD
@@ -1787,8 +1886,18 @@ function ExsarUI.CreateActionBar(opts)
                 else
                     enabled = ExsarLogic.PetActionEnabled(a.requires, petState)
                 end
-                s.icon:SetDesaturated(not enabled)
-                s.icon:SetAlpha(enabled and 1.0 or 0.35)
+                -- Grey-out priority: requirement-disabled > on-cooldown dim
+                -- (opts.dimOnCooldown, real CDs only — not the brief GCD) > full.
+                if not enabled then
+                    s.icon:SetDesaturated(true)
+                    s.icon:SetAlpha(0.35)
+                elseif opts.dimOnCooldown and isRealCD then
+                    s.icon:SetDesaturated(true)
+                    s.icon:SetAlpha(0.4)
+                else
+                    s.icon:SetDesaturated(false)
+                    s.icon:SetAlpha(1.0)
+                end
                 -- Active indicator: glow the slot if it defines an "active"
                 -- predicate (e.g. the aspect whose buff is up), else always on.
                 -- Drives both the glow border and the marching-ants (s.active).
@@ -1804,6 +1913,7 @@ function ExsarUI.CreateActionBar(opts)
 
     local function Refresh()
         ResolveStaticIcons()
+        ResolveSpells()
         ResolveActiveAll()
         ScanCounts()
         UpdateVisuals()

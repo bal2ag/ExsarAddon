@@ -36,3 +36,4 @@ RangeToTargetWidget.lua
 PetManagementWidget.lua
 AspectsWidget.lua
 TrapsWidget.lua
+CooldownsWidget.lua

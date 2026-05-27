@@ -40,6 +40,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Pet Management](#pet-management)
   - [Aspects](#aspects)
   - [Traps](#traps)
+  - [Cooldowns](#cooldowns)
 
 ## Installation
 
@@ -524,3 +525,18 @@ A compact, keybindable bar of your Hunter traps, so you can lay any trap with on
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Traps* section). Pressing the key lays that trap, including in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Traps](screenshots/traps.png) -->
+
+### Cooldowns
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A compact, keybindable bar of your major cooldowns in one place — a mix of trinkets and abilities.
+
+- **What it does:** One button each for your top and bottom trinket plus key ability cooldowns (Rapid Fire, Bestial Wrath, Intimidation, …). Click or press its key to fire it.
+- **Burst combo buttons:** Dedicated buttons that fire an ability together with a trinket (e.g. Bestial Wrath + bottom trinket, Rapid Fire + top trinket). These only show "ready" when *both* the ability and the trinket are off cooldown, and sit alongside the standalone buttons so you can bind each however you like.
+- **Trinkets follow your gear:** The trinket slots use whatever you currently have equipped in your top/bottom trinket slots, showing that item's icon and cooldown — no setup when you swap trinkets.
+- **Adapts to your spec:** Talent abilities only appear when you have them. The Bestial Wrath slot becomes Readiness if you're Survival, and the Intimidation slot disappears entirely unless you're Beast Mastery.
+- **At-a-glance readiness:** Each slot shows a cooldown sweep and countdown, and dims while it's on cooldown, so you can instantly see what's ready.
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Cooldowns* section), usable in combat. The bound key is shown in the top-right corner of the icon.
+
+<!-- ![Cooldowns](screenshots/cooldowns.png) -->
