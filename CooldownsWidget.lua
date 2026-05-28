@@ -73,7 +73,7 @@ ExsarUI.CreateActionBar({
     frameName           = "ExsarAddonCooldownsFrame",
     buttonPrefix        = "ExsarAddonCooldownBtn",
     placeholder         = "Cooldowns",
-    layout              = "vertical",
+    layout              = "horizontal",
     dimOnCooldown       = true,
     actions             = COOLDOWNS,
     moduleName          = "Cooldowns",

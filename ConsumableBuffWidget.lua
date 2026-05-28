@@ -60,8 +60,9 @@ local PADDING    = 6
 
 
 local NUM_ITEMS = #TRACKED_ITEMS
-local GRID_W = NUM_ITEMS * ICON_SIZE + (NUM_ITEMS - 1) * ICON_GAP + PADDING * 2
-local GRID_H = ICON_SIZE + PADDING * 2
+-- Vertical column: one icon wide, N icons tall.
+local GRID_W = ICON_SIZE + PADDING * 2
+local GRID_H = NUM_ITEMS * ICON_SIZE + (NUM_ITEMS - 1) * ICON_GAP + PADDING * 2
 
 -- =========================================================
 -- Main frame
@@ -122,7 +123,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
     end)
     s.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
     s.iconFrame:SetPoint("TOPLEFT", frame, "TOPLEFT",
-        PADDING + (i - 1) * (ICON_SIZE + ICON_GAP), -PADDING)
+        PADDING, -(PADDING + (i - 1) * (ICON_SIZE + ICON_GAP)))
 
     -- Glow: extends 4 px beyond icon on each side; only the outer ring is
     -- visible because slotBg (fully opaque, created after) covers the center.
