@@ -1773,3 +1773,43 @@ describe("ParseNameSet", function()
     end)
 end)
 
+-- =========================================================
+-- DevilsaurStage
+-- =========================================================
+
+describe("DevilsaurStage", function()
+    local TOOTH = 19992
+
+    it("returns 'absent' when no Tooth equipped and none in bags", function()
+        assert.are.equal("absent", Logic.DevilsaurStage(nil, false, false, TOOTH))
+        -- some other trinket equipped also counts as absent if no Tooth carried
+        assert.are.equal("absent", Logic.DevilsaurStage(12345, false, false, TOOTH))
+    end)
+
+    it("returns 'bagged' when Tooth is in bags but not equipped", function()
+        assert.are.equal("bagged", Logic.DevilsaurStage(nil, false, true, TOOTH))
+        assert.are.equal("bagged", Logic.DevilsaurStage(12345, false, true, TOOTH))
+    end)
+
+    it("returns 'equipped_unused' when Tooth equipped and buff not yet on pet", function()
+        assert.are.equal("equipped_unused", Logic.DevilsaurStage(TOOTH, false, false, TOOTH))
+    end)
+
+    it("returns 'equipped_buffed' when Tooth equipped AND buff active on pet", function()
+        -- the safety-net warning state: swap-back failed or hasn't run
+        assert.are.equal("equipped_buffed", Logic.DevilsaurStage(TOOTH, true, false, TOOTH))
+    end)
+
+    it("returns 'buffed_unequipped' when Tooth swapped back and buff still ticking", function()
+        -- the happy outcome
+        assert.are.equal("buffed_unequipped", Logic.DevilsaurStage(nil, true, true, TOOTH))
+        assert.are.equal("buffed_unequipped", Logic.DevilsaurStage(12345, true, false, TOOTH))
+    end)
+
+    it("prioritizes equipped+buff over bag presence", function()
+        -- with a Tooth equipped, bag state doesn't matter
+        assert.are.equal("equipped_buffed", Logic.DevilsaurStage(TOOTH, true, true, TOOTH))
+        assert.are.equal("equipped_unused", Logic.DevilsaurStage(TOOTH, false, true, TOOTH))
+    end)
+end)
+

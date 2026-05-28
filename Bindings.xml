@@ -42,6 +42,7 @@
     <Binding name="EXSAR_PET_ACTION4" category="ExsarAddon Pet"/>
     <Binding name="EXSAR_PET_ACTION5" category="ExsarAddon Pet"/>
     <Binding name="EXSAR_PET_ACTION6" category="ExsarAddon Pet"/>
+    <Binding name="EXSAR_PET_ACTION7" category="ExsarAddon Pet"/>
 
     <!--
         Aspects widget slots. Grouped under their own "ExsarAddon Aspects"

@@ -20,7 +20,76 @@
 -- Bindings.xml -- currently kept equal to the number of actions for a clean Key
 -- Bindings menu. When adding actions, grow PET_ACTIONS, MAX_SLOTS, and the
 -- Bindings.xml entries together.
-local MAX_SLOTS = 6
+local MAX_SLOTS = 7
+
+-- ----- Devilsaur Tooth prep slot ---------------------------------------------
+-- A two-click boss-prep workflow that puts a +crit buff on the pet from the
+-- Devilsaur Tooth trinket without leaving the (otherwise inferior) trinket
+-- equipped into combat:
+--   click 1  : swap Devilsaur Tooth into the top trinket slot (yellow glow
+--              appears). Wait out the 30s "just equipped" cooldown sweep.
+--   click 2  : /use the trinket (buff applied to pet) AND /equipslot the
+--              previous trinket back. Normally yellow goes away as the swap
+--              completes; if the swap fails (combat, bag slot changed) the
+--              icon stays red ("UNEQUIP!") and the user resolves it manually.
+--
+-- The "previous trinket" is identified by *bag slot*, not item: click 1's
+-- /equipslot bounces the previously-equipped trinket into the Tooth's bag
+-- slot, so the swap-back target is the same coords. The bag-slot coords are
+-- captured during stage 1 and persisted in ExsarAddonDB.petManagement.devilsaurSwap
+-- so the workflow survives /reload.
+local DEVILSAUR_TOOTH_ID = 19992
+local DEVILSAUR_BUFF_ID  = 24353
+local DEVILSAUR_SLOT     = 13  -- top trinket
+local DEVILSAUR_YELLOW   = { 1.0, 0.85, 0.15, 0.85 }  -- "use me!"
+local DEVILSAUR_RED      = { 1.0, 0.15, 0.15, 0.90 }  -- "unequip!"
+local devilsaurBuffName  -- resolved lazily via GetSpellInfo(spellID)
+
+local function FindToothInBags()
+    for bag = 0, 4 do
+        local numSlots = C_Container.GetContainerNumSlots(bag) or 0
+        for slot = 1, numSlots do
+            if C_Container.GetContainerItemID(bag, slot) == DEVILSAUR_TOOTH_ID then
+                return bag, slot
+            end
+        end
+    end
+end
+
+local function ToothEquippedId()
+    return GetInventoryItemID("player", DEVILSAUR_SLOT)
+end
+
+local function IsBuffOnPet()
+    if not UnitExists("pet") then return false end
+    if not devilsaurBuffName then
+        devilsaurBuffName = GetSpellInfo(DEVILSAUR_BUFF_ID)
+        if not devilsaurBuffName then return false end
+    end
+    for i = 1, 40 do
+        local name = UnitBuff("pet", i)
+        if not name then return false end
+        if name == devilsaurBuffName then return true end
+    end
+    return false
+end
+
+local function DevilsaurStore()
+    return ExsarAddonDB and ExsarAddonDB.petManagement
+end
+
+local function RememberToothBagSlot(bag, slot)
+    local db = DevilsaurStore(); if not db then return end
+    local prev = db.devilsaurSwap
+    if prev and prev.bag == bag and prev.slot == slot then return end
+    db.devilsaurSwap = { bag = bag, slot = slot }
+end
+
+local function StoredToothBagSlot()
+    local db = DevilsaurStore(); if not db then return end
+    local s = db.devilsaurSwap
+    if s and s.bag and s.slot then return s.bag, s.slot end
+end
 
 local PET_ACTIONS = {
     -- "Do the right thing" pet button: heals a living pet, revives a dead one,
@@ -101,6 +170,69 @@ local PET_ACTIONS = {
       macro = [[/cast [pet,nodead] Feed Pet
 /use Clefthoof Ribs]],
       requires = "alive" },
+
+    -- Devilsaur Tooth boss-prep: two-click workflow described at the top of
+    -- this file. Macro/border are entirely dynamic via the engine's
+    -- resolveMacro/resolveBorderColor hooks; everything else (icon, cooldown,
+    -- grey-out) is per-stage logic in this slot's own closures.
+    { key = "devilsaurprep", name = "Devilsaur Tooth Prep",
+      type = "macro",
+      iconItem = DEVILSAUR_TOOTH_ID,
+      -- Cooldown source must follow whatever holds the Tooth, NOT slot 13
+      -- blindly (whose CD reflects whatever-other-trinket when the Tooth is in
+      -- the bags). Slot 13 when equipped (catches the 30s equip CD + on-use
+      -- CD); the Tooth's bag-item CD when carried.
+      getCooldown = function()
+          if ToothEquippedId() == DEVILSAUR_TOOTH_ID then
+              local st, dur = GetInventoryItemCooldown("player", DEVILSAUR_SLOT)
+              if st and st > 0 and dur and dur > 0 then return st, dur, true end
+          else
+              local bag, slot = FindToothInBags()
+              if bag then
+                  local st, dur = C_Container.GetContainerItemCooldown(bag, slot)
+                  if st and st > 0 and dur and dur > 0 then return st, dur, true end
+              end
+          end
+          return 0, 0, false
+      end,
+      -- Grey out when no live pet, or when no Tooth available anywhere.
+      isEnabled = function(_, petState)
+          if not (petState.exists and petState.alive) then return false end
+          return ToothEquippedId() == DEVILSAUR_TOOTH_ID or FindToothInBags() ~= nil
+      end,
+      -- Yellow when equipped without buff yet ("USE!"); red when equipped and
+      -- buff already on pet ("UNEQUIP!"); no border otherwise.
+      resolveBorderColor = function()
+          local stage = ExsarLogic.DevilsaurStage(
+              ToothEquippedId(), IsBuffOnPet(),
+              FindToothInBags() ~= nil, DEVILSAUR_TOOTH_ID)
+          if stage == "equipped_unused" then return DEVILSAUR_YELLOW end
+          if stage == "equipped_buffed" then return DEVILSAUR_RED end
+          return nil
+      end,
+      -- Stage 1 (Tooth in bags): capture its (bag,slot) and equip it -- the
+      -- displaced trinket lands at those same coords, so click 2 swaps back
+      -- using the same numbers. Stage 2 (Tooth equipped): /use to apply the
+      -- buff to the pet, then /equipslot the previous trinket back. If the
+      -- /equipslot leg fails, the red border kicks in (engine reruns this
+      -- function next poll) and the user resolves the swap manually.
+      resolveMacro = function()
+          if ToothEquippedId() == DEVILSAUR_TOOTH_ID then
+              local bag, slot = StoredToothBagSlot()
+              if bag then
+                  return string.format("/use %d\n/equipslot %d %d %d",
+                      DEVILSAUR_SLOT, DEVILSAUR_SLOT, bag, slot)
+              end
+              return string.format("/use %d", DEVILSAUR_SLOT)
+          end
+          local bag, slot = FindToothInBags()
+          if bag then
+              RememberToothBagSlot(bag, slot)
+              return string.format("/equipslot %d %d %d", DEVILSAUR_SLOT, bag, slot)
+          end
+          return ""
+      end,
+    },
 }
 
 -- Sanity: keep the binding count aligned with the declared bindings.
@@ -122,5 +254,5 @@ ExsarUI.CreateActionBar({
     bindingCount        = MAX_SLOTS,
     bindingHeaderGlobal = "BINDING_HEADER_EXSARADDONPET",
     bindingHeaderText   = "ExsarAddon Pet",
-    pollInterval        = 0.2,
+    pollInterval        = 0.1,
 })

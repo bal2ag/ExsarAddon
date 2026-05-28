@@ -1320,6 +1320,9 @@ end
 --                    or to `false` to force the macro-text tooltip.
 --   activeBuff       player buff name; glows the border only while it is up
 --                    (action kind + opts.border; e.g. the active aspect)
+--   borderColor      {r,g,b,a} static border color override (per-slot opt-in
+--                    creates the border ring even when opts.border is unset,
+--                    e.g. a single warning slot on an otherwise borderless bar)
 --   bindingLabel     override for the Key Bindings UI row label
 -- Escape hooks (called on the poll tick; consume returns):
 --   resolveActive(s)        -> { id, name, icon } current item (item kind)
@@ -1328,6 +1331,13 @@ end
 --   resolveIcon(s, petState)-> texture
 --   isEnabled(s, petState)  -> bool
 --   isActive(s, petState)   -> bool (drives the border; overrides activeBuff)
+--   resolveBorderColor(s, petState) -> {r,g,b,a} | nil   per-tick dynamic
+--                    border show + recolor; nil hides it. Overrides isActive /
+--                    activeBuff / borderColor (lets one slot flip between
+--                    multiple states, e.g. Devilsaur Prep yellow vs red).
+--   resolveMacro(s, petState) -> macrotext string   stage-dependent macrotext
+--                    (e.g. Devilsaur Prep: equip vs use+swap). Engine queues
+--                    SecureSetAttribute when the text changes (combat-deferred).
 --   tooltip(s, GameTooltip) -> custom tooltip
 --
 -- opts: name (DB namespace), frameName, buttonPrefix, placeholder, actions,
@@ -1466,7 +1476,8 @@ function ExsarUI.CreateActionBar(opts)
     for i, action in ipairs(actions) do
         local kind = action.type
         if not kind then
-            if action.macro or action.trinketSlot or action.spells then kind = "macro"
+            if action.macro or action.trinketSlot or action.spells
+               or action.resolveMacro then kind = "macro"
             elseif action.spell then kind = "spell"
             else kind = "item" end
         end
@@ -1546,8 +1557,14 @@ function ExsarUI.CreateActionBar(opts)
 
         -- Optional gold 1px border ring (created before slotBg so only the
         -- outer ring shows once the opaque backing covers the center).
-        if opts.border then
-            s.border = ExsarUI.CreateGlow(btn, 1, 0.82, 0.25, 0.85, 1)
+        -- Created for the whole bar (opts.border) OR per-slot when the action
+        -- declares a static `borderColor` / dynamic `resolveBorderColor` (e.g.
+        -- the Devilsaur Prep slot's yellow/red warning).
+        if opts.border or action.borderColor or action.resolveBorderColor then
+            local c = action.borderColor
+            local r, g, b, a = 1, 0.82, 0.25, 0.85
+            if c then r, g, b, a = c[1] or r, c[2] or g, c[3] or b, c[4] or a end
+            s.border = ExsarUI.CreateGlow(btn, r, g, b, a, 1)
         end
         local slotBg = btn:CreateTexture(nil, "BACKGROUND")
         slotBg:SetAllPoints()
@@ -1781,6 +1798,27 @@ function ExsarUI.CreateActionBar(opts)
         if needLayout then ApplyLayout() end
     end
 
+    -- Apply the active-state border to a slot: a dynamic resolveBorderColor
+    -- override (returns {r,g,b,a} or nil to hide -- used for the Devilsaur Prep
+    -- yellow/red warning) takes precedence over the default s.active gate,
+    -- which lights the static gold ring.
+    local function AB_ApplyBorder(s, petState)
+        if not s.border then return end
+        local a = s.action
+        if a.resolveBorderColor then
+            local rgba = a.resolveBorderColor(s, petState)
+            if rgba then
+                s.border:SetColorTexture(rgba[1] or 1, rgba[2] or 1,
+                                         rgba[3] or 1, rgba[4] or 0.85)
+                s.border:Show()
+            else
+                s.border:Hide()
+            end
+        else
+            s.border:SetShown(s.active and true or false)
+        end
+    end
+
     -- ---------- per-slot visuals (icons / cooldown / grey-out / border) ----------
     local function UpdateVisuals()
         local now = GetTime()
@@ -1821,7 +1859,6 @@ function ExsarUI.CreateActionBar(opts)
                     s.cooldown:SetCooldown(0, 0)
                     s.timeText:SetText("")
                     s.active = false
-                    if s.border then s.border:Hide() end
                 else
                     local start, duration
                     if a.cooldownDebuff then
@@ -1843,8 +1880,8 @@ function ExsarUI.CreateActionBar(opts)
                         s.timeText:SetText("")
                     end
                     s.active = s.known and true or false
-                    if s.border then s.border:SetShown(s.active) end
                 end
+                AB_ApplyBorder(s, petState)
 
             else  -- macro / spell: greyed by a predicate, sweep from item/debuff/GCD
                 local start, duration, isRealCD
@@ -1942,7 +1979,20 @@ function ExsarUI.CreateActionBar(opts)
                 elseif a.activeBuff then active = AB_PlayerHasBuff(a.activeBuff)
                 else active = false end
                 s.active = active
-                if s.border then s.border:SetShown(active) end
+                AB_ApplyBorder(s, petState)
+
+                -- Stage-dependent macrotext (e.g. Devilsaur Prep: equip vs
+                -- use+swap depending on whether the Tooth is in slot 13 yet).
+                -- Setting macrotext is protected, so combat-defer via
+                -- ExsarUI.SecureSetAttribute. Only writes when the text
+                -- changes so we don't flood the queue.
+                if a.resolveMacro then
+                    local text = a.resolveMacro(s, petState)
+                    if text and text ~= s.macrotext then
+                        s.macrotext = text
+                        ExsarUI.SecureSetAttribute(s.btn, "macrotext", text)
+                    end
+                end
             end
         end
     end

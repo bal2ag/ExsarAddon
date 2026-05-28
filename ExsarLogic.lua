@@ -703,6 +703,37 @@ function ExsarLogic.ParseNameSet(text)
     return set
 end
 
+-- =========================================================
+-- Devilsaur Prep state machine (pet management widget)
+-- =========================================================
+
+-- Classify the live state of the Devilsaur Tooth boss-prep workflow into a
+-- single stage key so the widget can pick its macro + visuals without each
+-- module embedding the decision tree. Pure.
+--
+--   "absent"            no Tooth equipped, none in bags — nothing to do
+--   "bagged"            Tooth in bags, not equipped — click 1: equip it
+--   "equipped_unused"   Tooth equipped, buff not on pet — click 2: /use + swap
+--                       (yellow "use me!" highlight)
+--   "equipped_buffed"   Tooth equipped AND buff on pet — the /equipslot half of
+--                       click 2 failed (or hasn't fired). Red "unequip!" warning
+--                       — manual swap needed
+--   "buffed_unequipped" Tooth back in bags AND buff still ticking on pet — the
+--                       happy outcome; no highlight, no work owed
+--
+-- @param equippedId  number|nil  item id currently in the trinket slot
+-- @param buffOnPet   bool        is the buff active on the player's pet
+-- @param hasInBags   bool        is at least one Tooth carried in bags
+-- @param toothId     number      Devilsaur Tooth item id (passed for testability)
+function ExsarLogic.DevilsaurStage(equippedId, buffOnPet, hasInBags, toothId)
+    local equipped = equippedId == toothId
+    if equipped and buffOnPet then return "equipped_buffed" end
+    if equipped then return "equipped_unused" end
+    if buffOnPet then return "buffed_unequipped" end
+    if hasInBags then return "bagged" end
+    return "absent"
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic
