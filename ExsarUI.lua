@@ -1574,8 +1574,13 @@ function ExsarUI.CreateActionBar(opts)
         if action.icon then
             s.icon:SetTexture(action.icon)
         elseif kind == "item" then
-            s.icon:SetTexture(select(10, GetItemInfo(s.itemId))
-                or "Interface\\Icons\\INV_Misc_QuestionMark")
+            -- Item data may not be cached on a cold start; show the question-mark
+            -- placeholder and mark unresolved so ResolveStaticIcons retries it on
+            -- GET_ITEM_INFO_RECEIVED (probing the texture won't work -- the
+            -- placeholder counts as a texture and would block the retry forever).
+            local tex = select(10, GetItemInfo(s.itemId))
+            s.icon:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
+            s.iconResolved = tex ~= nil
         else
             s.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         end
@@ -1700,9 +1705,9 @@ function ExsarUI.CreateActionBar(opts)
                     or (a.iconSpell and GetSpellTexture(a.iconSpell))
                 if tex then s.icon:SetTexture(tex); s.iconResolved = true end
             end
-            if s.kind == "item" and not s.icon:GetTexture() then
+            if s.kind == "item" and not s.iconResolved then
                 local tex = select(10, GetItemInfo(s.itemId))
-                if tex then s.icon:SetTexture(tex) end
+                if tex then s.icon:SetTexture(tex); s.iconResolved = true end
             end
         end
     end
@@ -1745,7 +1750,9 @@ function ExsarUI.CreateActionBar(opts)
                     s.itemId, s.itemName = chosen.id, chosen.name
                     s.btn:SetAttribute("item",
                         a.hideWhenEmpty and ("item:" .. chosen.id) or chosen.name)
-                    s.icon:SetTexture(chosen.icon or select(10, GetItemInfo(chosen.id)) or nil)
+                    local tex = chosen.icon or select(10, GetItemInfo(chosen.id))
+                    s.icon:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
+                    s.iconResolved = tex ~= nil  -- retry via ResolveStaticIcons if cold
                     s.count = -1  -- force countText refresh
                 end
             end
