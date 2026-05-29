@@ -1569,8 +1569,118 @@ describe("RaidDebuffsShouldShow", function()
         assert.is_false(Logic.RaidDebuffsShouldShow(base({ hasTarget = false })))
     end)
 
+    it("still hides without a target even when both relaxers are on", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(
+            base({ hasTarget = false, showOutOfCombat = true, showOutOfRaid = true })))
+    end)
+
+    it("shows out of combat when showOutOfCombat is set", function()
+        assert.is_true(Logic.RaidDebuffsShouldShow(
+            base({ inCombat = false, showOutOfCombat = true })))
+    end)
+
+    it("still hides out of combat when only the raid relaxer is set", function()
+        assert.is_false(Logic.RaidDebuffsShouldShow(
+            base({ inCombat = false, showOutOfRaid = true })))
+    end)
+
+    it("shows out of raid when showOutOfRaid is set", function()
+        assert.is_true(Logic.RaidDebuffsShouldShow(
+            base({ inRaid = false, showOutOfRaid = true })))
+    end)
+
+    it("shows solo (no combat, no raid) when both relaxers are set", function()
+        assert.is_true(Logic.RaidDebuffsShouldShow(
+            base({ inCombat = false, inRaid = false,
+                   showOutOfCombat = true, showOutOfRaid = true })))
+    end)
+
     it("handles nil opts", function()
         assert.is_false(Logic.RaidDebuffsShouldShow(nil))
+    end)
+end)
+
+-- =========================================================
+-- ComputeDebuffStatus
+-- =========================================================
+
+describe("ComputeDebuffStatus", function()
+    local tracked = {
+        { key = "ff",    name = "Faerie Fire",     auras = { "Faerie Fire", "Faerie Fire (Feral)" } },
+        { key = "mark",  name = "Hunter's Mark",   auras = { "Hunter's Mark" } },
+        { key = "armor", name = "Armor reduction", auras = { "Sunder Armor", "Expose Armor" } },
+    }
+    local allOn = function() return true end
+
+    it("returns one entry per enabled debuff in input order", function()
+        local st = Logic.ComputeDebuffStatus(tracked, allOn, {})
+        assert.are.equal(3, #st)
+        assert.are.equal("ff", st[1].key)
+        assert.are.equal("mark", st[2].key)
+        assert.are.equal("armor", st[3].key)
+    end)
+
+    it("flags satisfied and reports the satisfying alias aura", function()
+        local st = Logic.ComputeDebuffStatus(tracked, allOn, { ["Expose Armor"] = true })
+        assert.is_false(st[1].satisfied)         -- ff
+        assert.is_nil(st[1].aura)
+        assert.is_true(st[3].satisfied)          -- armor
+        assert.are.equal("Expose Armor", st[3].aura)
+    end)
+
+    it("skips disabled debuffs entirely", function()
+        local onlyMark = function(key) return key == "mark" end
+        local st = Logic.ComputeDebuffStatus(tracked, onlyMark, {})
+        assert.are.equal(1, #st)
+        assert.are.equal("mark", st[1].key)
+    end)
+
+    it("respects caster matching like ComputeMissingDebuffs", function()
+        local BOOMKIN = "Player-1-ABCD"
+        local reqFor = function(key) if key == "ff" then return BOOMKIN end end
+        local st = Logic.ComputeDebuffStatus(tracked, allOn,
+            { ["Faerie Fire"] = "Player-1-OTHER" }, reqFor)
+        assert.is_false(st[1].satisfied)  -- wrong caster → not satisfied
+    end)
+
+    it("handles nil tracked / nil present gracefully", function()
+        assert.are.equal(0, #Logic.ComputeDebuffStatus(nil, allOn, nil))
+        assert.are.equal(3, #Logic.ComputeDebuffStatus(tracked, allOn, nil))
+    end)
+end)
+
+-- =========================================================
+-- DebuffBarColor
+-- =========================================================
+
+describe("DebuffBarColor", function()
+    local function blue(r, g, b)   return r == 0.25 and g == 0.55 and b == 0.95 end
+    local function yellow(r, g, b) return r == 0.95 and g == 0.85 and b == 0.15 end
+    local function orange(r, g, b) return r == 1.00 and g == 0.50 and b == 0.10 end
+
+    it("is blue above 50% remaining", function()
+        assert.is_true(blue(Logic.DebuffBarColor(6, 10)))
+    end)
+
+    it("is yellow at exactly 50% remaining", function()
+        assert.is_true(yellow(Logic.DebuffBarColor(5, 10)))
+    end)
+
+    it("is yellow between 20% and 50%", function()
+        assert.is_true(yellow(Logic.DebuffBarColor(3, 10)))
+    end)
+
+    it("is orange at exactly 20% remaining", function()
+        assert.is_true(orange(Logic.DebuffBarColor(2, 10)))
+    end)
+
+    it("is orange below 20%", function()
+        assert.is_true(orange(Logic.DebuffBarColor(0.5, 10)))
+    end)
+
+    it("is blue (full) when duration is zero / nil", function()
+        assert.is_true(blue(Logic.DebuffBarColor(0, 0)))
+        assert.is_true(blue(Logic.DebuffBarColor(nil, nil)))
     end)
 end)
 

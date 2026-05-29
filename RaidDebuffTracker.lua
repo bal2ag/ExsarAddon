@@ -1,16 +1,23 @@
 -- RaidDebuffTracker module
--- "Missing raid debuffs" caller: checks the player's target for a configured set
--- of critical raid debuffs important for hunter damage and shows an icon (marked
--- with a Red X) for each one that is MISSING — so you can call it out on Discord.
+-- Combined raid-debuff status panel: a vertical list with one row per tracked
+-- debuff important for hunter damage. Each row is either:
+--   * PRESENT — icon + name on a draining StatusBar (blue → yellow at 50% → orange
+--     at 20% of duration remaining) + a countdown timer, so you can see when a
+--     debuff is about to fall off and needs refreshing; or
+--   * MISSING — icon + red name on a solid dim-red bar (no timer), so you can
+--     still call out what's absent on Discord.
+-- A present debuff with no readable timer (permanent, or a client that hides
+-- others' durations) shows a full blue bar with no countdown.
 --
 -- Unlike TargetDebuffTracker (which shows debuffs you cast), this scans ALL
 -- debuffs on the target (raid debuffs come from other players), matching by name
 -- to catch every rank/source.
 --
--- Only visible while in combat, in a raid, with a target — and only lists the
--- debuffs that are actually absent. Each tracked debuff can be toggled off in
--- config (e.g. when the raid lacks the class that provides it).
--- Settings stored under ExsarAddonDB.raidDebuffs.
+-- Visibility: a target is always required. By default also requires in combat +
+-- in a raid; each of those is independently waivable via the "Show out of combat"
+-- / "Show out of raid" config checkboxes (both default off). Each tracked debuff
+-- can be toggled off in config (e.g. when the raid lacks the class that provides
+-- it). Settings stored under ExsarAddonDB.raidDebuffs.
 
 local ADDON_NAME = "ExsarAddon"
 
@@ -61,14 +68,18 @@ local TRACKED_DEBUFFS = {
 -- Layout constants  (vertical list: title + [icon] colored-name rows)
 -- =========================================================
 
-local ICON_SIZE = 20    -- per-row icon
+local ICON_SIZE = 20    -- per-row icon (and bar height)
 local ROW_GAP   = 3     -- vertical gap between rows
-local TEXT_GAP  = 5     -- icon → name gap
+local TEXT_GAP  = 5     -- icon → bar gap
 local TITLE_GAP = 4     -- title → first row gap
 local PADDING   = 6
+local BAR_INSET = 4     -- name/timer inset from the bar edges
+local TIMER_RESERVE = 48 -- extra bar width beyond the widest name (timer + insets)
 
-local TITLE_TEXT  = "Debuffs missing:"
-local MISSING_COLOR = { 1, 0.4, 0.4 }  -- default name color; per-entry `color` overrides
+local TITLE_TEXT  = "Raid debuffs:"
+local MISSING_COLOR    = { 1, 0.4, 0.4 }       -- missing name color; per-entry `color` overrides
+local PRESENT_COLOR    = { 1, 1, 1 }           -- present name color; per-entry `presentColor` overrides
+local MISSING_BAR_COLOR = { 0.5, 0.12, 0.12 }  -- solid dim-red fill for a missing row
 
 -- =========================================================
 -- Main frame
@@ -107,6 +118,15 @@ end
 
 local function IsWidgetEnabled()
     return rDB().enabled ~= false
+end
+
+-- Visibility relaxers (both default OFF → stored true only when enabled).
+local function IsShowOutOfCombat()
+    return rDB().showOutOfCombat == true
+end
+
+local function IsShowOutOfRaid()
+    return rDB().showOutOfRaid == true
 end
 
 local function IsAutoDetectEnabled()
@@ -166,7 +186,8 @@ end
 local function MakeSlot(debuff)
     local s = { def = debuff }
 
-    -- Row container holds the icon (left) + name text (right of icon).
+    -- Row container holds the icon (left) + a status bar (right of icon) that
+    -- carries the name (left-overlaid) and the countdown timer (right-overlaid).
     s.row = CreateFrame("Frame", nil, frame)
     s.row:SetHeight(ICON_SIZE)
 
@@ -175,12 +196,30 @@ local function MakeSlot(debuff)
     holder:SetPoint("TOPLEFT", s.row, "TOPLEFT", 0, 0)
     s.icon = ExsarUI.CreateIcon(holder)
 
-    s.name = s.row:CreateFontString(nil, "OVERLAY")
+    -- Draining timer bar. Present → colored fill that drains as the debuff
+    -- expires; missing → solid dim-red fill. Width is set per layout pass.
+    s.bar = CreateFrame("StatusBar", nil, s.row)
+    s.bar:SetPoint("TOPLEFT", holder, "TOPRIGHT", TEXT_GAP, 0)
+    s.bar:SetHeight(ICON_SIZE)
+    s.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    s.bar:SetMinMaxValues(0, 1)
+    s.bar:SetValue(1)
+
+    local bg = s.bar:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.55)
+
+    s.name = s.bar:CreateFontString(nil, "OVERLAY")
     s.name:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
-    s.name:SetPoint("LEFT", holder, "RIGHT", TEXT_GAP, 0)
+    s.name:SetPoint("LEFT", s.bar, "LEFT", BAR_INSET, 0)
     local c = debuff.color or MISSING_COLOR
     s.name:SetTextColor(c[1], c[2], c[3], 1)
     s.name:SetText(debuff.name)
+
+    s.timer = s.bar:CreateFontString(nil, "OVERLAY")
+    s.timer:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    s.timer:SetPoint("RIGHT", s.bar, "RIGHT", -BAR_INSET, 0)
+    s.timer:SetTextColor(1, 1, 1, 1)
 
     s.row:Hide()
     return s
@@ -211,28 +250,76 @@ end
 -- Layout
 -- =========================================================
 
--- Lay out the title + one row per missing debuff (vertical). Only called when
--- the widget is active, so the title is always shown — its presence tells the
--- user the widget is live even when nothing is missing (empty list under title).
-local function ApplyLayout(missing)
+local lastTimeStrs = {}  -- [slotIndex] = last timer string (avoid SetText churn)
+
+-- Lay out the title + one row per ENABLED tracked debuff (vertical), present or
+-- missing. Only called when the widget is active, so the title is always shown.
+-- `status` is the ordered ExsarLogic.ComputeDebuffStatus result; `timing` maps
+-- aura name → { duration, expTime } for present debuffs; `now` is GetTime().
+local function ApplyLayout(status, timing, now)
     for _, s in ipairs(slots) do s.row:Hide() end
+
+    -- Uniform bar width across rows = widest enabled name + room for the timer.
+    local maxNameW = 0
+    for _, st in ipairs(status) do
+        maxNameW = math.max(maxNameW, slots[st.def._slotIndex].name:GetStringWidth())
+    end
+    local barW = maxNameW + TIMER_RESERVE
 
     local maxRowW = titleText:GetStringWidth()
     local yOffset = PADDING + titleText:GetStringHeight() + TITLE_GAP
 
-    for _, def in ipairs(missing) do
-        local s = slots[def._slotIndex]
+    for _, st in ipairs(status) do
+        local idx = st.def._slotIndex
+        local s = slots[idx]
         s.row:ClearAllPoints()
         s.row:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -yOffset)
-        local rowW = ICON_SIZE + TEXT_GAP + s.name:GetStringWidth()
+        s.bar:SetWidth(barW)
+        local rowW = ICON_SIZE + TEXT_GAP + barW
         s.row:SetWidth(rowW)
         maxRowW = math.max(maxRowW, rowW)
+
+        if st.satisfied then
+            local t = timing and timing[st.aura]
+            local dur = (t and t.duration) or 0
+            local exp = (t and t.expTime) or 0
+            local remaining = exp > 0 and math.max(0, exp - now) or 0
+            if dur > 0 and exp > 0 then
+                s.bar:SetMinMaxValues(0, dur)
+                s.bar:SetValue(remaining)
+                s.bar:SetStatusBarColor(ExsarLogic.DebuffBarColor(remaining, dur))
+                local str = ExsarLogic.FormatCooldown(remaining)
+                if str ~= lastTimeStrs[idx] then
+                    lastTimeStrs[idx] = str
+                    s.timer:SetText(str)
+                end
+            else
+                -- present but no readable timer (permanent / API hid it)
+                s.bar:SetMinMaxValues(0, 1)
+                s.bar:SetValue(1)
+                s.bar:SetStatusBarColor(ExsarLogic.DebuffBarColor(1, 0))
+                s.timer:SetText("")
+                lastTimeStrs[idx] = nil
+            end
+            local c = st.def.presentColor or PRESENT_COLOR
+            s.name:SetTextColor(c[1], c[2], c[3], 1)
+        else
+            -- missing: solid dim-red bar, red name, no timer
+            s.bar:SetMinMaxValues(0, 1)
+            s.bar:SetValue(1)
+            s.bar:SetStatusBarColor(MISSING_BAR_COLOR[1], MISSING_BAR_COLOR[2], MISSING_BAR_COLOR[3])
+            s.timer:SetText("")
+            lastTimeStrs[idx] = nil
+            local c = st.def.color or MISSING_COLOR
+            s.name:SetTextColor(c[1], c[2], c[3], 1)
+        end
+
         s.row:Show()
         yOffset = yOffset + ICON_SIZE + ROW_GAP
     end
 
     -- Trim the trailing row gap (none added when the list is empty).
-    if #missing > 0 then yOffset = yOffset - ROW_GAP end
+    if #status > 0 then yOffset = yOffset - ROW_GAP end
 
     frame:SetSize(maxRowW + PADDING * 2, yOffset + PADDING)
     frame:Show()
@@ -247,11 +334,13 @@ local function UpdateMissing()
     local hasTarget = UnitExists("target") and true or false
 
     local show = ExsarLogic.RaidDebuffsShouldShow({
-        enabled   = IsWidgetEnabled(),
-        inCombat  = C_inCombat,
-        inRaid    = IsInRaid(),
-        hasTarget = hasTarget,
-        unlocked  = unlocked,
+        enabled         = IsWidgetEnabled(),
+        inCombat        = C_inCombat,
+        inRaid          = IsInRaid(),
+        hasTarget       = hasTarget,
+        showOutOfCombat = IsShowOutOfCombat(),
+        showOutOfRaid   = IsShowOutOfRaid(),
+        unlocked        = unlocked,
     })
 
     if not show then
@@ -259,29 +348,34 @@ local function UpdateMissing()
         return
     end
 
-    -- Build the aura→caster map of debuffs on the target (any caster). The 7th
-    -- return of UnitDebuff is the caster unit token; resolve it to a GUID so
-    -- entries with a required caster (Faerie Fire) can be matched. A nil token
-    -- (caster out of range / unreported) stores `true` = present-but-unknown.
-    -- While unlocked we skip the scan entirely (present stays empty) so EVERY
-    -- enabled debuff lists as missing — a deterministic positioning/testing
-    -- preview that doesn't depend on what the current target happens to have.
-    local present = {}
+    -- Build the aura→caster map of debuffs on the target (any caster) plus a
+    -- parallel aura→timing map (duration + expiration) for the draining bars.
+    -- Returns 5/6/7 of UnitDebuff are duration / expirationTime / caster token;
+    -- resolve the caster to a GUID so entries with a required caster (Faerie
+    -- Fire) can be matched. A nil token (caster out of range / unreported)
+    -- stores `true` = present-but-unknown. While unlocked we skip the scan
+    -- entirely (present stays empty) so EVERY enabled debuff lists as missing —
+    -- a deterministic positioning preview independent of the current target.
+    local present, timing = {}, {}
     if hasTarget and not unlocked then
         for i = 1, 40 do
-            local bName, _, _, _, _, _, bCaster = UnitDebuff("target", i)
+            local bName, _, _, _, bDuration, bExp, bCaster = UnitDebuff("target", i)
             if not bName then break end
             local guid = bCaster and UnitGUID(bCaster) or nil
             present[bName] = guid or true
+            if not timing[bName] then
+                timing[bName] = { duration = bDuration or 0, expTime = bExp or 0 }
+            end
         end
     end
 
-    local missing = ExsarLogic.ComputeMissingDebuffs(
-        TRACKED_DEBUFFS, IsDebuffEnabled, present, RequiredCasterFor)
     -- Tag each entry with its slot index for the layout step.
     for idx, def in ipairs(TRACKED_DEBUFFS) do def._slotIndex = idx end
 
-    ApplyLayout(missing)
+    local status = ExsarLogic.ComputeDebuffStatus(
+        TRACKED_DEBUFFS, IsDebuffEnabled, present, RequiredCasterFor)
+
+    ApplyLayout(status, timing, GetTime())
 end
 
 -- =========================================================
@@ -487,6 +581,24 @@ ExsarAddon.RegisterModule({
             function() return IsWidgetEnabled() end,
             function(v)
                 rDB().enabled = v
+                UpdateMissing()
+            end)
+        y = y - 30
+
+        -- Visibility relaxers (a target is always required). Both default off,
+        -- so the default gating stays combat + raid + target.
+        ExsarAddon.CreateCheckbox(parent, "Show out of combat", 16, y,
+            function() return IsShowOutOfCombat() end,
+            function(v)
+                rDB().showOutOfCombat = v
+                UpdateMissing()
+            end)
+        y = y - 30
+
+        ExsarAddon.CreateCheckbox(parent, "Show out of raid", 16, y,
+            function() return IsShowOutOfRaid() end,
+            function(v)
+                rDB().showOutOfRaid = v
                 UpdateMissing()
             end)
         y = y - 30

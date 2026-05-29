@@ -178,11 +178,11 @@ Shows your Hunter's Mark and Serpent Sting on the current target with countdowns
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
-Calls out critical raid debuffs that are **missing** from your target, so you can ask the raid to reapply them on Discord.
+A combined status panel for critical raid debuffs on your target — showing both what's **present** (with refresh timers) and what's **missing** (to call out on Discord).
 
-- **Shows what's absent:** A vertical list under a "Debuffs missing:" title — one icon + colored name for each tracked debuff that is *not* currently on your target (the opposite of the Target Debuff Tracker). When nothing is missing, only the title shows.
-- **All casters counted:** Detects debuffs applied by anyone in the raid, not just you.
-- **Only when it matters:** Appears while in combat, in a raid, with a target (or any time it's unlocked). The "Debuffs missing:" title is your cue that it's live — so an empty list under it means everything's covered, not that the widget is off.
+- **One row per debuff:** A vertical list under a "Raid debuffs:" title. Each tracked debuff shows either a **present** row — icon + name on a draining timer bar that runs blue → yellow (at 50% remaining) → orange (at 20% remaining) with a countdown, so you can see when it's about to fall off and needs refreshing — or a **missing** row — icon + red name on a solid red bar, so you can still call out absences.
+- **All casters counted:** Detects debuffs applied by anyone in the raid, not just you — including their remaining durations.
+- **Visibility you control:** A target is always required (it's what's scanned). By default the panel also only appears in combat and in a raid; two config checkboxes — **Show out of combat** and **Show out of raid** (both off by default) — let you relax either requirement, e.g. to watch debuffs while soloing or in a 5-man.
 - **Testing preview:** While unlocked, it lists *every* tracked debuff as missing regardless of your target, so you can see the full widget and position it.
 - **Per-debuff toggles:** Each tracked debuff can be turned off in config so you only watch for the ones your raid composition can actually provide. The whole widget can also be disabled.
 - **Talent-gated debuffs (Faerie Fire & Judgement of the Crusader):** Some debuffs only give their bonus when the caster is talented — Improved Faerie Fire's +hit, and Judgement of the Crusader's +crit (from a paladin's Improved Seal of the Crusader). That talent is invisible on the target, so the widget identifies *which* druid/paladin provides it and only counts *their* version (a feral's armor-only Faerie Fire, or an untalented paladin's Judgement, still shows as missing). It finds them two ways: **automatically**, by inspecting nearby raid druids/paladins' talents whenever they come within ~28 yards (a one-time catch is enough — it remembers them for the session; toggle off with the **Auto-detect talented casters** checkbox if you'd rather not auto-inspect), and **manually**, by targeting the player and clicking **Set from target** in config. With nobody identified yet, the debuff from anyone counts.

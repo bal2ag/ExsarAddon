@@ -609,6 +609,26 @@ end
 --                           (e.g. several specced druids).
 -- @return array of the missing tracked entries, in input order
 function ExsarLogic.ComputeMissingDebuffs(tracked, isEnabled, present, requiredCasterFor)
+    local missing = {}
+    for _, st in ipairs(ExsarLogic.ComputeDebuffStatus(tracked, isEnabled, present, requiredCasterFor)) do
+        if not st.satisfied then missing[#missing + 1] = st.def end
+    end
+    return missing
+end
+
+--- Compute the present/missing status of every enabled tracked debuff. Pure.
+-- The combined-panel generalization of ComputeMissingDebuffs: it returns one
+-- entry per ENABLED tracked debuff (in input order), flagging whether the entry
+-- is satisfied (any of its alias auras present and cast by an accepted caster)
+-- and, if so, WHICH alias aura satisfied it — so the caller can look up that
+-- aura's live duration/expiration to drive a timer bar. Disabled debuffs are
+-- skipped. Caster-matching rules are identical to ComputeMissingDebuffs.
+-- @param tracked    array of { key, name, auras = { auraName, ... } }
+-- @param isEnabled  function(key) -> bool
+-- @param present    table { [auraName] = true | "<guid>" } of auras on the target
+-- @param requiredCasterFor  optional function(key) -> req (nil / guid / set)
+-- @return array of { def = <tracked entry>, key, satisfied = bool, aura = name|nil }
+function ExsarLogic.ComputeDebuffStatus(tracked, isEnabled, present, requiredCasterFor)
     -- Does a present aura's caster `p` satisfy the requirement `req`?
     local function casterOk(req, p)
         if not req then return true end       -- no caster requirement
@@ -617,23 +637,45 @@ function ExsarLogic.ComputeMissingDebuffs(tracked, isEnabled, present, requiredC
         return p == req
     end
 
-    local missing = {}
+    local out = {}
     present = present or {}
     for _, d in ipairs(tracked or {}) do
         if isEnabled(d.key) then
             local req = requiredCasterFor and requiredCasterFor(d.key) or nil
-            local found = false
+            local satisfied, satAura = false, nil
             for _, aura in ipairs(d.auras or {}) do
                 local p = present[aura]
                 if p ~= nil and casterOk(req, p) then
-                    found = true
+                    satisfied, satAura = true, aura
                     break
                 end
             end
-            if not found then missing[#missing + 1] = d end
+            out[#out + 1] = { def = d, key = d.key, satisfied = satisfied, aura = satAura }
         end
     end
-    return missing
+    return out
+end
+
+--- Color for a draining debuff-timer bar, by fraction of duration remaining.
+-- Blue while plenty of time is left, yellow as it crosses half, orange when it
+-- is about to fall off — a refresh-urgency cue. Thresholds match the spec:
+-- 50% → yellow, 20% → orange. With no/zero duration (permanent debuff, or the
+-- client not reporting a timer) it returns blue (treated as full).
+-- @param remaining  seconds left (may be nil)
+-- @param duration   total duration in seconds (nil/<=0 → treated as full)
+-- @return r, g, b
+function ExsarLogic.DebuffBarColor(remaining, duration)
+    if not duration or duration <= 0 then
+        return 0.25, 0.55, 0.95   -- no timing → full (blue)
+    end
+    local frac = (remaining or 0) / duration
+    if frac > 0.5 then
+        return 0.25, 0.55, 0.95   -- blue
+    elseif frac > 0.2 then
+        return 0.95, 0.85, 0.15   -- yellow
+    else
+        return 1.00, 0.50, 0.10   -- orange
+    end
 end
 
 --- Find the rank of a named talent in an inspected talent list. Pure.
@@ -650,17 +692,23 @@ function ExsarLogic.FindTalentRank(talents, name)
 end
 
 --- Decide whether the raid-debuff tracker frame should be visible.
--- The real callout display requires the feature enabled, the player in combat,
--- in a raid, and with a target to inspect. When unlocked (config preview) it
--- always shows so the user can position it. Whether any debuffs are actually
--- missing is decided separately by the layout step.
--- @param o table { enabled, inCombat, inRaid, hasTarget, unlocked }
+-- The combined panel always requires the feature enabled and a target (a target
+-- is needed to scan for debuffs at all). The combat and raid requirements are
+-- each independently relaxable via config: `showOutOfCombat` waives the in-combat
+-- requirement, `showOutOfRaid` waives the in-raid requirement (both default off,
+-- so the default behavior is the original combat + raid + target gating). When
+-- unlocked (config preview) it always shows so the user can position it.
+-- @param o table { enabled, inCombat, inRaid, hasTarget,
+--                  showOutOfCombat, showOutOfRaid, unlocked }
 -- @return bool
 function ExsarLogic.RaidDebuffsShouldShow(o)
     o = o or {}
     if o.unlocked then return true end
-    return o.enabled == true and o.inCombat == true
-        and o.inRaid == true and o.hasTarget == true
+    if o.enabled ~= true then return false end
+    if o.hasTarget ~= true then return false end
+    if o.inCombat ~= true and o.showOutOfCombat ~= true then return false end
+    if o.inRaid ~= true and o.showOutOfRaid ~= true then return false end
+    return true
 end
 
 --- Choose which raid/party members the assist widget should track and show.
