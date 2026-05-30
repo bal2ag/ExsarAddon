@@ -1830,14 +1830,8 @@ function ExsarUI.CreateActionBar(opts)
     local function UpdateVisuals()
         local now = GetTime()
         local exists = UnitExists("pet")
-        -- Around a pet death (notably in combat) the "pet" unit token can read as
-        -- absent even though a revivable dead pet exists. Revive Pet is usable
-        -- ONLY when you have a dead pet, so treat a usable Revive as a dead pet --
-        -- this keeps the all-in-one icon on Revive (not the Call whistle) and the
-        -- `requires` gating correct when the token is flaky.
-        local deadByRevive = (not exists) and IsUsableSpell("Revive Pet") and true or false
         local petState = {
-            exists = (exists or deadByRevive) and true or false,
+            exists = exists and true or false,
             alive  = (exists and not UnitIsDead("pet")) and true or false,
         }
         local stateKey = ExsarLogic.PetStateKey(petState)

@@ -91,30 +91,110 @@ local function StoredToothBagSlot()
     if s and s.bag and s.slot then return s.bag, s.slot end
 end
 
+-- ----- Pet life-state tracking (dead vs dismissed) ---------------------------
+-- The trouble state is "pet died AND its body has despawned" (you ran out of
+-- range of the corpse, or started a Revive cast and cancelled it, etc.). With
+-- the corpse STILL on the ground the pet is a normal unit -- `UnitExists("pet")`
+-- and `[@pet,dead]` are true, so the macro works. Once the body despawns the
+-- "pet" token vanishes entirely, and a corpse-gone dead pet becomes
+-- INDISTINGUISHABLE from a dismissed pet: UnitExists / UnitIsDead / UnitHealth /
+-- GetPetHappiness / HasPetUI all read false / false / 0 / nil / false for BOTH
+-- (verified in-game). The game knows internally (Revive vs Call) but exposes
+-- nothing, so the only way to tell a corpse-gone dead pet from a dismissed one
+-- is to remember HOW the pet left:
+--   * it DIED  -> combat-log UNIT_DIED/UNIT_DESTROYED for the pet's GUID (fires
+--     at death regardless of the corpse later despawning)
+--   * you DISMISSED it -> the pet simply vanished with no death recorded
+-- We persist the verdict so the all-in-one slot can pick Revive vs Call, and so
+-- it survives /reload (a dead pet stays dead across a relog).
+local petDead = false   -- true = we have a dead, revivable pet (not just absent)
+local petGUID           -- GUID of the current/last pet, to match the death event
+
+local function PetMgmtDB() return ExsarAddonDB and ExsarAddonDB.petManagement end
+
+local function SetPetDead(v)
+    petDead = v and true or false
+    local db = PetMgmtDB()
+    if db then db.petDead = petDead end
+end
+
+local function IsPetDead() return petDead end
+
+local petTracker = CreateFrame("Frame")
+petTracker:RegisterEvent("PLAYER_ENTERING_WORLD")
+petTracker:RegisterEvent("UNIT_PET")
+petTracker:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+petTracker:SetScript("OnEvent", function(_, event)
+    if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        -- Authoritative death signal -- fires once at death and is the only thing
+        -- still true after the corpse despawns and the token is gone.
+        local _, sub, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+        if destGUID and destGUID == petGUID
+           and (sub == "UNIT_DIED" or sub == "UNIT_DESTROYED") then
+            SetPetDead(true)
+        end
+    elseif event == "UNIT_PET" then
+        -- While the token still exists we can read the truth directly: alive
+        -- clears the flag, a corpse-present dead pet sets it (covers a death the
+        -- combat log might have missed). A pet that vanished fires this too but
+        -- with the token gone, so we leave the remembered verdict untouched --
+        -- that's the dismiss case (petDead already false) or corpse-gone dead
+        -- (petDead already true from UNIT_DIED).
+        if UnitExists("pet") then
+            petGUID = UnitGUID("pet")
+            SetPetDead(UnitIsDead("pet"))
+        end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        local db = PetMgmtDB()
+        if db then petDead = db.petDead == true end
+        if UnitExists("pet") then
+            petGUID = UnitGUID("pet")
+            SetPetDead(UnitIsDead("pet"))
+        end
+    end
+end)
+
 local PET_ACTIONS = {
     -- "Do the right thing" pet button: heals a living pet, revives a dead one,
     -- or calls/revives when you have none. Never greyed (no `requires`, handles
     -- every state); the icon tracks state via dynamicIcon.
     { key = "petaio", name = "Pet (All-in-One)",
-      dynamicIcon = {
-          alive   = { spell = "Mend Pet" },
-          dead    = { spell = "Revive Pet" },
-          missing = { spell = "Call Pet" },
-      },
+      type = "macro",
       gcd = true,
-      -- Revive Pet is cast UNCONDITIONALLY (no `[@pet,dead,exists]` gate) on
-      -- purpose: right around a pet death -- especially in combat, where we
-      -- can't rewrite the macro -- the "pet" unit token can momentarily read as
-      -- absent. A token-gated Revive line then fails and execution falls through
-      -- to `[nopet] Call Pet`, which is the "stuck calling a dead pet" bug. By
-      -- always attempting Revive Pet first, a dead pet is revived regardless of
-      -- the token; its cast triggers the GCD, which blocks the trailing Call Pet
-      -- so there is no double-summon. The only cost: with no pet at all the
-      -- Revive line errors harmlessly before Call Pet summons.
-      macro = [[/use [@pet,nodead,exists] Mend Pet
-/stopmacro [@pet,nodead,exists]
-/cast Revive Pet
-/cast [nopet] Call Pet]] },
+      -- "Do the right thing" pet button: Mend a live pet / Revive a dead one /
+      -- Call when you have none. The dead-vs-dismissed split can't be read from
+      -- the API once the corpse despawns, so it comes from the persisted
+      -- IsPetDead() verdict (see the pet life-state tracking note above). Three
+      -- states drive both icon and macro:
+      --   * HAVE A PET (UnitExists, i.e. alive OR a dead pet whose corpse is
+      --     still up) -> Mend a live pet with an UNGATED `/cast Revive Pet`
+      --     fallback. The fallback is what handles a pet that DIES mid-combat:
+      --     we can't rewrite a secure macro in combat, so the variant loaded
+      --     while the pet was alive must itself be able to revive. The Mend gate
+      --     is `[@pet,exists,nodead]`, NOT `[@pet,nodead]` -- `nodead` alone is
+      --     TRUE for an absent unit (a nonexistent pet is "not dead"), which
+      --     would wrongly fire Mend ("you do not have a pet") and `/stopmacro`
+      --     before the Revive.
+      --   * DEAD, corpse gone (no token but IsPetDead) -> `/cast Revive Pet`.
+      --   * DISMISSED / petless -> `/cast Call Pet`.
+      -- Revive and Call can't share one static macro: an ungated Revive with no
+      -- pet errors AND locks the keypress (the client commits to the first
+      -- reachable /cast), starving a following Call -- and Call-first locks the
+      -- same way on a dead pet. That's why the split must come from IsPetDead().
+      resolveIcon = function(_, petState)
+          local spell
+          if petState.exists then spell = "Mend Pet"
+          elseif IsPetDead()   then spell = "Revive Pet"
+          else                      spell = "Call Pet" end
+          return (GetSpellTexture(spell))
+      end,
+      resolveMacro = function(_, petState)
+          if petState.exists then
+              return "/cast [@pet,exists,nodead] Mend Pet\n/stopmacro [@pet,exists,nodead]\n/cast Revive Pet"
+          end
+          if IsPetDead() then return "/cast Revive Pet" end
+          return "/cast Call Pet"
+      end },
 
     -- Send the pet in: Dash for the speed boost, then command the attack.
     -- Needs a living pet, so greyed when the pet is missing or dead.
