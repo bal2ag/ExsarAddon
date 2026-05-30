@@ -102,11 +102,19 @@ local PET_ACTIONS = {
           missing = { spell = "Call Pet" },
       },
       gcd = true,
+      -- Revive Pet is cast UNCONDITIONALLY (no `[@pet,dead,exists]` gate) on
+      -- purpose: right around a pet death -- especially in combat, where we
+      -- can't rewrite the macro -- the "pet" unit token can momentarily read as
+      -- absent. A token-gated Revive line then fails and execution falls through
+      -- to `[nopet] Call Pet`, which is the "stuck calling a dead pet" bug. By
+      -- always attempting Revive Pet first, a dead pet is revived regardless of
+      -- the token; its cast triggers the GCD, which blocks the trailing Call Pet
+      -- so there is no double-summon. The only cost: with no pet at all the
+      -- Revive line errors harmlessly before Call Pet summons.
       macro = [[/use [@pet,nodead,exists] Mend Pet
 /stopmacro [@pet,nodead,exists]
-/use [@pet,dead,exists] Revive Pet
-/stopmacro [@pet,exists]
-/use [nopet] Call Pet]] },
+/cast Revive Pet
+/cast [nopet] Call Pet]] },
 
     -- Send the pet in: Dash for the speed boost, then command the attack.
     -- Needs a living pet, so greyed when the pet is missing or dead.
