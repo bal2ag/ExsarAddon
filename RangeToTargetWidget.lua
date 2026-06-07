@@ -145,9 +145,17 @@ end
 -- =========================================================
 -- Polling (range checks have no event; poll at 0.1s)
 -- =========================================================
+-- The poller runs on a dedicated always-shown ticker frame, NOT on `frame`.
+-- `frame` gets :Hide()'d in the no-target branch, and a hidden frame stops
+-- running its OnUpdate -- which would leave the widget unable to re-evaluate
+-- HaveAttackableTarget() until a PLAYER_TARGET_CHANGED event. That breaks the
+-- case where a unit you already have targeted transitions unattackable ->
+-- attackable with no target change (e.g. the Kael'Thas Advisors becoming
+-- attackable one by one): no event fires, so the widget would stay hidden.
 
+local ticker = CreateFrame("Frame", ADDON_NAME .. "RangeToTargetTicker", UIParent)
 local pollElapsed = 0
-frame:SetScript("OnUpdate", function(_, elapsed)
+ticker:SetScript("OnUpdate", function(_, elapsed)
     pollElapsed = pollElapsed + elapsed
     if pollElapsed < 0.1 then return end
     pollElapsed = 0
