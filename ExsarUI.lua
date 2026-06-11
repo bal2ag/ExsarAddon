@@ -1383,7 +1383,9 @@ local function AB_DebuffCooldown(debuffName)
 end
 
 -- True if the player currently has a buff with the given name (any rank).
-local function AB_PlayerHasBuff(buffName)
+-- Used by the action bar engine (activeBuff) and by swing-cycle tracking
+-- (Feign Death end detection in RangedSwingTimer / CastBar).
+function ExsarUI.PlayerHasBuff(buffName)
     for i = 1, 40 do
         local name = UnitBuff("player", i)
         if not name then break end
@@ -1391,6 +1393,7 @@ local function AB_PlayerHasBuff(buffName)
     end
     return false
 end
+local AB_PlayerHasBuff = ExsarUI.PlayerHasBuff
 
 -- Show a spell's tooltip (by name or id) on GameTooltip via its hyperlink.
 -- Returns true if a tooltip was shown (false if the spell can't be linked, e.g.

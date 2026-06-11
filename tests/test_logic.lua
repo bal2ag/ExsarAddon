@@ -506,6 +506,83 @@ describe("ReticuleFraction", function()
 end)
 
 -- =========================================================
+-- AutoShotDelay
+-- =========================================================
+
+describe("AutoShotDelay", function()
+    -- Baseline: last shot at t=100, speed 2.8 → due at t=102.8
+
+    it("returns nil with no cycle running", function()
+        assert.is_nil(Logic.AutoShotDelay(100, 0, 2.8, 0))
+        assert.is_nil(Logic.AutoShotDelay(100, nil, 2.8, 0))
+    end)
+
+    it("returns nil for zero or missing speed", function()
+        assert.is_nil(Logic.AutoShotDelay(105, 100, 0, 0))
+        assert.is_nil(Logic.AutoShotDelay(105, 100, nil, 0))
+    end)
+
+    it("returns nil mid-cycle with no cast", function()
+        assert.is_nil(Logic.AutoShotDelay(101, 100, 2.8, 0))
+    end)
+
+    it("predicts clip when a cast ends past the due time", function()
+        -- Cast ends at 103.3, shot due at 102.8 → 0.5 clip, known mid-cycle
+        local delay, predicted = Logic.AutoShotDelay(101, 100, 2.8, 103.3)
+        assert.is_true(approx(0.5, delay))
+        assert.is_true(predicted)
+    end)
+
+    it("returns nil when the cast ends before the due time", function()
+        assert.is_nil(Logic.AutoShotDelay(101, 100, 2.8, 102.0))
+    end)
+
+    it("applies the small predict grace to cast clips", function()
+        -- 0.01 clip: under the 0.02 grace
+        assert.is_nil(Logic.AutoShotDelay(101, 100, 2.8, 102.81))
+        -- 0.03 clip: over it
+        local delay = Logic.AutoShotDelay(101, 100, 2.8, 102.83)
+        assert.is_true(approx(0.03, delay))
+    end)
+
+    it("keeps the predicted clip while the cast runs past due", function()
+        -- now is already past due but the cast is still running
+        local delay, predicted = Logic.AutoShotDelay(103.0, 100, 2.8, 103.3)
+        assert.is_true(approx(0.5, delay))
+        assert.is_true(predicted)
+    end)
+
+    it("grows the overdue delay live when no cast is running", function()
+        local d1, p1 = Logic.AutoShotDelay(103.5, 100, 2.8, 0)
+        local d2 = Logic.AutoShotDelay(104.5, 100, 2.8, 0)
+        assert.is_true(approx(0.7, d1))
+        assert.is_false(p1)
+        assert.is_true(approx(1.7, d2))
+    end)
+
+    it("treats a finished cast as not casting", function()
+        -- castEnd in the past: overdue regime, measured from now
+        local delay, predicted = Logic.AutoShotDelay(104, 100, 2.8, 103)
+        assert.is_true(approx(1.2, delay))
+        assert.is_false(predicted)
+    end)
+
+    it("suppresses overdue readings within the latency grace", function()
+        -- 0.15s past due: hidden (event latency makes every cycle read late)
+        assert.is_nil(Logic.AutoShotDelay(102.95, 100, 2.8, 0))
+        -- 0.25s past due: shown
+        local delay = Logic.AutoShotDelay(103.05, 100, 2.8, 0)
+        assert.is_true(approx(0.25, delay))
+    end)
+
+    it("honors custom grace thresholds", function()
+        assert.is_nil(Logic.AutoShotDelay(103.05, 100, 2.8, 0, 0.02, 0.5))
+        local delay = Logic.AutoShotDelay(103.05, 100, 2.8, 0, 0.02, 0.1)
+        assert.is_true(approx(0.25, delay))
+    end)
+end)
+
+-- =========================================================
 -- GridPosition
 -- =========================================================
 

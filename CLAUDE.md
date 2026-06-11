@@ -17,7 +17,7 @@ Then reload the UI in-game with `/reload`. There is no build step.
 ## Quality Checks
 
 Run these before committing changes:
-- `busted` — runs unit tests (193 tests covering ExsarLogic and MakeDB)
+- `busted` — runs unit tests (320 tests covering ExsarLogic and MakeDB)
 - `luacheck .` — static analysis; should report 0 warnings / 0 errors
 - `luac -p *.lua` — syntax check (redundant with luacheck but faster)
 
@@ -131,14 +131,15 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - `S.speed` — hasted weapon speed from `UnitRangedDamage("player")`, refreshed on `UNIT_AURA` and `PLAYER_EQUIPMENT_CHANGED`
 - `S.aimWindow` — stop-moving window = `0.5 + latency` (seconds); the ~0.5s shot wind-up animation plus server latency
 - Single pair of red reticules at `aimWindow / speed` fraction from center
-- `UNIT_SPELLCAST_SUCCEEDED` resyncs `lastShotTime`; checks both `arg2 == spellName` (old TBC API) and `arg3/arg5 == spellID` (modern API)
-- Aimed Shot landing and Feign Death also handled in `UNIT_SPELLCAST_SUCCEEDED` (reset/clear the cycle)
+- `UNIT_SPELLCAST_SUCCEEDED` resyncs `lastShotTime`; checks both `arg2 == spellName` (old TBC API) and `arg3/arg5 == spellID` (modern API). **On the Anniversary client arg2 is a cast GUID, not the name, and the spellID is rank-specific** — multi-rank spells need an ID table for every rank (Aimed Shot: `AIMED_SHOT_IDS`, ranks 19434/20900-20904/27065 — rank 1 is 19434, NOT 13954; keep in sync with CastBar.lua's table). A single-ID check silently misses every rank
+- Swing-cycle resets, both in `UNIT_SPELLCAST_SUCCEEDED`: an Aimed Shot landing restarts the cycle (`lastShotTime = now`, bar refills); Feign Death hides the bar and sets `S.feigning`, and the cycle restarts when the **FD buff fades** (`UNIT_AURA` + `ExsarUI.PlayerHasBuff`) — NOT on attack resume: `START_AUTOREPEAT_SPELL` does not reliably re-fire after FD (verified in-game: the resume-based restart left the bar hidden until the next real auto). The bar redraws after the FD-end restart even though `shooting` is false (OnUpdate draws whenever the weapon cooldown is running)
 - Bar color: blue (safe) → red (stop moving / aim window active)
 - `SPELLS_CHANGED` triggers a 0.5s deferred `RefreshAll()` to handle talent-driven speed changes
-- Clip indicator: shows `(X.X)` seconds between the reticules when an active cast will delay the next auto shot
+- Delay indicator (`ExsarLogic.AutoShotDelay`, pure/tested): recomputed every OnUpdate frame, two regimes — a cast ending past the due time shows the predicted clip in red (`(0.34)`, static while the cast runs), and a shot past due that hasn't fired (melee weave with auto-repeat off, moving, dead zone) shows a live-growing orange counter (`(+1.3)`). Gated on `S.autoFired` (cleared on PLAYER_REGEN_ENABLED + Feign Death — NOT on combat enter: the pull's first auto shot is what causes combat, so it fires just before PLAYER_REGEN_DISABLED, and clearing there wipes the first shot's flag) — NOT on `S.shooting`, because melee weaving toggles auto-repeat off (verified in-game), which is exactly the case the counter must cover. Overdue readings under `CLIP_OVERDUE_GRACE` (0.2s) are suppressed: `UNIT_SPELLCAST_SUCCEEDED` lags the server, so every normal cycle reads ~0.1s late just before the event lands. The widget stays visible while overdue (the cycle-complete hide is skipped when a delay is showing). Future refinement: `UNIT_SPELLCAST_FAILED_QUIET` fires for Auto Shot (75) when an attempt fails with auto-repeat ON (each failure costs ~0.5s before the client retries — see WeaponSwingTimer-SixxFix's `OnUnitSpellCastFailedQuiet`); not currently used
 
 **`CastBar.lua` structure:**
 - `autoAimTicker` — always-running frame that detects the Auto Shot aim window from `lastAutoTime + autoSpeed - AUTO_AIM_TIME` and shows a green bar
+- Swing-cycle resets re-anchor `lastAutoTime` (mirrors the RangedSwingTimer model — keep the two in sync): an Aimed Shot landing anchors a full cycle from the landing; Feign Death sets `fdReset` + clears the anchor, and the **FD buff fading** (`UNIT_AURA` + `ExsarUI.PlayerHasBuff`) anchors a full cycle from FD end (`START_AUTOREPEAT_SPELL` keeps a fallback anchor, but it does not reliably re-fire after FD). While `fdReset` is pending the ticker's Case B (lastAutoTime == 0 → "first shot fires on stop") is suppressed — after FD that state means "cycle restarts when feign ends", not "instant shot"
 - Regular casts (Aimed Shot, Steady Shot) detected via `UNIT_SPELLCAST_START` → `UnitCastingInfo`
 - Multi-Shot detected via `COMBAT_LOG_EVENT_UNFILTERED` / `SPELL_CAST_START` using `CombatLogGetCurrentEventInfo()` (required for TBC Classic Anniversary modern client; old variadic-args approach does not work)
 - `UNIT_SPELLCAST_FAILED` / `UNIT_SPELLCAST_INTERRUPTED` → brief red flash before hiding

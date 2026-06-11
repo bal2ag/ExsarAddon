@@ -29,6 +29,7 @@ local SPELL_ID_AUTO   = 75
 local SPELL_ID_AIMED  = 19434   -- Rank 1 of Aimed Shot in TBC Classic (NOT 13954)
 local SPELL_ID_STEADY = 34120
 local SPELL_ID_MULTI  = 2643
+local SPELL_ID_FEIGN  = 5384
 
 -- Aimed Shot spell IDs across all TBC Classic ranks.
 -- UNIT_SPELLCAST_START is unreliable for Aimed Shot; detection requires the
@@ -70,16 +71,19 @@ local C = {
     autoIcon     = nil,    -- cached icon texture for auto shot
     aimedIcon    = nil,    -- cached icon texture for aimed shot
     multiIcon    = nil,    -- cached icon texture for multi-shot
-    lastAutoTime = 0,      -- GetTime() of the last Auto Shot fire; drives aim-window detection
+    lastAutoTime = 0,      -- GetTime() of the last swing-cycle anchor (Auto Shot fire or
+                           -- Aimed Shot landing — both start a full cycle); drives aim-window detection
     autoSpeed    = 0,      -- hasted ranged weapon speed (seconds); from UnitRangedDamage
     baseSpeed    = 0,      -- base (unhasted) ranged weapon speed (seconds)
     inAutoAim    = false,  -- gate: true once the hasted aim window bar has been shown this cycle
+    fdReset      = false,  -- Feign Death reset the cycle; re-anchor on attack resume
     locked       = false,  -- cached; updated on ADDON_LOADED and lock toggle
     -- Resolved at PLAYER_ENTERING_WORLD:
     nameAuto    = "Auto Shot",
     nameAimed   = "Aimed Shot",
     nameSteady  = "Steady Shot",
     nameMulti   = "Multi-Shot",
+    nameFeign   = "Feign Death",
     tracked     = {},     -- name -> true
 }
 
@@ -338,7 +342,9 @@ autoAimTicker:SetScript("OnUpdate", function(self, elapsed)
     -- We do NOT use GetSpellCooldown here — it returns (0,0) for auto-attack
     -- weapon cooldowns in TBC Classic even while the cooldown is active, making
     -- it useless for distinguishing "weapon ready" from "weapon on cooldown".
-    if not inAim and autoAimStopTime > 0 then
+    -- Skipped while a Feign Death reset is pending (lastAutoTime == 0 then
+    -- means "cycle restarts on attack resume", not "first shot fires on stop").
+    if not inAim and autoAimStopTime > 0 and not C.fdReset then
         local autoOverdue = (C.lastAutoTime == 0)
             or (C.autoSpeed > 0 and (C.autoSpeed - (now - C.lastAutoTime)) <= 0)
         if autoOverdue then
@@ -500,6 +506,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         C.nameAimed  = GetSpellInfo(SPELL_ID_AIMED)  or "Aimed Shot"
         C.nameSteady = GetSpellInfo(SPELL_ID_STEADY) or "Steady Shot"
         C.nameMulti  = GetSpellInfo(SPELL_ID_MULTI)  or "Multi-Shot"
+        C.nameFeign  = GetSpellInfo(SPELL_ID_FEIGN)  or "Feign Death"
         C.tracked = {
             [C.nameAuto]   = true,
             [C.nameAimed]  = true,
@@ -522,6 +529,15 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         autoAimMoving = GetUnitSpeed("player") > 0
         if not autoAimMoving then
             autoAimStopTime = GetTime()  -- already stationary; seed the stop time
+        end
+        if C.fdReset then
+            -- Resuming attack after Feign Death: the swing cycle restarted, so
+            -- the next auto is a full weapon cycle from now (matches the
+            -- RangedSwingTimer model). Without this anchor, lastAutoTime == 0
+            -- would take the first-shot fast path and show the aim bar
+            -- immediately, a full cycle early.
+            C.fdReset      = false
+            C.lastAutoTime = GetTime()
         end
 
     elseif event == "STOP_AUTOREPEAT_SPELL" then
@@ -554,6 +570,36 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 RefreshAutoSpeed()
                 RefreshAutoAimTime()
             end
+
+            -- Aimed Shot landing resets the server-side auto shot cooldown:
+            -- the next auto (and its aim window) is a full weapon cycle from
+            -- the landing, not from the last auto. Without this re-anchor the
+            -- aim bar appears on the stale schedule and no shot follows.
+            local isAimed = (arg2 == C.nameAimed)
+                or AIMED_SHOT_IDS[arg3]
+                or AIMED_SHOT_IDS[arg5]
+            if isAimed then
+                C.lastAutoTime = GetTime()
+                C.inAutoAim    = false
+                RefreshAutoSpeed()
+                RefreshAutoAimTime()
+            end
+
+            -- Feign Death cancels the shot cycle; it restarts when attacking
+            -- resumes (START_AUTOREPEAT_SPELL anchors a full cycle from the
+            -- resume — see fdReset there).
+            local isFeign = (arg2 == C.nameFeign)
+                or (arg3 == SPELL_ID_FEIGN)
+                or (arg5 == SPELL_ID_FEIGN)
+            if isFeign then
+                C.fdReset      = true
+                C.lastAutoTime = 0
+                C.inAutoAim    = false
+                if C.casting and C.spellName == C.nameAuto then
+                    C.casting = false   -- stale aim bar; frame hides next tick
+                end
+            end
+
             -- Multi-Shot bar was started by combatFrame on SPELL_CAST_START;
             -- EndCast(false) clears it when the shot fires.
             EndCast(false)
@@ -561,6 +607,14 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
 
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then
+            -- Feign Death ended (buff faded): the swing cycle restarts now, so
+            -- anchor the aim-window prediction a full cycle from this moment.
+            -- (START_AUTOREPEAT_SPELL keeps a fallback anchor in case the
+            -- fade was missed, but it does not reliably fire after FD.)
+            if C.fdReset and not ExsarUI.PlayerHasBuff(C.nameFeign) then
+                C.fdReset      = false
+                C.lastAutoTime = GetTime()
+            end
             RefreshAutoSpeed()
             RefreshAutoAimTime()
         end

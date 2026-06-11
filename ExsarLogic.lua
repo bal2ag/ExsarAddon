@@ -176,6 +176,34 @@ function ExsarLogic.ReticuleFraction(aimWindow, speed)
     return math.min(aimWindow / speed, 0.98)
 end
 
+--- Compute the projected delay to the next auto shot.
+-- Covers both delay regimes: a cast in progress that will finish after the
+-- shot is due (predicted clip), and a shot already past due that has not
+-- fired (live overdue — e.g. melee weaving with auto-repeat off, moving,
+-- dead zone). Each regime has its own display threshold: predicted clips are
+-- client-side math and can be trusted near zero, while overdue readings lag
+-- the server by event latency, so every normal cycle reads slightly "late"
+-- right before UNIT_SPELLCAST_SUCCEEDED arrives.
+-- @param now           current time
+-- @param lastShotTime  time of the last auto shot (0/nil = no cycle running)
+-- @param speed         hasted weapon speed in seconds
+-- @param castEnd       absolute end time of the player's current cast (0/nil = not casting)
+-- @param predictGrace  minimum predicted clip worth showing (default 0.02)
+-- @param overdueGrace  minimum elapsed lateness worth showing (default 0.2)
+-- @return delay in seconds (or nil if none to show), isPredicted (true = cast-driven)
+function ExsarLogic.AutoShotDelay(now, lastShotTime, speed, castEnd, predictGrace, overdueGrace)
+    if not lastShotTime or lastShotTime <= 0 then return nil end
+    if not speed or speed <= 0 then return nil end
+    local due = lastShotTime + speed
+    local casting = castEnd ~= nil and castEnd > now
+    local delay = (casting and math.max(castEnd, now) or now) - due
+    local grace = casting and (predictGrace or 0.02) or (overdueGrace or 0.2)
+    if delay > grace then
+        return delay, casting
+    end
+    return nil
+end
+
 --- Calculate grid position for icon layout (0-based col/row).
 -- @param index       1-based index
 -- @param iconsPerRow number of icons per row

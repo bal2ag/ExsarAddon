@@ -17,15 +17,38 @@ local GCD_PROBE_SPELL = "Wing Clip"
 local AUTO_SHOT_ID   = 75
 -- Spells that reset the auto shot cycle on completion:
 --   Aimed Shot  — server resets the ranged cooldown when the cast lands
---   Feign Death — cancels the current shot cycle; timer restarts on resumption
-local AIMED_SHOT_ID  = 13954
+--   Feign Death — cancels the current shot cycle; timer restarts when FD ends
 local FEIGN_DEATH_ID = 5384
+
+-- Aimed Shot spell IDs across all TBC Classic ranks. The modern Anniversary
+-- client reports the rank-specific ID in UNIT_SPELLCAST_SUCCEEDED (arg3), and
+-- arg2 is a cast GUID (not the spell name), so a single-ID or name check
+-- silently misses every rank. Rank 1 is 19434 — NOT 13954 (same gotcha as
+-- CastBar.lua's AIMED_SHOT_IDS; keep the two tables in sync).
+local AIMED_SHOT_IDS = {
+    [19434] = true,   -- Rank 1
+    [20900] = true,   -- Rank 2
+    [20901] = true,   -- Rank 3
+    [20902] = true,   -- Rank 4
+    [20903] = true,   -- Rank 5
+    [20904] = true,   -- Rank 6
+    [27065] = true,   -- Rank 7
+}
+local AIMED_SHOT_NAME_ID = 19434   -- used only to resolve the localized name
 
 local DEFAULT_WIDTH  = 220
 local DEFAULT_HEIGHT = 20
 local RETICULE_W      = 3
 local RETICULE_GLOW_W = 9
 local EDGE_GLOW_W     = 8
+
+-- Delay display thresholds (see ExsarLogic.AutoShotDelay): predicted clips
+-- are client-side math and trustworthy near zero; overdue readings lag the
+-- server by event latency, so every cycle reads ~0.1s late right before
+-- UNIT_SPELLCAST_SUCCEEDED arrives — without the larger grace the indicator
+-- would flicker on every normal shot.
+local CLIP_PREDICT_GRACE = 0.02
+local CLIP_OVERDUE_GRACE = 0.2
 
 -- =========================================================
 -- Runtime state
@@ -43,7 +66,8 @@ local S = {
     barZone        = -1,     -- last color zone (0=red,1=orange,2=blue); -1=unset
     castEnd        = 0,      -- absolute GetTime() when the player's current cast ends; 0 if not casting
     autoFired      = false,  -- true after the first real auto shot; gates clip detection
-    clipStr        = "",     -- current clip text; set when a cast starts, cleared on next auto shot
+    feigning       = false,  -- Feign Death buff is up; cycle restarts when it fades
+    clipPredicted  = true,   -- last delay regime shown (true = cast clip red, false = overdue orange)
     lastClipStr    = "",     -- cached clip text to avoid redundant SetText calls
     lastSpeedStr   = "",     -- cached countdown text to avoid redundant SetText calls
     refreshDelay   = 0,      -- seconds remaining before a deferred RefreshAll fires; 0 = inactive
@@ -92,7 +116,9 @@ speedText:SetPoint("LEFT", frame, "LEFT", 4, 0)
 speedText:SetTextColor(1, 1, 1, 0.9)
 speedText:SetText("")
 
--- Clip label: shown between the reticules when the current cast will delay the auto shot
+-- Delay label: shown between the reticules when the next auto shot is being
+-- delayed — by a cast that ends past the due time (red, predicted) or by an
+-- overdue shot that hasn't fired (orange, live counter; e.g. melee weaving)
 local clipText = frame:CreateFontString(nil, "OVERLAY")
 clipText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
 clipText:SetPoint("CENTER", frame, "CENTER", 0, 0)
@@ -203,7 +229,6 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         edgeGlowR:Hide()
         if S.lastClipStr ~= "" then
             S.lastClipStr = ""
-            S.castEnd     = 0
             clipText:Hide()
         end
         if S.lastSpeedStr ~= "" then
@@ -215,24 +240,32 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         return
     end
 
-    -- Clear clip text when auto shot is off (no cast in progress anyway)
-    if not S.shooting and S.lastClipStr ~= "" then
-        S.lastClipStr = ""
-        S.castEnd     = 0
-        clipText:Hide()
-    end
-
     local now       = GetTime()
     local remaining = math.max(0, S.speed - (now - S.lastShotTime))
 
-    -- Hide bar when the cycle is complete and auto shot is off
-    if remaining <= 0 and not S.shooting then
+    -- Delay indicator, recomputed every frame: while a cast runs past the due
+    -- time it is the predicted clip (static), and once the shot is overdue
+    -- without firing (melee weave, moving, dead zone) it grows live. Cleared
+    -- when the next shot advances lastShotTime.
+    local clipStr, clipPredicted = "", false
+    if S.autoFired then
+        local delay, predicted = ExsarLogic.AutoShotDelay(now, S.lastShotTime,
+            S.speed, S.castEnd, CLIP_PREDICT_GRACE, CLIP_OVERDUE_GRACE)
+        if delay then
+            clipStr = string.format(predicted and "(%.2f)" or "(+%.1f)", delay)
+            clipPredicted = predicted
+        end
+    end
+
+    -- Hide bar when the cycle is complete, auto shot is off, and there is no
+    -- delay to report (an overdue shot keeps the widget up so the live
+    -- counter stays visible while weaving).
+    if remaining <= 0 and not S.shooting and clipStr == "" then
         bar:Hide()
         edgeGlowL:Hide()
         edgeGlowR:Hide()
         if S.lastClipStr ~= "" then
             S.lastClipStr = ""
-            S.castEnd     = 0
             clipText:Hide()
         end
         -- Show final speed even with bar hidden
@@ -300,11 +333,20 @@ frame:SetScript("OnUpdate", function(self, elapsed)
 
     bar:Show()
 
-    -- Clip indicator: computed once at cast start, held until next auto shot fires.
-    if S.clipStr ~= S.lastClipStr then
-        S.lastClipStr = S.clipStr
-        if S.clipStr ~= "" then
-            clipText:SetText(S.clipStr)
+    -- Apply the delay text; color follows the regime (red = predicted cast
+    -- clip, orange = live overdue counter).
+    if clipStr ~= S.lastClipStr then
+        S.lastClipStr = clipStr
+        if clipStr ~= "" then
+            if clipPredicted ~= S.clipPredicted then
+                S.clipPredicted = clipPredicted
+                if clipPredicted then
+                    clipText:SetTextColor(1, 0.3, 0.3, 1)
+                else
+                    clipText:SetTextColor(1, 0.65, 0.1, 1)
+                end
+            end
+            clipText:SetText(clipStr)
             clipText:Show()
         else
             clipText:Hide()
@@ -332,7 +374,6 @@ frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("BAG_UPDATE")
 frame:RegisterEvent("SPELLS_CHANGED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -340,9 +381,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         ApplySize()
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        S.autoShotName   = GetSpellInfo(AUTO_SHOT_ID)   or "Auto Shot"
-        S.aimedShotName  = GetSpellInfo(AIMED_SHOT_ID)  or "Aimed Shot"
-        S.feignDeathName = GetSpellInfo(FEIGN_DEATH_ID) or "Feign Death"
+        S.autoShotName   = GetSpellInfo(AUTO_SHOT_ID)       or "Auto Shot"
+        S.aimedShotName  = GetSpellInfo(AIMED_SHOT_NAME_ID) or "Aimed Shot"
+        S.feignDeathName = GetSpellInfo(FEIGN_DEATH_ID)     or "Feign Death"
         RefreshAll()
 
     elseif event == "START_AUTOREPEAT_SPELL" then
@@ -359,20 +400,10 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
 
     elseif event == "UNIT_SPELLCAST_START" then
         if arg1 == "player" then
-            -- Compute clip amount once at cast start.
+            -- Record the cast end; the OnUpdate delay computation reads it.
             local _, _, _, _, endMS = UnitCastingInfo("player")
             if type(endMS) == "number" and endMS > 0 then
                 S.castEnd = endMS / 1000
-                -- How much will this cast delay the next auto shot?
-                if S.autoFired and S.speed > 0 and S.lastShotTime > 0 then
-                    local due = S.lastShotTime + S.speed
-                    local clipAmt = S.castEnd - due
-                    if clipAmt > 0.02 then
-                        S.clipStr = string.format("(%.2f)", clipAmt)
-                    else
-                        S.clipStr = ""
-                    end
-                end
             end
         end
 
@@ -394,7 +425,6 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 S.lastShotTime = GetTime()
                 S.autoFired    = true  -- first real auto shot; enable clip detection
                 S.barZone      = -1    -- force color re-evaluation on next frame
-                S.clipStr      = ""    -- clear clip indicator on new cycle
                 -- Resync speed/aim in case haste changed mid-cycle
                 RefreshSpeed()
                 RefreshAimWindow()
@@ -405,29 +435,32 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             -- Treat it the same as an Auto Shot firing: the next shot is a full
             -- weapon cycle away from now.
             local isAimedShot = (arg2 == S.aimedShotName)
-                or (arg3 == AIMED_SHOT_ID)
-                or (arg5 == AIMED_SHOT_ID)
+                or AIMED_SHOT_IDS[arg3]
+                or AIMED_SHOT_IDS[arg5]
             if isAimedShot then
                 S.lastShotTime = GetTime()
                 S.barZone      = -1
-                S.clipStr      = ""
                 RefreshSpeed()
                 RefreshAimWindow()
                 UpdateReticulePositions()
             end
 
-            -- Feign Death cancels the current shot cycle.  Reset lastShotTime so
-            -- that START_AUTOREPEAT_SPELL re-seeds it cleanly when auto shot
-            -- resumes.  Also hide the bar immediately rather than waiting for
-            -- STOP_AUTOREPEAT_SPELL (which may arrive in the same or next frame).
+            -- Feign Death cancels the current shot cycle.  Hide the bar for
+            -- the duration of the feign (also immediately, rather than waiting
+            -- for STOP_AUTOREPEAT_SPELL which may arrive in the same or next
+            -- frame).  The cycle restarts when the FD buff FADES — handled in
+            -- UNIT_AURA via S.feigning — not when attacking resumes:
+            -- START_AUTOREPEAT_SPELL does not reliably fire again after FD,
+            -- so a resume-based restart leaves the bar hidden until the next
+            -- real auto shot resyncs it.
             local isFeignDeath = (arg2 == S.feignDeathName)
                 or (arg3 == FEIGN_DEATH_ID)
                 or (arg5 == FEIGN_DEATH_ID)
             if isFeignDeath then
+                S.feigning     = true
                 S.lastShotTime = 0
                 S.shooting     = false
                 S.autoFired    = false
-                S.clipStr      = ""
                 bar:Hide()
                 edgeGlowL:Hide()
                 edgeGlowR:Hide()
@@ -436,6 +469,15 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
 
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then
+            -- Feign Death ended (buff faded): the swing timer restarts now —
+            -- a full weapon cycle from the moment FD ends, before any attack
+            -- resume. The bar redraws from full even though shooting is off
+            -- (OnUpdate draws whenever the weapon cooldown is running).
+            if S.feigning and not ExsarUI.PlayerHasBuff(S.feignDeathName) then
+                S.feigning     = false
+                S.lastShotTime = GetTime()
+                S.barZone      = -1
+            end
             RefreshAll()
         end
 
@@ -451,8 +493,11 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         -- Stats may not be updated immediately; wait 0.5s before re-reading speed.
         S.refreshDelay = 0.5
 
-    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
-        S.clipStr   = ""
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Clear only on combat EXIT. The pull's first auto shot is what causes
+        -- combat, so UNIT_SPELLCAST_SUCCEEDED (setting autoFired) arrives just
+        -- before PLAYER_REGEN_DISABLED — clearing on combat enter would wipe
+        -- the first shot's flag and mute the delay indicator until shot two.
         S.autoFired = false
     end
 end)

@@ -94,7 +94,9 @@ Bar showing your Auto Shot cycle with a clip-window indicator so you know when i
 - **Bar behavior:** The bar starts full after each Auto Shot and drains toward the center over the weapon speed cycle. When it empties, your next Auto Shot is ready.
 - **Red reticules:** A pair of vertical red bars mark the aim window — the point where your character must be standing still and not casting to let the ~0.5s Auto Shot wind-up fire. Starting a cast before this zone can still clip the auto shot if the cast extends into or past it.
 - **Bar color:** Blue when safe to cast, red when inside the aim window, grey when the GCD is active.
-- **Clipping:** If you begin a cast that will delay the next Auto Shot, the delay amount is shown in red between the reticules (e.g. `(0.34)`).
+- **Clipping:** If you begin a cast that will delay the next Auto Shot, the predicted delay is shown in red between the reticules (e.g. `(0.34)`).
+- **Overdue counter:** If an Auto Shot is ready but you haven't fired it — melee weaving, moving, or standing in the dead zone — a live orange counter (e.g. `(+1.3)`) ticks up showing how long you've delayed it. It clears when the shot finally fires. Small readings (under 0.2s) are suppressed since event latency makes every normal cycle look slightly late.
+- **Swing resets:** An Aimed Shot landing restarts the cycle — the bar refills the moment it fires. Feign Death hides the bar while you're feigned, and the bar refills with a fresh full cycle the moment the feign ends.
 
 <!-- ![Ranged Swing Timer](screenshots/ranged-swing-timer.png) -->
 
@@ -109,6 +111,7 @@ Cast bar for Auto Shot aim window, Aimed Shot, Steady Shot, and Multi-Shot. Each
 
 - **Shot colors:** Auto Shot (green), Aimed Shot (gold), Steady Shot (purple), Multi-Shot (orange)
 - **Auto Shot:** Detected automatically from your swing timer — the bar appears during the ~0.5s aim window when you must stand still for the shot to fire
+- **Swing resets:** Aimed Shot and Feign Death reset the swing timer, and the aim-window prediction follows: after an Aimed Shot lands the next aim bar comes a full weapon cycle later, and after Feign Death a full cycle from the moment the feign ends — no more premature aim bar with no shot behind it
 - **Multi-Shot:** Has a 0.5s base cast time (not instant), reduced by haste just like the Auto Shot wind-up
 - **Haste:** All cast durations account for your current haste effects (Rapid Fire, Bloodlust, haste rating, etc.)
 - **Failed casts:** A brief red flash is shown when a cast is interrupted or fails
