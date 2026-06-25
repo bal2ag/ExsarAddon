@@ -82,6 +82,7 @@ ExsarUI.CreateActionBar({
     layout              = "horizontal",
     dimOnCooldown       = true,
     rangeCheck          = true,  -- red shade on out-of-range harm slots (Tranquilizing Shot)
+    manaCheck           = true,  -- blue shade on abilities you can't afford
     border              = true,  -- gold ring on the equipped weapon/pole (isActive)
     extraEvents         = { "PLAYER_EQUIPMENT_CHANGED" },  -- update the ring on swap
     actions             = ACTIONS,

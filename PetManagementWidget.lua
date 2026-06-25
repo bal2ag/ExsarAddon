@@ -197,8 +197,10 @@ local PET_ACTIONS = {
       end,
       -- Out-of-range shade against the pet (only meaningful in the Mend state --
       -- a live pet); an absent/dead pet fails the rangeUnit exists+alive gate so
-      -- the Revive/Call states never shade.
-      rangeSpell = "Mend Pet", rangeUnit = "pet" },
+      -- the Revive/Call states never shade. manaSpell blue-shades when you can't
+      -- afford Mend Pet (IsUsableSpell reports no-mana only with a live pet, so
+      -- the Revive/Call states stay clear); blue takes precedence over range.
+      rangeSpell = "Mend Pet", rangeUnit = "pet", manaSpell = "Mend Pet" },
 
     -- Send the pet in: Dash for the speed boost, then command the attack.
     -- Needs a living pet, so greyed when the pet is missing or dead.
@@ -338,6 +340,7 @@ ExsarUI.CreateActionBar({
     placeholder         = "Pet",
     layout              = "horizontal",
     rangeCheck          = true,  -- red shade when out of pet range (Mend/Feed Pet)
+    manaCheck           = true,  -- blue shade when you can't afford Mend Pet
     actions             = PET_ACTIONS,
     moduleName          = "Pet Management",
     configName          = "Pet management",

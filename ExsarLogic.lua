@@ -454,6 +454,17 @@ function ExsarLogic.ShouldShowRangeShade(inRange, hasValidUnit)
     return inRange == 0
 end
 
+--- Decide whether an action icon's out-of-mana blue shade should show.
+-- Mirrors the default UI's blue tint: shade only when the spell is unusable
+-- specifically for lack of mana/power -- the second return of IsUsableSpell.
+-- Other unusable reasons (on cooldown, no valid target, not learned) leave the
+-- second return false/nil and so do NOT shade.
+-- @param noMana  IsUsableSpell 2nd return: true = not enough mana/power
+-- @return bool
+function ExsarLogic.ShouldShowManaShade(noMana)
+    return noMana and true or false
+end
+
 --- Compute the hunter's maximum ranged shooting range.
 -- Base ranged range is 35 yd; the Survival talent Hawk Eye adds 2 yd per rank
 -- (max 3 ranks → +6 yd → 41 yd). Used to extend the range widget's "far"

@@ -20,6 +20,8 @@
 local MAX_SLOTS = 5
 
 -- macro kind: /cast lays the highest known rank; cooldownSpell drives the sweep.
+-- manaSpell lets the engine blue-shade the slot when you can't afford the trap
+-- (macro slots have no auto-resolved cast spell, so it must be named explicitly).
 local function trap(name)
     return {
         key          = name,
@@ -27,6 +29,7 @@ local function trap(name)
         iconSpell    = name,
         macro        = "/cast " .. name,
         cooldownSpell = name,
+        manaSpell    = name,
     }
 end
 
@@ -46,6 +49,7 @@ ExsarUI.CreateActionBar({
     buttonPrefix        = "ExsarAddonTrapBtn",
     placeholder         = "Traps",
     layout              = "horizontal",
+    manaCheck           = true,  -- blue shade when you can't afford to lay the trap
     actions             = TRAPS,
     moduleName          = "Traps",
     configName          = "Traps",

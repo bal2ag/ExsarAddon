@@ -69,6 +69,7 @@ ExsarUI.CreateActionBar({
     layout              = "horizontal",
     dimOnCooldown       = true,
     rangeCheck          = true,
+    manaCheck           = true,  -- blue shade on shots you can't afford (precedence over range)
     actions             = ACTIONS,
     moduleName          = "Core Combat",
     configName          = "Core Combat",

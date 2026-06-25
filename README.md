@@ -504,6 +504,7 @@ A compact, keybindable bar of pet-management buttons, so you can keep your pet c
 - **Charge counts:** Item-based buttons show how many you have left in the bottom-right corner — for example, the Steam Tonk button shows the net number of Steam Tonk Controller charges in your bags.
 - **Cooldowns:** Item-based buttons show a cooldown sweep and countdown timer when the item is on cooldown — for example, the Steam Tonk button reflects the Steam Tonk Controller's 30-second cooldown. Buttons whose macros cast a global-cooldown spell (Mend Pet, Dismiss Pet, Call Pet) also show a brief sweep during the global cooldown, so you can see when the action is momentarily blocked.
 - **Out-of-range shade:** Pet-targeted buttons (Mend Pet on the all-in-one button, Feed Pet) are covered with a red shade over the icon when you're too far from your pet to use them, so you can see at a glance when you need to close the gap.
+- **Out-of-mana shade:** The all-in-one button is covered with a blue shade when you can't afford to Mend your pet. The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Built-in macros:** Each button runs a macro built into the addon and tuned for hunters; the macros aren't user-editable.
 - **Devilsaur Tooth boss prep:** A dedicated button for the +crit-to-pet buff from the Devilsaur Tooth trinket. Click once before a pull to swap the Tooth into your top trinket slot (yellow border, "use me!"); wait out the 30-second equip cooldown; click again to apply the buff to your pet AND swap your previous trinket back in — both in one click. If anything blocks the swap-back (a sudden combat start, a disturbed bag slot), the button turns red ("UNEQUIP!") so you know to swap it back manually before pulling. The button greys out if you have no pet or no Tooth.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Pet* section). Pressing the key runs that slot's macro, including in combat. The bound key is shown in the top-right corner of the icon.
@@ -530,6 +531,7 @@ A compact, keybindable bar of your Hunter traps, so you can lay any trap with on
 
 - **What it does:** One button per trap — Frost, Freezing, Immolation, Explosive, and Snake. Click or press its key to lay that trap (always the highest rank you know).
 - **Cooldowns:** Each trap shows a cooldown sweep and countdown timer while it's on cooldown, so you can see at a glance which traps are ready.
+- **Out-of-mana shade:** A trap you can't afford to lay is covered with a blue shade over the icon, so you can see at a glance when you're too low on mana.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Traps* section). Pressing the key lays that trap, including in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Traps](screenshots/traps.png) -->
@@ -546,6 +548,7 @@ A compact, keybindable bar of your major cooldowns in one place — a mix of tri
 - **Adapts to your spec:** Talent abilities only appear when you have them. The Bestial Wrath slot becomes Readiness if you're Survival, and the Intimidation slot disappears entirely unless you're Beast Mastery.
 - **At-a-glance readiness:** Each slot shows a cooldown sweep and countdown, and dims while it's on cooldown, so you can instantly see what's ready.
 - **Out-of-range shade:** When you have an attackable target, a harm ability that's out of range (e.g. Intimidation) is covered with a red shade over the icon, so you can see at a glance when you need to close distance.
+- **Out-of-mana shade:** A cooldown you can't afford is covered with a blue shade over the icon. The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Cooldowns* section), usable in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Cooldowns](screenshots/cooldowns.png) -->
@@ -561,6 +564,7 @@ A compact, keybindable bar of your main combat abilities and a couple of handy c
 - **Adapts to your spec:** Abilities you don't know simply don't appear — so Aimed Shot only shows up when you're Marksmanship.
 - **Cooldown feedback:** Abilities with a real cooldown (Multi-Shot, Arcane Shot, Kill Command, …) show a sweep + countdown and dim while down; instant/GCD-only shots stay bright so the bar doesn't flicker as you spam.
 - **Out-of-range shade:** When you have an attackable target, any ability that's out of range is covered with a red shade over the icon (like the default UI's red hotkey numbers, but over the whole icon) — so you can see at a glance which shots you need to close distance for.
+- **Out-of-mana shade:** A shot you can't afford is covered with a blue shade over the icon (like the default UI's blue tint). The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Combat* section), usable in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Core Combat](screenshots/core-combat.png) -->
@@ -577,6 +581,7 @@ A compact, keybindable bar for your situational utility — abilities you reach 
 - **Weapon swapping:** One-press buttons to switch between your 2H weapon and your dual 1H setup — works in combat. The button for whatever you currently have equipped is highlighted with a gold ring (the dual-1H button lights up only when both weapons are equipped), and the fishing button highlights while your fishing pole is out.
 - **Cooldown feedback:** Abilities with a real cooldown show a sweep + countdown and dim while down.
 - **Out-of-range shade:** An ability that's out of range of its target is covered with a red shade over the icon — Tranquilizing Shot against an attackable enemy, and Misdirection against the friendly target you're redirecting to — so you can see at a glance when you need to close distance.
+- **Out-of-mana shade:** An ability you can't afford is covered with a blue shade over the icon. The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Utility* section). The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Utilities](screenshots/utilities.png) -->

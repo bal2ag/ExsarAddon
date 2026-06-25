@@ -1422,6 +1422,20 @@ describe("ShouldShowRangeShade", function()
     end)
 end)
 
+describe("ShouldShowManaShade", function()
+    it("shades when the spell is out of mana", function()
+        assert.is_true(Logic.ShouldShowManaShade(true))
+    end)
+
+    it("does not shade when mana is sufficient", function()
+        assert.is_false(Logic.ShouldShowManaShade(false))
+    end)
+
+    it("does not shade when the mana flag is nil", function()
+        assert.is_false(Logic.ShouldShowManaShade(nil))
+    end)
+end)
+
 describe("MaxShootingRange", function()
     it("returns the 35yd base with no Hawk Eye", function()
         assert.are.equal(35, Logic.MaxShootingRange(0))

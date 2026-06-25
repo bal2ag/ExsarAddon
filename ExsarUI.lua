@@ -1332,6 +1332,12 @@ end
 --                    target spells like Misdirection). Set "pet" for pet-targeted
 --                    abilities (Mend/Feed Pet). IsSpellInRange returns nil for the
 --                    wrong unit type, so the shade self-selects per spell.
+--   manaSpell        (with opts.manaCheck) spell name whose mana cost governs the
+--                    out-of-mana blue shade. Auto-resolved for spell/`spells`
+--                    slots; macro/item slots opt in explicitly, or `false` to
+--                    suppress. Independent of rangeSpell (a slot's range spell and
+--                    its mana-cost spell can differ -- the Auto Shot macro range-
+--                    checks Auto Shot, which costs no mana).
 -- Escape hooks (called on the poll tick; consume returns):
 --   resolveActive(s)        -> { id, name, icon } current item (item kind)
 --   getCooldown(s)          -> start, duration, isRealCD
@@ -1354,6 +1360,8 @@ end
 --   dimOnCooldown (dim macro/spell slots while a real CD runs),
 --   rangeCheck (red out-of-range shade over slots whose ability is out of range
 --   of its target -- hostile, friendly, or pet; see rangeSpell / rangeUnit),
+--   manaCheck (blue out-of-mana shade over slots whose spell is unusable for
+--   lack of mana; see manaSpell. Takes precedence over the range shade),
 --   moduleName,
 --   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
 --   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval.
@@ -1633,6 +1641,18 @@ function ExsarUI.CreateActionBar(opts)
             s.rangeShade:Hide()
         end
 
+        -- Out-of-mana blue shade (opts.manaCheck): a translucent blue wash, same
+        -- placement as the range shade, shown when the slot's spell is unusable
+        -- specifically for lack of mana/power. Takes precedence over the range
+        -- shade (only one of the two is ever shown).
+        if opts.manaCheck then
+            s.manaShade = btn:CreateTexture(nil, "OVERLAY")
+            s.manaShade:SetAllPoints()
+            s.manaShade:SetColorTexture(0.1, 0.4, 1, 0.4)
+            s.manaShade:SetDrawLayer("OVERLAY", -1)
+            s.manaShade:Hide()
+        end
+
         btn:Hide()  -- ApplyLayout shows/positions
         slots[i] = s
     end
@@ -1862,6 +1882,18 @@ function ExsarUI.CreateActionBar(opts)
         return s.activeSpell or a.spell
     end
 
+    -- Resolve the spell whose mana cost governs a slot's out-of-mana shade.
+    -- Same shape as AB_RangeSpell but independent (the range spell and the
+    -- mana-cost spell can differ -- e.g. the Auto Shot macro range-checks Auto
+    -- Shot, which is free). Macro/item slots opt in via an explicit `manaSpell`
+    -- string (or `manaSpell = false` to suppress).
+    local function AB_ManaSpell(s)
+        local a = s.action
+        if a.manaSpell ~= nil then return a.manaSpell or nil end
+        if s.kind == "item" then return nil end
+        return s.activeSpell or a.spell
+    end
+
     -- ---------- per-slot visuals (icons / cooldown / grey-out / border) ----------
     local function UpdateVisuals()
         local now = GetTime()
@@ -2038,17 +2070,32 @@ function ExsarUI.CreateActionBar(opts)
                 end
             end
 
+            -- Out-of-mana blue shade (item slots have no mana spell so they
+            -- never shade). Computed first because it takes PRECEDENCE over the
+            -- range shade: when a slot is both out of range and out of mana, the
+            -- blue (mana) wash is the more actionable signal, so it wins.
+            local manaShow = false
+            if s.manaShade then
+                local spell = AB_ManaSpell(s)
+                if spell then
+                    local _, noMana = IsUsableSpell(spell)
+                    manaShow = ExsarLogic.ShouldShowManaShade(noMana)
+                end
+                s.manaShade:SetShown(manaShow)
+            end
+
             -- Out-of-range red shade (applies to both kinds; item slots have no
             -- range spell so they never shade). The range UNIT is per-slot:
             -- "target" by default (harm spells, and friendly-target spells like
             -- Misdirection), or `rangeUnit` (e.g. "pet" for Mend/Feed Pet).
             -- IsSpellInRange returns nil when the spell can't act on that unit,
             -- so a harm spell against a friendly target (or vice versa) never
-            -- shades -- no attackable-only gate needed here.
+            -- shades -- no attackable-only gate needed here. Suppressed while the
+            -- mana shade is up (mana precedence).
             if s.rangeShade then
                 local show = false
                 local spell = AB_RangeSpell(s)
-                if spell then
+                if spell and not manaShow then
                     local unit = s.action.rangeUnit or "target"
                     local valid = UnitExists(unit) and not UnitIsDead(unit)
                     show = ExsarLogic.ShouldShowRangeShade(
