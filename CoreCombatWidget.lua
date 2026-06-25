@@ -42,7 +42,8 @@ local ACTIONS = {
       macro = [[/targetenemy [noexists][dead][help]
 /cast !Auto Shot]],
       iconSpell  = "Auto Shot",
-      rangeSpell = "Auto Shot" },
+      rangeSpell = "Auto Shot",
+      gcdSpell   = false },  -- Auto Shot is off-GCD; never show the GCD swirl here
 
     ability("Steady Shot"),
     ability("Multi-Shot"),

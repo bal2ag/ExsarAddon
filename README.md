@@ -519,6 +519,7 @@ A compact, keybindable vertical bar of your Hunter aspects, so you can swap aspe
 
 - **What it does:** One button per aspect — Aspect of the Hawk, Viper, Cheetah, Pack, Wild, and Monkey. Click or press its key to cast that aspect.
 - **Active aspect highlighted:** The aspect you currently have active shows an animated marching-ants border, so you can see at a glance which one is up.
+- **Global cooldown swirl:** The aspect buttons show the brief global-cooldown sweep when you cast something, matching the default action bars.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Aspects* section). Pressing the key casts that aspect, including in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Aspects](screenshots/aspects.png) -->
@@ -531,6 +532,7 @@ A compact, keybindable bar of your Hunter traps, so you can lay any trap with on
 
 - **What it does:** One button per trap — Frost, Freezing, Immolation, Explosive, and Snake. Click or press its key to lay that trap (always the highest rank you know).
 - **Cooldowns:** Each trap shows a cooldown sweep and countdown timer while it's on cooldown, so you can see at a glance which traps are ready.
+- **Global cooldown swirl:** Trap slots show the brief global-cooldown sweep when you cast something, matching the default action bars.
 - **Out-of-mana shade:** A trap you can't afford to lay is covered with a blue shade over the icon, so you can see at a glance when you're too low on mana.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Traps* section). Pressing the key lays that trap, including in combat. The bound key is shown in the top-right corner of the icon.
 
@@ -547,6 +549,7 @@ A compact, keybindable bar of your major cooldowns in one place — a mix of tri
 - **Trinkets follow your gear:** The trinket slots use whatever you currently have equipped in your top/bottom trinket slots, showing that item's icon and cooldown — no setup when you swap trinkets.
 - **Adapts to your spec:** Talent abilities only appear when you have them. The Bestial Wrath slot becomes Readiness if you're Survival, and the Intimidation slot disappears entirely unless you're Beast Mastery.
 - **At-a-glance readiness:** Each slot shows a cooldown sweep and countdown, and dims while it's on cooldown, so you can instantly see what's ready.
+- **Global cooldown swirl:** Abilities on the global cooldown (e.g. Intimidation) show the brief GCD sweep when you cast something, matching the default action bars; off-GCD cooldowns (Rapid Fire, Bestial Wrath) and trinkets don't.
 - **Out-of-range shade:** When you have an attackable target, a harm ability that's out of range (e.g. Intimidation) is covered with a red shade over the icon, so you can see at a glance when you need to close distance.
 - **Out-of-mana shade:** A cooldown you can't afford is covered with a blue shade over the icon. The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Cooldowns* section), usable in combat. The bound key is shown in the top-right corner of the icon.
@@ -563,6 +566,7 @@ A compact, keybindable bar of your main combat abilities and a couple of handy c
 - **Casts the right rank:** Ability buttons always use the highest rank you know, and show that spell's tooltip on hover.
 - **Adapts to your spec:** Abilities you don't know simply don't appear — so Aimed Shot only shows up when you're Marksmanship.
 - **Cooldown feedback:** Abilities with a real cooldown (Multi-Shot, Arcane Shot, Kill Command, …) show a sweep + countdown and dim while down; instant/GCD-only shots stay bright so the bar doesn't flicker as you spam.
+- **Global cooldown swirl:** Just like the default action bars, every on-the-GCD ability shows the brief global-cooldown sweep the instant you cast something, so the whole bar reads as momentarily busy. Off-GCD shots (Auto Shot) don't.
 - **Out-of-range shade:** When you have an attackable target, any ability that's out of range is covered with a red shade over the icon (like the default UI's red hotkey numbers, but over the whole icon) — so you can see at a glance which shots you need to close distance for.
 - **Out-of-mana shade:** A shot you can't afford is covered with a blue shade over the icon (like the default UI's blue tint). The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Combat* section), usable in combat. The bound key is shown in the top-right corner of the icon.
@@ -580,6 +584,7 @@ A compact, keybindable bar for your situational utility — abilities you reach 
 - **Fishing setup in one button:** Equips your fishing pole and applies your Sharpened Fish Hook to it.
 - **Weapon swapping:** One-press buttons to switch between your 2H weapon and your dual 1H setup — works in combat. The button for whatever you currently have equipped is highlighted with a gold ring (the dual-1H button lights up only when both weapons are equipped), and the fishing button highlights while your fishing pole is out.
 - **Cooldown feedback:** Abilities with a real cooldown show a sweep + countdown and dim while down.
+- **Global cooldown swirl:** On-the-GCD abilities show the brief global-cooldown sweep when you cast something, matching the default action bars.
 - **Out-of-range shade:** An ability that's out of range of its target is covered with a red shade over the icon — Tranquilizing Shot against an attackable enemy, and Misdirection against the friendly target you're redirecting to — so you can see at a glance when you need to close distance.
 - **Out-of-mana shade:** An ability you can't afford is covered with a blue shade over the icon. The blue (out-of-mana) shade takes precedence over the red (out-of-range) one.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Utility* section). The bound key is shown in the top-right corner of the icon.

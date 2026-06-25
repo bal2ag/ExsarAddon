@@ -1309,7 +1309,15 @@ end
 --   trinketSlot      equipped inventory slot (13/14): macro kind that defaults
 --                    to "/use <slot>", with icon from GetInventoryItemTexture
 --                    and CD from GetInventoryItemCooldown (for a cooldowns bar)
---   gcd              show the GCD sweep (macro kind)
+--   gcd              force the GCD sweep via the shared Wing Clip probe -- for
+--                    spell-LESS macro slots (all-in-one pet button, Steam Tonk)
+--                    whose cast spell can't be resolved. Slots WITH a resolvable
+--                    cast spell get the GCD swirl automatically (see gcdSpell) and
+--                    don't need this.
+--   gcdSpell         override the spell whose GCD participation drives the GCD
+--                    swirl. Auto-resolved (activeSpell/spell/cooldownSpell/
+--                    iconSpell) for every non-item slot; set explicitly to retarget
+--                    it, or `false` to suppress (e.g. the off-GCD Auto Shot macro).
 --   requires         pet-state grey-out token (PetActionEnabled)
 --   tooltipSpell     override for the hover tooltip's spell. By default a
 --                    macro/spell slot shows the tooltip of its associated spell
@@ -1894,6 +1902,20 @@ function ExsarUI.CreateActionBar(opts)
         return s.activeSpell or a.spell
     end
 
+    -- Resolve the spell whose GCD participation governs a slot's GCD sweep --
+    -- the spell the slot actually casts. Wider fallback than the range/mana
+    -- resolvers (also cooldownSpell + iconSpell) so trap/aspect macro slots are
+    -- covered. Reading GetSpellCooldown on it is self-selecting: on-GCD spells
+    -- report the active GCD as their cooldown, off-GCD spells (Auto Shot, Rapid
+    -- Fire, trinkets) report 0, so only genuinely on-GCD slots ever sweep.
+    -- `gcdSpell = false` suppresses (e.g. the Auto Shot macro, off-GCD).
+    local function AB_GcdSpell(s)
+        local a = s.action
+        if a.gcdSpell ~= nil then return a.gcdSpell or nil end
+        if s.kind == "item" then return nil end
+        return s.activeSpell or a.spell or a.cooldownSpell or a.iconSpell
+    end
+
     -- ---------- per-slot visuals (icons / cooldown / grey-out / border) ----------
     local function UpdateVisuals()
         local now = GetTime()
@@ -2007,9 +2029,24 @@ function ExsarUI.CreateActionBar(opts)
                             start, duration, isRealCD = st, dur, true
                         end
                     end
-                    if a.gcd and gcdActive
-                       and (not start or (gcdStart + gcdDuration) > (start + duration)) then
-                        start, duration, isRealCD = gcdStart, gcdDuration, false
+                    -- GCD sweep (only when no real CD is running): mirror the
+                    -- default UI's GCD swirl on every on-GCD ability. Resolve the
+                    -- slot's cast spell and read its GetSpellCooldown -- on-GCD
+                    -- spells report the live GCD, off-GCD spells report 0, so the
+                    -- swirl self-selects. Spell-less macro slots (the all-in-one
+                    -- pet button, Steam Tonk) fall back to `gcd = true` + the
+                    -- shared Wing Clip probe.
+                    if not start and gcdActive then
+                        local gsp = AB_GcdSpell(s)
+                        if gsp then
+                            local st, dur = GetSpellCooldown(gsp)
+                            if ExsarLogic.CooldownState(st, dur) == "gcd" then
+                                start, duration, isRealCD = st, dur, false
+                            end
+                        end
+                        if not start and a.gcd then
+                            start, duration, isRealCD = gcdStart, gcdDuration, false
+                        end
                     end
                 end
 
