@@ -24,6 +24,16 @@ local rtDB = ExsarUI.MakeDB("rangeToTarget")
 -- minimum (e.g. Auto Shot) would report out-of-range when too close and corrupt
 -- the lower bound. Item IDs come from the LibRangeCheck harm-item tables; ones
 -- not present in the TBC client return nil and are skipped at runtime.
+--
+-- The top-end Auto Shot checker is the exception: it DOES have a 5yd dead-zone
+-- minimum, but its threshold tracks the player's real shooting range (35yd base,
+-- +2yd per Survival Hawk Eye rank), which no fixed item can. The dead-zone
+-- corruption (Auto Shot reporting out-of-range when too close) is self-healing:
+-- when too close, Wing Clip (5yd) reports in-range, and ComputeRangeBracket's
+-- non-monotonic guard drops the contradictory far lower bound. `autoShotChecker`
+-- is updated by RefreshShootingRange() whenever talents change.
+
+local autoShotChecker = { range = 35, spell = "Auto Shot" }
 
 local CHECKERS = {
     { range = 5,  spell = "Wing Clip" },          -- melee
@@ -34,7 +44,28 @@ local CHECKERS = {
     { range = 25, item  = 24268 },                -- Netherweave Net
     { range = 30, item  = 7734  },                -- Six Demon Bag
     { range = 35, item  = 18904 },                -- Zorbin's Ultra-Shrinker
+    autoShotChecker,                              -- 35yd + 2/rank Hawk Eye
 }
+
+-- Edge of shooting range; beyond it is "far". Refreshed from the Hawk Eye talent.
+local rangedMax = 35
+
+local function RefreshShootingRange()
+    local rank = 0
+    local numTabs = GetNumTalentTabs() or 0
+    for t = 1, numTabs do
+        local numTalents = GetNumTalents(t) or 0
+        for i = 1, numTalents do
+            local name, _, _, _, r = GetTalentInfo(t, i)
+            if name == "Hawk Eye" then
+                rank = r or 0
+                break
+            end
+        end
+    end
+    rangedMax = ExsarLogic.MaxShootingRange(rank)
+    autoShotChecker.range = rangedMax
+end
 
 -- =========================================================
 -- Zone colors
@@ -131,7 +162,7 @@ local function UpdateDisplay()
     end
 
     local minR, maxR = ExsarLogic.ComputeRangeBracket(CHECKERS, results)
-    local zone = ExsarLogic.RangeZone(minR, maxR)
+    local zone = ExsarLogic.RangeZone(minR, maxR, nil, nil, rangedMax)
 
     rangeText:SetText(ExsarLogic.FormatRangeBracket(minR, maxR))
     rangeText:Show()
@@ -169,12 +200,22 @@ end)
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+frame:RegisterEvent("CHARACTER_POINTS_CHANGED")
+frame:RegisterEvent("SPELLS_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, rtDB, 0, -200)
+        RefreshShootingRange()
         UpdateDisplay()
-    elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_TARGET_CHANGED" then
+    elseif event == "PLAYER_TALENT_UPDATE" or event == "CHARACTER_POINTS_CHANGED"
+        or event == "SPELLS_CHANGED" then
+        RefreshShootingRange()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        RefreshShootingRange()
+        UpdateDisplay()
+    elseif event == "PLAYER_TARGET_CHANGED" then
         UpdateDisplay()
     end
 end)

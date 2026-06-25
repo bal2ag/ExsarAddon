@@ -486,7 +486,8 @@ Shows an estimated distance bracket to your current target (e.g. "5-8 yd") with 
 
 - **Intent:** Generalizes the Melee Range Indicator's binary in/out check into a distance estimate, so you can position precisely for melee weaving — staying close while reading exactly how far out of melee you are.
 - **Display:** Two stacked text lines — the distance bracket on top (e.g. "5-8 yd", "0-5 yd" when in melee, "35+ yd" when far), and a zone label below: **MELEE** (orange, within melee reach), **WEAVE** (green, the sweet spot just outside melee), **IN RANGE** (blue, within shooting range), or **FAR** (red, beyond shooting range).
-- **How it works:** WoW doesn't expose an exact distance to a unit, so the widget probes a ladder of range checks with known thresholds — Wing Clip (5 yd) plus a series of fixed-range items (8, 10, 15, 20, 25, 30, 35 yd) — and brackets your distance between the nearest in-range and farthest out-of-range check. The estimate is only as fine as the available checks; bounds widen if a check can't be evaluated. This is the same technique used by RangeDisplay and LibRangeCheck.
+- **Spec-aware shooting range:** Your maximum shooting range is 35 yd by default, but the Survival talent **Hawk Eye** adds 2 yd per rank (up to 41 yd at 3/3). The widget reads your Hawk Eye rank and extends both the IN RANGE→FAR boundary and the top of the distance bracket accordingly, so a Survival hunter isn't told "FAR" while a target is still shootable.
+- **How it works:** WoW doesn't expose an exact distance to a unit, so the widget probes a ladder of range checks with known thresholds — Wing Clip (5 yd), a series of fixed-range items (8, 10, 15, 20, 25, 30, 35 yd), and your actual Auto Shot range at the top — and brackets your distance between the nearest in-range and farthest out-of-range check. The estimate is only as fine as the available checks; bounds widen if a check can't be evaluated. This is the same technique used by RangeDisplay and LibRangeCheck.
 - **Shown when:** You have an attackable target (or the widget is unlocked for positioning); hidden otherwise.
 
 <!-- ![Range to Target](screenshots/range-to-target.png) -->
@@ -502,6 +503,7 @@ A compact, keybindable bar of pet-management buttons, so you can keep your pet c
 - **Smart icons:** A button can change its icon to match your pet's state. For example, the all-in-one pet button shows the Mend Pet icon when your pet is alive, the Revive Pet icon when it's dead, and the Call Pet icon when you have no pet.
 - **Charge counts:** Item-based buttons show how many you have left in the bottom-right corner — for example, the Steam Tonk button shows the net number of Steam Tonk Controller charges in your bags.
 - **Cooldowns:** Item-based buttons show a cooldown sweep and countdown timer when the item is on cooldown — for example, the Steam Tonk button reflects the Steam Tonk Controller's 30-second cooldown. Buttons whose macros cast a global-cooldown spell (Mend Pet, Dismiss Pet, Call Pet) also show a brief sweep during the global cooldown, so you can see when the action is momentarily blocked.
+- **Out-of-range shade:** Pet-targeted buttons (Mend Pet on the all-in-one button, Feed Pet) are covered with a red shade over the icon when you're too far from your pet to use them, so you can see at a glance when you need to close the gap.
 - **Built-in macros:** Each button runs a macro built into the addon and tuned for hunters; the macros aren't user-editable.
 - **Devilsaur Tooth boss prep:** A dedicated button for the +crit-to-pet buff from the Devilsaur Tooth trinket. Click once before a pull to swap the Tooth into your top trinket slot (yellow border, "use me!"); wait out the 30-second equip cooldown; click again to apply the buff to your pet AND swap your previous trinket back in — both in one click. If anything blocks the swap-back (a sudden combat start, a disturbed bag slot), the button turns red ("UNEQUIP!") so you know to swap it back manually before pulling. The button greys out if you have no pet or no Tooth.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Pet* section). Pressing the key runs that slot's macro, including in combat. The bound key is shown in the top-right corner of the icon.
@@ -543,6 +545,7 @@ A compact, keybindable bar of your major cooldowns in one place — a mix of tri
 - **Trinkets follow your gear:** The trinket slots use whatever you currently have equipped in your top/bottom trinket slots, showing that item's icon and cooldown — no setup when you swap trinkets.
 - **Adapts to your spec:** Talent abilities only appear when you have them. The Bestial Wrath slot becomes Readiness if you're Survival, and the Intimidation slot disappears entirely unless you're Beast Mastery.
 - **At-a-glance readiness:** Each slot shows a cooldown sweep and countdown, and dims while it's on cooldown, so you can instantly see what's ready.
+- **Out-of-range shade:** When you have an attackable target, a harm ability that's out of range (e.g. Intimidation) is covered with a red shade over the icon, so you can see at a glance when you need to close distance.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Cooldowns* section), usable in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Cooldowns](screenshots/cooldowns.png) -->
@@ -557,6 +560,7 @@ A compact, keybindable bar of your main combat abilities and a couple of handy c
 - **Casts the right rank:** Ability buttons always use the highest rank you know, and show that spell's tooltip on hover.
 - **Adapts to your spec:** Abilities you don't know simply don't appear — so Aimed Shot only shows up when you're Marksmanship.
 - **Cooldown feedback:** Abilities with a real cooldown (Multi-Shot, Arcane Shot, Kill Command, …) show a sweep + countdown and dim while down; instant/GCD-only shots stay bright so the bar doesn't flicker as you spam.
+- **Out-of-range shade:** When you have an attackable target, any ability that's out of range is covered with a red shade over the icon (like the default UI's red hotkey numbers, but over the whole icon) — so you can see at a glance which shots you need to close distance for.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Combat* section), usable in combat. The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Core Combat](screenshots/core-combat.png) -->
@@ -572,6 +576,7 @@ A compact, keybindable bar for your situational utility — abilities you reach 
 - **Fishing setup in one button:** Equips your fishing pole and applies your Sharpened Fish Hook to it.
 - **Weapon swapping:** One-press buttons to switch between your 2H weapon and your dual 1H setup — works in combat. The button for whatever you currently have equipped is highlighted with a gold ring (the dual-1H button lights up only when both weapons are equipped), and the fishing button highlights while your fishing pole is out.
 - **Cooldown feedback:** Abilities with a real cooldown show a sweep + countdown and dim while down.
+- **Out-of-range shade:** An ability that's out of range of its target is covered with a red shade over the icon — Tranquilizing Shot against an attackable enemy, and Misdirection against the friendly target you're redirecting to — so you can see at a glance when you need to close distance.
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Utility* section). The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Utilities](screenshots/utilities.png) -->

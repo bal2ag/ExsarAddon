@@ -33,14 +33,16 @@ local ACTIONS = {
       macro = [[/cast Raptor Strike
 /startattack]],
       iconSpell     = "Raptor Strike",
-      cooldownSpell = "Raptor Strike" },
+      cooldownSpell = "Raptor Strike",
+      rangeSpell    = "Raptor Strike" },
 
     -- Start attacking: target the nearest enemy if we have no valid target,
     -- then turn on Auto Shot (! = ensure on, don't toggle off). No cooldown.
     { key = "autoshot", name = "Auto Shot",
       macro = [[/targetenemy [noexists][dead][help]
 /cast !Auto Shot]],
-      iconSpell = "Auto Shot" },
+      iconSpell  = "Auto Shot",
+      rangeSpell = "Auto Shot" },
 
     ability("Steady Shot"),
     ability("Multi-Shot"),
@@ -66,6 +68,7 @@ ExsarUI.CreateActionBar({
     placeholder         = "Combat",
     layout              = "horizontal",
     dimOnCooldown       = true,
+    rangeCheck          = true,
     actions             = ACTIONS,
     moduleName          = "Core Combat",
     configName          = "Core Combat",

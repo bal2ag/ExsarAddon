@@ -439,6 +439,33 @@ function ExsarLogic.FormatRangeBracket(minR, maxR)
     return string.format("%d-%d yd", lo, maxR)
 end
 
+--- Decide whether an action icon's out-of-range red shade should show.
+-- Mirrors the default UI's red-hotkey behavior: shade only when the ability's
+-- range unit is valid (exists + alive) AND the ability is confirmed out of
+-- range of it. The unit can be the hostile target (harm spells), a friendly
+-- target (Misdirection), or the pet (Mend/Feed Pet) -- `IsSpellInRange` returns
+-- nil when the spell can't target that unit, so a nil result (no range
+-- restriction, wrong unit type, or spell unknown) never shades.
+-- @param inRange  IsSpellInRange result: 1 (in range), 0 (out of range), nil (N/A)
+-- @param hasValidUnit bool (range unit exists and is alive)
+-- @return bool
+function ExsarLogic.ShouldShowRangeShade(inRange, hasValidUnit)
+    if not hasValidUnit then return false end
+    return inRange == 0
+end
+
+--- Compute the hunter's maximum ranged shooting range.
+-- Base ranged range is 35 yd; the Survival talent Hawk Eye adds 2 yd per rank
+-- (max 3 ranks → +6 yd → 41 yd). Used to extend the range widget's "far"
+-- boundary and its top-end Auto Shot checker for Survival-specced hunters.
+-- @param hawkEyeRank number talent rank (0-3); nil treated as 0
+-- @param base       number optional base range (default 35)
+-- @return number maximum shooting range in yards
+function ExsarLogic.MaxShootingRange(hawkEyeRank, base)
+    base = base or 35
+    return base + 2 * (hawkEyeRank or 0)
+end
+
 --- Classify a bracket into a weaving zone label.
 -- "melee": within melee reach (too close); "weave": the sweet spot just outside
 -- melee; "inrange": within shooting range; "far": beyond shooting range;

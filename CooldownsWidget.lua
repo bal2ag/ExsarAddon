@@ -75,6 +75,7 @@ ExsarUI.CreateActionBar({
     placeholder         = "Cooldowns",
     layout              = "horizontal",
     dimOnCooldown       = true,
+    rangeCheck          = true,  -- red shade on out-of-range harm slots (Intimidation)
     actions             = COOLDOWNS,
     moduleName          = "Cooldowns",
     configName          = "Cooldowns",

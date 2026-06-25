@@ -194,7 +194,11 @@ local PET_ACTIONS = {
           end
           if IsPetDead() then return "/cast Revive Pet" end
           return "/cast Call Pet"
-      end },
+      end,
+      -- Out-of-range shade against the pet (only meaningful in the Mend state --
+      -- a live pet); an absent/dead pet fails the rangeUnit exists+alive gate so
+      -- the Revive/Call states never shade.
+      rangeSpell = "Mend Pet", rangeUnit = "pet" },
 
     -- Send the pet in: Dash for the speed boost, then command the attack.
     -- Needs a living pet, so greyed when the pet is missing or dead.
@@ -257,7 +261,8 @@ local PET_ACTIONS = {
       gcd = true,  -- /cast Feed Pet triggers the GCD
       macro = [[/cast [pet,nodead] Feed Pet
 /use Clefthoof Ribs]],
-      requires = "alive" },
+      requires = "alive",
+      rangeSpell = "Feed Pet", rangeUnit = "pet" },
 
     -- Devilsaur Tooth boss-prep: two-click workflow described at the top of
     -- this file. Macro/border are entirely dynamic via the engine's
@@ -332,6 +337,7 @@ ExsarUI.CreateActionBar({
     buttonPrefix        = "ExsarAddonPetActionBtn",
     placeholder         = "Pet",
     layout              = "horizontal",
+    rangeCheck          = true,  -- red shade when out of pet range (Mend/Feed Pet)
     actions             = PET_ACTIONS,
     moduleName          = "Pet Management",
     configName          = "Pet management",

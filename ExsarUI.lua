@@ -1324,6 +1324,14 @@ end
 --                    creates the border ring even when opts.border is unset,
 --                    e.g. a single warning slot on an otherwise borderless bar)
 --   bindingLabel     override for the Key Bindings UI row label
+--   rangeSpell       (with opts.rangeCheck) spell name governing the out-of-range
+--                    red shade. Auto-resolved for spell/`spells` slots; macro/item
+--                    slots must set it explicitly, or `false` to suppress.
+--   rangeUnit        (with opts.rangeCheck) unit token whose range to check for
+--                    the shade. Default "target" (harm spells, and friendly-
+--                    target spells like Misdirection). Set "pet" for pet-targeted
+--                    abilities (Mend/Feed Pet). IsSpellInRange returns nil for the
+--                    wrong unit type, so the shade self-selects per spell.
 -- Escape hooks (called on the poll tick; consume returns):
 --   resolveActive(s)        -> { id, name, icon } current item (item kind)
 --   getCooldown(s)          -> start, duration, isRealCD
@@ -1343,7 +1351,10 @@ end
 -- opts: name (DB namespace), frameName, buttonPrefix, placeholder, actions,
 --   layout ("horizontal"|"vertical"|"grid"), gridCols, border (gold 1px ring
 --   active indicator) / activeAnts (marching-ants active indicator),
---   dimOnCooldown (dim macro/spell slots while a real CD runs), moduleName,
+--   dimOnCooldown (dim macro/spell slots while a real CD runs),
+--   rangeCheck (red out-of-range shade over slots whose ability is out of range
+--   of its target -- hostile, friendly, or pet; see rangeSpell / rangeUnit),
+--   moduleName,
 --   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
 --   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval.
 -- Returns a handle { frame, slots, Refresh, ApplyLayout, dbFunc }.
@@ -1610,6 +1621,18 @@ function ExsarUI.CreateActionBar(opts)
         s.countText:SetTextColor(1, 1, 0.8, 1)
         s.countText:SetText("")
 
+        -- Out-of-range red shade (opts.rangeCheck): a translucent red wash over
+        -- the whole icon when the slot's ability is out of range on an
+        -- attackable target. OVERLAY sub-level -1 keeps it above the icon but
+        -- below the hotkey/count text.
+        if opts.rangeCheck then
+            s.rangeShade = btn:CreateTexture(nil, "OVERLAY")
+            s.rangeShade:SetAllPoints()
+            s.rangeShade:SetColorTexture(1, 0, 0, 0.35)
+            s.rangeShade:SetDrawLayer("OVERLAY", -1)
+            s.rangeShade:Hide()
+        end
+
         btn:Hide()  -- ApplyLayout shows/positions
         slots[i] = s
     end
@@ -1829,6 +1852,16 @@ function ExsarUI.CreateActionBar(opts)
         end
     end
 
+    -- Resolve the spell whose range governs a slot's out-of-range shade.
+    -- Spell/`spells` slots auto-use their cast spell; macro/item slots opt in
+    -- via an explicit `rangeSpell` string (or `rangeSpell = false` to suppress).
+    local function AB_RangeSpell(s)
+        local a = s.action
+        if a.rangeSpell ~= nil then return a.rangeSpell or nil end
+        if s.kind == "item" then return nil end
+        return s.activeSpell or a.spell
+    end
+
     -- ---------- per-slot visuals (icons / cooldown / grey-out / border) ----------
     local function UpdateVisuals()
         local now = GetTime()
@@ -2003,6 +2036,25 @@ function ExsarUI.CreateActionBar(opts)
                         ExsarUI.SecureSetAttribute(s.btn, "macrotext", text)
                     end
                 end
+            end
+
+            -- Out-of-range red shade (applies to both kinds; item slots have no
+            -- range spell so they never shade). The range UNIT is per-slot:
+            -- "target" by default (harm spells, and friendly-target spells like
+            -- Misdirection), or `rangeUnit` (e.g. "pet" for Mend/Feed Pet).
+            -- IsSpellInRange returns nil when the spell can't act on that unit,
+            -- so a harm spell against a friendly target (or vice versa) never
+            -- shades -- no attackable-only gate needed here.
+            if s.rangeShade then
+                local show = false
+                local spell = AB_RangeSpell(s)
+                if spell then
+                    local unit = s.action.rangeUnit or "target"
+                    local valid = UnitExists(unit) and not UnitIsDead(unit)
+                    show = ExsarLogic.ShouldShowRangeShade(
+                        IsSpellInRange(spell, unit), valid and true or false)
+                end
+                s.rangeShade:SetShown(show)
             end
         end
     end

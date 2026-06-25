@@ -1402,6 +1402,43 @@ describe("FormatRangeBracket", function()
     end)
 end)
 
+describe("ShouldShowRangeShade", function()
+    it("never shades without a valid range unit", function()
+        assert.is_false(Logic.ShouldShowRangeShade(0, false))
+        assert.is_false(Logic.ShouldShowRangeShade(1, false))
+        assert.is_false(Logic.ShouldShowRangeShade(nil, false))
+    end)
+
+    it("shades only when confirmed out of range (0) of a valid unit", function()
+        assert.is_true(Logic.ShouldShowRangeShade(0, true))
+    end)
+
+    it("does not shade when in range (1)", function()
+        assert.is_false(Logic.ShouldShowRangeShade(1, true))
+    end)
+
+    it("does not shade when range is indeterminate (nil)", function()
+        assert.is_false(Logic.ShouldShowRangeShade(nil, true))
+    end)
+end)
+
+describe("MaxShootingRange", function()
+    it("returns the 35yd base with no Hawk Eye", function()
+        assert.are.equal(35, Logic.MaxShootingRange(0))
+        assert.are.equal(35, Logic.MaxShootingRange(nil))
+    end)
+
+    it("adds 2yd per Hawk Eye rank", function()
+        assert.are.equal(37, Logic.MaxShootingRange(1))
+        assert.are.equal(39, Logic.MaxShootingRange(2))
+        assert.are.equal(41, Logic.MaxShootingRange(3))
+    end)
+
+    it("honors a custom base range", function()
+        assert.are.equal(46, Logic.MaxShootingRange(3, 40))
+    end)
+end)
+
 describe("RangeZone", function()
     it("classifies within melee reach as melee", function()
         assert.are.equal("melee", Logic.RangeZone(nil, 5))
