@@ -335,11 +335,11 @@ Shows which aspect is currently active. Pulses a red warning when Aspect of the 
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
-Crossed-swords icon showing melee range status. Displays a cooldown sweep for your melee swing timer and a pulsating gold glow when your swing is ready in range.
+Crossed-swords icon showing melee range status. Displays a cooldown sweep for your melee swing timer and a pulsating cyan glow when your swing is ready in range. The icon sits on a near-opaque background disc so it stays readable when the screen is full of spell effects.
 
 - **Intent:** Designed to support melee weaving — stepping into melee range between auto shots to land a Raptor Strike. Shows at a glance whether you're in melee range and whether your swing is ready.
 - **Visual states:**
-  - **Ready** (in range, swing available): Full-alpha gold swords with blade glow lines, fast-pulsating gold glow ring (3 Hz) — swing now!
+  - **Ready** (in range, swing available): Full-alpha high-contrast cyan-white swords with cyan blade glow lines, fast-pulsating cyan glow ring (3 Hz) — the cyan pops against warm fire/spell effects where gold would blend in. Swing now!
   - **On cooldown** (in range, swing cooling down): Half-alpha gold swords with cooldown sweep and countdown timer, slow-pulsating muted glow ring — move away after swinging
   - **Out of range, swing on cooldown:** Two green arrows pointing up on a grey circular background (no swords) with the cooldown sweep and countdown timer — step in, swing is resetting, no glow
   - **Out of range, swing ready:** Two green arrows pointing up on a grey circular background (no swords) — the always-on cue, shown whenever you're in combat but not in melee range. Same look as the on-cooldown state but without the sweep/timer.

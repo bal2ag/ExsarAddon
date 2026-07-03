@@ -52,6 +52,13 @@ local SWORD_COLOR_EDGE   = { 1.0,  0.65, 0.0,  0.45 }   -- warm glow behind blad
 local SWORD_COLOR_GUARD  = { 0.70, 0.55, 0.25, 1.0 }    -- bronze crossguard
 local SWORD_COLOR_HANDLE = { 0.50, 0.35, 0.15, 1.0 }    -- brown handle
 
+-- High-contrast "ready" palette: bright cyan-white pops against warm spell FX
+-- (fire/lava/gold particles) where the normal gold blade would blend in.
+local READY_COLOR_BLADE  = { 0.60, 1.0,  1.0,  1.0 }    -- bright cyan-white blade
+local READY_COLOR_EDGE   = { 0.25, 0.85, 1.0,  0.55 }   -- cyan glow behind blade
+local READY_COLOR_GUARD  = { 0.40, 0.85, 0.95, 1.0 }    -- cyan crossguard
+local READY_COLOR_HANDLE = { 0.30, 0.60, 0.72, 1.0 }    -- muted cyan handle
+
 local GREY_COLOR_BLADE   = { 0.45, 0.45, 0.45, 1.0 }
 local GREY_COLOR_EDGE    = { 0.35, 0.35, 0.35, 0.45 }
 local GREY_COLOR_GUARD   = { 0.40, 0.40, 0.40, 1.0 }
@@ -108,20 +115,22 @@ local bgRing = frame:CreateTexture(nil, "BACKGROUND")
 bgRing:SetPoint("CENTER")
 bgRing:SetSize(78, 78)
 bgRing:SetTexture(CIRCLE_MASK)
-bgRing:SetVertexColor(0.35, 0.28, 0.10, 0.5)
+bgRing:SetVertexColor(0.35, 0.28, 0.10, 0.9)
 
 -- Inner fill
 local bg = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
 bg:SetPoint("CENTER")
 bg:SetSize(74, 74)
 bg:SetTexture(CIRCLE_MASK)
-bg:SetVertexColor(0.12, 0.10, 0.06, 0.75)
+bg:SetVertexColor(0.10, 0.08, 0.05, 0.97)
 
--- Background color modes: warm gold (normal) vs neutral grey (out-of-range idle)
-local BG_NORMAL_RING = { 0.35, 0.28, 0.10, 0.5  }
-local BG_NORMAL_FILL = { 0.12, 0.10, 0.06, 0.75 }
-local BG_GREY_RING   = { 0.28, 0.28, 0.28, 0.55 }
-local BG_GREY_FILL   = { 0.10, 0.10, 0.10, 0.80 }
+-- Background color modes: warm gold (normal) vs neutral grey (out-of-range idle).
+-- Near-opaque so spell/particle FX behind the widget can't bleed through and
+-- wash out the readout during busy fights.
+local BG_NORMAL_RING = { 0.35, 0.28, 0.10, 0.9  }
+local BG_NORMAL_FILL = { 0.10, 0.08, 0.05, 0.97 }
+local BG_GREY_RING   = { 0.28, 0.28, 0.28, 0.9  }
+local BG_GREY_FILL   = { 0.08, 0.08, 0.08, 0.97 }
 
 local currentBgMode = "normal"
 
@@ -160,7 +169,7 @@ local function BuildSword(sign)
     glow:SetStartPoint("CENTER", frame, bx1, by1)
     glow:SetEndPoint("CENTER", frame, bx2, by2)
     glow:SetThickness(24)
-    glow:SetColorTexture(1.0, 0.85, 0.3, 0.25)
+    glow:SetColorTexture(0.35, 0.9, 1.0, 0.30)  -- cyan blade glow (ready state only)
     glow:Hide()
     glowLines[#glowLines + 1] = glow
 
@@ -269,13 +278,20 @@ local COLOR_GREY = {
     guard  = GREY_COLOR_GUARD,
     handle = GREY_COLOR_HANDLE,
 }
+local COLOR_READY = {
+    blade  = READY_COLOR_BLADE,
+    edge   = READY_COLOR_EDGE,
+    guard  = READY_COLOR_GUARD,
+    handle = READY_COLOR_HANDLE,
+}
+local PALETTES = { normal = COLOR_NORMAL, grey = COLOR_GREY, ready = COLOR_READY }
 
 local currentColorMode = "normal"
 
 local function SetSwordColors(mode)
     if mode == currentColorMode then return end
     currentColorMode = mode
-    local palette = mode == "grey" and COLOR_GREY or COLOR_NORMAL
+    local palette = PALETTES[mode] or COLOR_NORMAL
     for _, entry in ipairs(allLines) do
         local c = palette[entry.colorKey]
         entry.line:SetColorTexture(c[1], c[2], c[3], c[4])
@@ -376,12 +392,15 @@ local function UpdateState()
     -- Determine color mode, alpha, and glow
     local ready = inRange and not onCooldown
     if inRange then
-        SetSwordColors("normal")
         SetSwordsVisible(true)
         SetBackgroundMode("normal")
         if onCooldown then
+            SetSwordColors("normal")
             frame:SetAlpha(0.5)
         else
+            -- Ready to swing: high-contrast cyan blades so the "hit now" cue
+            -- pops against warm spell FX instead of blending with gold.
+            SetSwordColors("ready")
             frame:SetAlpha(1.0)
         end
     elseif outOfRangeOnCd or outOfRangeIdle then
@@ -407,7 +426,7 @@ local function UpdateState()
     if ready then
         glowRingActive = true
         glowRingMuted  = false
-        glowRing:SetVertexColor(1.0, 0.95, 0.75, 0.85)
+        glowRing:SetVertexColor(0.55, 0.95, 1.0, 0.9)
         glowRing:Show()
     elseif inRange and onCooldown then
         glowRingActive = true

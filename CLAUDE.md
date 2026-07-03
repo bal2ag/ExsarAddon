@@ -54,7 +54,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 | `PlayerInfoWidget.lua` | Player portrait/health/auras, always visible (toggleable); low-HP burst warning with optional sound alert |
 | `PetInfoWidget.lua` | Pet portrait/health/auras, shows only when pet exists; low-HP burst warning and damage border with optional sound alerts |
 | `AspectTracker.lua` | Aspect of the Pack warning — pulses red glow + red marching-ants when Pack is active in combat |
-| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating gold glow ring when swing is ready in range; always-on green-up-arrows-on-grey cue while in combat and out of range; optional range-change sound effects |
+| `MeleeRangeIndicator.lua` | Crossed-swords icon showing melee range status; cooldown sweep for swing timer; pulsating cyan glow ring + high-contrast cyan swords when swing is ready in range (pops against warm spell FX); near-opaque background disc for readability in busy fights; always-on green-up-arrows-on-grey cue while in combat and out of range; optional range-change sound effects |
 | `GlobalCooldownTracker.lua` | Global cooldown tracker |
 | `RaidTargetWidget.lua` | Tank/assist roster: a vertical list of tracked group members (auto-detected tanks ∪ manually named members), one per row. Each row shows the member (class-colored name + portrait), the raid mark on their current target, that target's name, and the target's health; click a row to **assist** that member (target whatever they are on, live). Assist is the only combat-stable targeting primitive — see structure note. No icon-targeting (removed: you can't secure-target an arbitrary marked mob in combat) |
 | `PetAggressiveAlert.lua` | Pulsing red skull + text when pet is on aggressive mode |
@@ -162,13 +162,13 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - Placeholder text shown when unlocked; glow border shown in both active and unlocked states
 
 **`MeleeRangeIndicator.lua` structure:**
-- Crossed-swords icon with circular mask background; gold/grey sword color modes and warm/grey background color modes (`SetBackgroundMode`)
+- Crossed-swords icon with circular mask background; ready/gold/grey sword color modes (`SetSwordColors` over `PALETTES` — `ready` = high-contrast cyan-white, `normal` = gold, `grey` = out-of-range) and warm/grey background color modes (`SetBackgroundMode`). Background disc is near-opaque (fill α 0.97 / ring α 0.9) so spell/particle FX can't bleed through and wash out the readout during busy fights
 - Range check via `IsSpellInRange("Wing Clip", "target")` polled at 0.1s
 - Swing timer from combat log `SWING_DAMAGE`/`SWING_MISSED` + Raptor Strike spell IDs
-- Four visual states: ready (full alpha + gold swords + glow ring + blade glow), in-range on-cooldown (half alpha + gold swords + muted glow + sweep), out-of-range on-cooldown (green up-arrows on grey background, no swords, full alpha + sweep + countdown timer, `outOfRangeOnCd`), out-of-range idle (green up-arrows on grey background, no swords, no sweep — the always-on in-combat cue, `outOfRangeIdle`). The two out-of-range states look identical except the cooldown sweep distinguishes the on-cooldown case.
+- Four visual states: ready (full alpha + high-contrast cyan swords + cyan glow ring + cyan blade glow), in-range on-cooldown (half alpha + gold swords + muted glow + sweep), out-of-range on-cooldown (green up-arrows on grey background, no swords, full alpha + sweep + countdown timer, `outOfRangeOnCd`), out-of-range idle (green up-arrows on grey background, no swords, no sweep — the always-on in-combat cue, `outOfRangeIdle`). The two out-of-range states look identical except the cooldown sweep distinguishes the on-cooldown case.
 - Visibility (`shouldShow`): shown whenever in combat, or while the swing lingers on cooldown out of combat, or when unlocked; hidden otherwise
 - `SetSwordsVisible` toggles the sword lines (hidden in both out-of-range states); `SetArrowsVisible` toggles the green up-arrows status overlay (shown in both out-of-range states), built on `overlayFrame`
-- Pulsating gold glow ring (3.0 Hz) behind the icon in ready state only
+- Pulsating cyan glow ring (3.0 Hz) behind the icon in ready state only (gold when in-range on-cooldown)
 - Optional enter/leave range sound effects: enter = FileDataID 567947 (BullWhipHit1) via `PlaySoundFile`; leave = SoundKit ID 1024 (ChickenDeath) via `PlaySound`
 
 **`RangeToTargetWidget.lua` structure (and the range-bracketing approach for future range widgets):**
