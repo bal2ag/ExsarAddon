@@ -435,13 +435,13 @@ local function UpdateState()
 end
 
 -- =========================================================
--- Polling (range checks have no event; poll at 0.1s)
+-- Polling (range checks have no event; poll at 0.03s for tight melee weaving)
 -- =========================================================
 
 local pollFrame = CreateFrame("Frame")
 pollFrame:SetScript("OnUpdate", function(self, elapsed)
     M.pollElapsed = M.pollElapsed + elapsed
-    if M.pollElapsed < 0.1 then return end
+    if M.pollElapsed < 0.03 then return end
     M.pollElapsed = 0
     UpdateState()
 end)
