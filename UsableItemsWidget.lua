@@ -30,6 +30,13 @@ local TK_ZONES = {
     ["The Mechanar"] = true,
 }
 
+local COILFANG_ZONES = {
+    ["Serpentshrine Cavern"] = true,  -- the raid
+    ["The Slave Pens"]       = true,
+    ["The Underbog"]         = true,
+    ["The Steamvault"]       = true,
+}
+
 local TRACKED_ITEMS = {
     { name = "Dark Rune", id = 20520, col = 0, row = 0, bindingLabel = "Mana Rune",
       alternates = {
@@ -37,12 +44,14 @@ local TRACKED_ITEMS = {
       } },
     { name = "Super Mana Potion", id = 22832, col = 0, row = 1, bindingLabel = "Mana Potion",
       alternates = {
+          { name = "Cenarion Mana Salve",      id = 32903, zones = COILFANG_ZONES },
           { name = "Bottled Nethergon Energy", id = 32902, zones = TK_ZONES },
           { name = "Crystal Mana Potion",      id = 33935 },
           { name = "Auchenai Mana Potion",     id = 32948 },
       } },
     { name = "Super Healing Potion", id = 22829, col = 1, row = 1, bindingLabel = "Health Potion",
       alternates = {
+          { name = "Cenarion Healing Salve",   id = 32904, zones = COILFANG_ZONES },
           { name = "Bottled Nethergon Vapor",  id = 32905, zones = TK_ZONES },
           { name = "Crystal Healing Potion",   id = 33934 },
           { name = "Auchenai Healing Potion",  id = 32947 },
