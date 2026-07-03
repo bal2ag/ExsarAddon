@@ -23,6 +23,12 @@ local RAPTOR_STRIKE_IDS = {
     [27014] = true,   -- Rank 7
 }
 
+-- Feign Death cancels the current melee swing cycle (auto-attack stops while
+-- feigning). The cycle restarts when the FD buff fades, mirroring the ranged
+-- swing timer's FD handling. (Aimed Shot's cooldown reset is ranged-only and
+-- has no melee analogue, so it is not tracked here.)
+local FEIGN_DEATH_ID = 5384
+
 -- =========================================================
 -- Runtime state
 -- =========================================================
@@ -34,6 +40,8 @@ local M = {
     speed       = 0,      -- hasted main-hand attack speed (seconds)
     lastSwing   = 0,      -- GetTime() when the last melee swing fired
     swingActive = false,   -- true once we've seen at least one swing this session
+    feigning    = false,   -- Feign Death buff is up; cycle restarts when it fades
+    feignDeathName = "Feign Death",
 }
 
 local function RefreshSpeed()
@@ -476,9 +484,10 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
-frame:SetScript("OnEvent", function(self, event, arg1)
+frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, mrDB, 0, -150)
         if not mrDB().locked then
@@ -486,6 +495,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        M.feignDeathName = GetSpellInfo(FEIGN_DEATH_ID) or "Feign Death"
         RefreshSpeed()
         UpdateState()
 
@@ -494,8 +504,35 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         M.lastSwing   = 0
         UpdateState()
 
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if arg1 == "player" then
+            -- Feign Death cancels the current melee swing cycle. Clear the
+            -- swing state so the cooldown sweep doesn't linger on a stale
+            -- swing while feigning; the cycle restarts when the FD buff fades
+            -- (handled in UNIT_AURA via M.feigning), mirroring RangedSwingTimer.
+            local isFeignDeath = (arg2 == M.feignDeathName)
+                or (arg3 == FEIGN_DEATH_ID)
+                or (arg5 == FEIGN_DEATH_ID)
+            if isFeignDeath then
+                M.feigning    = true
+                M.swingActive = false
+                M.lastSwing   = 0
+                UpdateState()
+            end
+        end
+
     elseif event == "UNIT_AURA" then
-        if arg1 == "player" then RefreshSpeed() end
+        if arg1 == "player" then
+            -- Feign Death ended (buff faded): restart the swing cycle a full
+            -- weapon speed from now, so the sweep counts down to the first
+            -- post-FD swing rather than waiting for it to land.
+            if M.feigning and not ExsarUI.PlayerHasBuff(M.feignDeathName) then
+                M.feigning    = false
+                M.lastSwing   = GetTime()
+                M.swingActive = true
+            end
+            RefreshSpeed()
+        end
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         RefreshSpeed()

@@ -346,6 +346,7 @@ Crossed-swords icon showing melee range status. Displays a cooldown sweep for yo
   - **Out of range, swing ready:** Two green arrows pointing up on a grey circular background (no swords) — the always-on cue, shown whenever you're in combat but not in melee range. Same look as the on-cooldown state but without the sweep/timer.
   - **Hidden:** Out of combat with no swing cooldown lingering (and widget is locked)
 - **Swing timer:** Tracked via combat log (SWING_DAMAGE/SWING_MISSED and Raptor Strike hits). Cooldown sweep and countdown show time until next swing.
+- **Swing reset:** Feign Death clears the swing while you're feigned (no stale cooldown sweep), and the timer restarts with a fresh full cycle the moment the feign ends.
 - **Sound effects:** Optional sounds play when entering and leaving melee range (configurable in the config panel)
 
 <!-- ![Melee Range Indicator](screenshots/melee-range.png) -->
