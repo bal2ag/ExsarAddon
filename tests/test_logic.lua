@@ -583,6 +583,34 @@ describe("AutoShotDelay", function()
 end)
 
 -- =========================================================
+-- ShouldShowHoldWarning
+-- =========================================================
+
+describe("ShouldShowHoldWarning", function()
+    it("shows while stationary, auto active, and before the cap", function()
+        assert.is_true(Logic.ShouldShowHoldWarning(true, false, 100, 100.5))
+    end)
+
+    it("hidden when auto shot is off", function()
+        assert.is_false(Logic.ShouldShowHoldWarning(false, false, 100, 100.5))
+    end)
+
+    it("hidden while moving (movement cancels the pending shot)", function()
+        assert.is_false(Logic.ShouldShowHoldWarning(true, true, 100, 100.5))
+    end)
+
+    it("hidden once the safety cap is reached", function()
+        assert.is_false(Logic.ShouldShowHoldWarning(true, false, 100.5, 100.5))
+        assert.is_false(Logic.ShouldShowHoldWarning(true, false, 101, 100.5))
+    end)
+
+    it("hidden with no active hold (holdEnd nil or zero)", function()
+        assert.is_false(Logic.ShouldShowHoldWarning(true, false, 100, nil))
+        assert.is_false(Logic.ShouldShowHoldWarning(true, false, 100, 0))
+    end)
+end)
+
+-- =========================================================
 -- GridPosition
 -- =========================================================
 

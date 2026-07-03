@@ -145,6 +145,7 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 - Multi-Shot detected via `COMBAT_LOG_EVENT_UNFILTERED` / `SPELL_CAST_START` using `CombatLogGetCurrentEventInfo()` (required for TBC Classic Anniversary modern client; old variadic-args approach does not work)
 - `UNIT_SPELLCAST_FAILED` / `UNIT_SPELLCAST_INTERRUPTED` → brief red flash before hiding
 - Bar colors: green (Auto Shot aim), gold (Aimed Shot), blue (Steady Shot), orange (Multi-Shot)
+- **Auto-shot HOLD warning (retry-timer cue).** When the Auto Shot aim bar reaches its predicted end (`now >= C.endTime`) but the shot hasn't fired yet — the hidden **retry timer** window (see "The Retry Timer" in the Hunter timing reference) — the bar does NOT hide. Instead `BeginHold(now)` enters a HOLD state: the bar stays full + amber and a pulsing **orange glow** (`holdGlow`, `ExsarUI.CreateGlow` on BACKGROUND) surrounds the whole widget, telling the player *"wait, don't act — the auto is still pending"* (acting here clips the shot). The glow pulses via `ExsarLogic.PulseAlpha`; `ExsarLogic.ShouldShowHoldWarning(autoActive, moving, now, holdEnd)` (pure/tested) gates it. HOLD ends when the shot fires (`EndHold()` in the `UNIT_SPELLCAST_SUCCEEDED` auto branch — its whole purpose is to bridge the gap until this event), on movement (cancels the pending shot), on `STOP_AUTOREPEAT_SPELL`/Feign Death, when a new cast supersedes it (`ShowBar`), or at the `HOLD_MAX` (0.85s) safety cap so a missed fire event can't strand the glow. **Self-isolating property:** because `C.endTime` (from `lastAutoTime + autoSpeed`) and the fire event are both shifted by the same event latency, a clean cycle shows a near-zero glow while the glow *duration tracks the real retry delay*. Only entered while stationary + auto-repeat on. Toggle: `ExsarAddonDB.castBar.holdWarning` (default ON; "Auto-shot HOLD warning" config checkbox), cached as `C.holdWarn`.
 
 **`KillCommandAlert.lua` structure:**
 - Two eagle-wing crescents flanking the player, each built from 7 feather strokes via `frame:CreateLine()`; each feather has a wide low-alpha glow line (ARTWORK) plus a narrow bright core line (OVERLAY)
@@ -325,6 +326,22 @@ When standing still, the game auto-starts the wind-up so it completes exactly at
 
 **Clipping**: If a cast (Steady Shot, etc.) is still in progress when the auto shot becomes available, the auto is delayed until the cast finishes. The delay = `castEndTime - autoAvailableTime`.
 
+### The Retry Timer (hidden 500ms auto-shot resume delay)
+
+Source: Blizzard "Not A Bug" blue post — [Classic Hunter: The Retry Timer](https://us.forums.blizzard.com/en/wow/t/classic-hunter-the-retry-timer/542470). This is **intentional reference-client behavior**, not spell batching and not a server heartbeat, and it is the mechanic behind "the cast bar finished / the swing timer emptied but the shot doesn't fire for another fraction of a second."
+
+**Mechanic.** Auto Shot does not fire the instant it becomes eligible. The client runs a hidden **retry timer** that periodically re-attempts to (re)start Auto Shot, and that timer **refreshes on a 500ms cadence**. Whenever Auto Shot cannot fire the moment the swing cooldown ends — because you were moving, because a cast/GCD was occupying the shot, or because auto-repeat was toggled — the game waits for the **next retry tick** to try again. The gap between "eligible" and "next retry tick" is dead time of **0 to ~0.5s**, on top of the normal wind-up. It is not deterministic from the client's side: you can't see the retry timer's phase, only its effect.
+
+**Triggers** (from the blue post):
+1. **Movement** — the retry timer checks for movement before resuming; it refreshes every 500ms *while moving*. Stop moving just after a tick and you wait up to ~0.5s for the next check to observe you're stationary.
+2. **Casting a shot with a cast time** — Aimed Shot, Multi-Shot, Steady Shot, Volley all start the retry timer *in the background during the cast*. **Any Auto Shot that follows one of these can be delayed by up to 0.5s before it even begins its wind-up** — and this happens **even while standing perfectly still**. This is the case that bites a standard Steady-Shot weave rotation.
+3. **Feign Death** resume — compounded delay on the post-FD Auto Shot.
+4. **Double-tapping the Auto Shot toggle/macro** while already shooting — starts a retry cycle, up to 0.5s.
+5. **Toggling Auto Shot on while a melee ability (Raptor Strike) is up** — instant retry failure.
+6. **Re-enabling Auto Shot before the swing completes** — delay up to a full 3.4s.
+
+**Key consequence for widgets:** the visible cast/aim bar and the swing-timer bar predict when the shot is *due*; the retry timer means the shot can *actually* land 0–0.5s after that predicted moment. That trailing "due but not yet fired" window is exactly what the user must be told **not to act in** (starting Steady Shot there clips the pending auto). We surface it as the **overdue delay counter** in `RangedSwingTimer` (`ExsarLogic.AutoShotDelay` orange live counter — the "shot past due, hasn't fired" regime): that counter *is* the retry-timer window made visible. Because the retry delay is not observable in advance, the only honest signal is reactive — show the time elapsed since the shot became due until `UNIT_SPELLCAST_SUCCEEDED` lands. Note the `CLIP_OVERDUE_GRACE` (0.2s) suppression: event latency makes every normal cycle read ~0.1s late, so short retry gaps below the grace are currently hidden.
+
 ### Widget Implications
 
 - **Swing timer reticules**: Mark the hasted clip window (`0.5 / haste + latency`) — shows when starting a new cast would delay the next auto shot
@@ -357,7 +374,7 @@ Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `
 `ExsarAddonDB` is the top-level table. Each module namespaces its settings:
 - `ExsarAddonDB.cooldownTracker` — position (x, y), scale, locked, groupGap
 - `ExsarAddonDB.rangedSwingTimer` — position (x, y), scale, width, locked
-- `ExsarAddonDB.castBar` — position (x, y), scale, width, locked
+- `ExsarAddonDB.castBar` — position (x, y), scale, width, locked, holdWarning (auto-shot HOLD retry-timer glow; default ON, stores `false` when disabled)
 - `ExsarAddonDB.killCommandAlert` — position (x, y), scale, size, locked
 - `ExsarAddonDB.activeEffects` — position (x, y), scale, locked
 - `ExsarAddonDB.usableItems` — position (x, y), scale, locked

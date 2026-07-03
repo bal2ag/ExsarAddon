@@ -111,6 +111,7 @@ Cast bar for Auto Shot aim window, Aimed Shot, Steady Shot, and Multi-Shot. Each
 
 - **Shot colors:** Auto Shot (green), Aimed Shot (gold), Steady Shot (purple), Multi-Shot (orange)
 - **Auto Shot:** Detected automatically from your swing timer — the bar appears during the ~0.5s aim window when you must stand still for the shot to fire
+- **HOLD warning (retry timer):** After the aim bar fills, the auto shot doesn't always fire immediately — Classic's hidden "retry timer" can delay it up to ~0.5s (especially right after a Steady/Aimed/Multi-Shot cast, even standing still). When this happens the bar stays full and a **pulsing orange glow** surrounds it: *wait, don't act yet* — starting your next shot now would clip the pending auto. The glow clears the instant the shot fires, so its length shows exactly how long the shot was held. Toggle with the "Auto-shot HOLD warning" checkbox in config
 - **Swing resets:** Aimed Shot and Feign Death reset the swing timer, and the aim-window prediction follows: after an Aimed Shot lands the next aim bar comes a full weapon cycle later, and after Feign Death a full cycle from the moment the feign ends — no more premature aim bar with no shot behind it
 - **Multi-Shot:** Has a 0.5s base cast time (not instant), reduced by haste just like the Auto Shot wind-up
 - **Haste:** All cast durations account for your current haste effects (Rapid Fire, Bloodlust, haste rating, etc.)

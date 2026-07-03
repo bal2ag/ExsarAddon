@@ -204,6 +204,25 @@ function ExsarLogic.AutoShotDelay(now, lastShotTime, speed, castEnd, predictGrac
     return nil
 end
 
+--- Whether the auto-shot "HOLD" warning should currently be shown.
+-- The hold window is the gap between the aim bar reaching its predicted end
+-- (the shot is due) and the shot actually firing — the hidden retry-timer delay.
+-- It ends when the shot fires (caller drops out of the hold state), the player
+-- moves (movement cancels the pending shot), auto shot is toggled off, or a
+-- safety cap (holdEnd) is reached so a missed fire event can't strand the glow.
+-- @param autoActive  true while Auto Shot auto-repeat is toggled on
+-- @param moving      true if the player is moving this frame
+-- @param now         current time (GetTime())
+-- @param holdEnd     absolute safety-cap time for the hold (0/nil = no hold)
+-- @return true if the hold warning should be visible
+function ExsarLogic.ShouldShowHoldWarning(autoActive, moving, now, holdEnd)
+    if not autoActive then return false end
+    if moving then return false end
+    if not holdEnd or holdEnd <= 0 then return false end
+    if now >= holdEnd then return false end
+    return true
+end
+
 --- Calculate grid position for icon layout (0-based col/row).
 -- @param index       1-based index
 -- @param iconsPerRow number of icons per row

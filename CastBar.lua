@@ -24,6 +24,23 @@ local FLASH_DURATION = 0.4
 local AUTO_CLIP_TIME = 0.65  -- default before first measurement
 local AUTO_WIND_UP   = 0.65
 
+-- Auto-shot HOLD warning: the window between the aim bar reaching its predicted
+-- end (shot is due) and the shot actually firing. This gap is the hidden "retry
+-- timer" (a 0.5s-cadence resume check) plus event latency — during it the player
+-- must NOT act or they clip the pending auto. We keep the bar full + wrap it in a
+-- pulsing orange glow until UNIT_SPELLCAST_SUCCEEDED lands (or movement/the cap
+-- cancels it). Because the bar's end anchor and the fire event are both shifted
+-- by the same latency, a clean cycle shows a near-zero glow and the glow duration
+-- tracks the real delay. HOLD_MAX caps it so a missed fire event can't strand the
+-- glow (retry ~0.5s + latency, with headroom).
+local HOLD_MAX      = 0.85
+local HOLD_PULSE_HZ = 2.6
+local HOLD_MIN_A    = 0.34   -- never fully dim — the warning must stay legible at the trough
+local HOLD_MAX_A    = 0.86
+local HOLD_GLOW_SIZE = 7     -- halo spread beyond the widget (bigger = more prominent)
+local HOLD_BAR_COLOR = { 0.95, 0.45, 0.05, 0.9 }  -- amber "still active, wait"
+local HOLD_GLOW_COLOR = { 1.0, 0.45, 0.05 }
+
 -- Used only to resolve localized spell names at login
 local SPELL_ID_AUTO   = 75
 local SPELL_ID_AIMED  = 19434   -- Rank 1 of Aimed Shot in TBC Classic (NOT 13954)
@@ -78,6 +95,9 @@ local C = {
     inAutoAim    = false,  -- gate: true once the hasted aim window bar has been shown this cycle
     fdReset      = false,  -- Feign Death reset the cycle; re-anchor on attack resume
     locked       = false,  -- cached; updated on ADDON_LOADED and lock toggle
+    holding      = false,  -- true during the auto-shot HOLD window (aim done, shot pending)
+    holdEnd      = 0,      -- absolute safety-cap time for the current hold
+    holdWarn     = true,   -- cached config flag; false disables the HOLD warning
     -- Resolved at PLAYER_ENTERING_WORLD:
     nameAuto    = "Auto Shot",
     nameAimed   = "Aimed Shot",
@@ -134,6 +154,11 @@ timeText:SetTextColor(1, 1, 1, 0.9)
 -- Placeholder label: shown when the widget is unlocked but no cast is active,
 -- so the bar can be positioned even when it would normally be invisible.
 local placeholderText = ExsarUI.CreatePlaceholder(frame, "Cast Bar")
+
+-- HOLD glow: pulsing orange halo surrounding the whole widget during the
+-- retry-timer window (aim bar done, auto shot not yet fired — "wait, don't act").
+local holdGlow = ExsarUI.CreateGlow(frame,
+    HOLD_GLOW_COLOR[1], HOLD_GLOW_COLOR[2], HOLD_GLOW_COLOR[3], HOLD_MAX_A, HOLD_GLOW_SIZE, "BACKGROUND")
 
 frame:Hide()
 
@@ -208,6 +233,12 @@ local function ShowPlaceholder()
 end
 
 local function ShowBar(name, icon, startSec, endSec)
+    -- A new cast supersedes any pending HOLD glow.
+    if C.holding then
+        C.holding = false
+        C.holdEnd = 0
+        holdGlow:Hide()
+    end
     inPlaceholder = false
     placeholderText:Hide()
     C.casting     = true
@@ -223,6 +254,32 @@ local function ShowBar(name, icon, startSec, endSec)
     bar:Show()
     timeText:SetText("")
     frame:Show()
+end
+
+-- Enter the HOLD state: the auto-shot aim bar has reached its predicted end but
+-- the shot hasn't fired yet (retry-timer delay). Keep the bar full + amber and
+-- show the pulsing orange glow until the shot lands or movement/the cap cancels.
+local function BeginHold(now)
+    C.casting   = false   -- the aim bar's fill is complete
+    C.inAutoAim = false
+    C.holding   = true
+    C.holdEnd   = now + HOLD_MAX
+    inPlaceholder = false
+    placeholderText:Hide()
+    bar:SetColorTexture(HOLD_BAR_COLOR[1], HOLD_BAR_COLOR[2], HOLD_BAR_COLOR[3], HOLD_BAR_COLOR[4])
+    bar:SetWidth(math.max(0.01, cachedBarW))
+    bar:Show()
+    timeText:SetText("")
+    holdGlow:Show()
+    frame:Show()
+end
+
+-- Leave the HOLD state (shot fired, movement, toggle off, or safety cap).
+local function EndHold()
+    if not C.holding then return end
+    C.holding = false
+    C.holdEnd = 0
+    holdGlow:Hide()
 end
 
 
@@ -295,6 +352,11 @@ autoAimTicker:SetScript("OnUpdate", function(self, elapsed)
         autoAimStopTime = now
     end
     autoAimMoving = moving
+
+    -- During the HOLD window the aim bar is already resolved; the frame's
+    -- OnUpdate owns the glow and its exit conditions (including movement).
+    -- Don't let the aim detection re-show a bar over the hold.
+    if C.holding then return end
 
     -- Don't replace another spell's cast bar.
     if C.casting and C.spellName ~= C.nameAuto then return end
@@ -423,6 +485,20 @@ end
 frame:SetScript("OnUpdate", function(self, elapsed)
     local now = GetTime()
 
+    -- HOLD state: the auto-shot aim bar finished but the shot hasn't fired yet
+    -- (retry-timer window). Pulse the orange glow until the shot lands (cleared
+    -- in UNIT_SPELLCAST_SUCCEEDED) or an exit condition is hit.
+    if C.holding then
+        local moving = GetUnitSpeed("player") > 0
+        if not ExsarLogic.ShouldShowHoldWarning(C.autoActive, moving, now, C.holdEnd) then
+            EndHold()
+            ShowPlaceholder()
+            return
+        end
+        holdGlow:SetAlpha(ExsarLogic.PulseAlpha(now, HOLD_PULSE_HZ, HOLD_MIN_A, HOLD_MAX_A))
+        return
+    end
+
     -- Flash state: hold the bar at full red briefly, then show placeholder/hide
     if C.flashEnd > 0 then
         if now >= C.flashEnd then
@@ -445,6 +521,15 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     -- Safety: if a bar is still up after its expected end time, hide it.
     -- Covers Auto Shot (aim window expiry) and Multi-Shot (post-fire animation).
     if C.casting and now >= C.endTime then
+        -- Auto Shot: the aim bar reached its predicted end but the shot may not
+        -- have fired yet (retry timer). Enter the HOLD glow instead of hiding,
+        -- so the player waits out the hidden delay. Only while still stationary
+        -- and auto-repeat is on — movement/toggle-off just clears the bar.
+        if C.spellName == C.nameAuto and C.holdWarn and C.autoActive
+            and GetUnitSpeed("player") <= 0 then
+            BeginHold(now)
+            return
+        end
         C.casting   = false
         C.inAutoAim = false
         ShowPlaceholder()
@@ -498,7 +583,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         ExsarUI.RestorePosition(self, cbDB, 0, -270)
         ApplySize()
-        C.locked = cbDB().locked and true or false
+        C.locked   = cbDB().locked and true or false
+        C.holdWarn = cbDB().holdWarning ~= false
         if not C.locked then ShowPlaceholder() end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -544,6 +630,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         C.autoActive  = false
         C.inAutoAim   = false
         autoAimMoving = false
+        EndHold()
         if C.casting and C.spellName == C.nameAuto then
             C.casting = false   -- frame hides on next OnUpdate tick
         end
@@ -563,6 +650,15 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         if arg1 == "player" then
             local isAuto = (arg2 == C.nameAuto) or (arg3 == SPELL_ID_AUTO) or (arg5 == SPELL_ID_AUTO)
             if isAuto then
+                -- The shot landed: end any HOLD glow (its whole purpose was to
+                -- bridge the gap until this event). Also close out the aim bar
+                -- itself — if the fire event beat the predicted endTime (latency
+                -- jitter), leaving it up would spuriously BeginHold after the
+                -- shot already fired.
+                EndHold()
+                if C.casting and C.spellName == C.nameAuto then
+                    C.casting = false
+                end
                 -- Resync shot timestamp; resets the inAutoAim gate for the next cycle
                 C.lastAutoTime = GetTime()
                 C.inAutoAim    = false
@@ -592,6 +688,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or (arg3 == SPELL_ID_FEIGN)
                 or (arg5 == SPELL_ID_FEIGN)
             if isFeign then
+                EndHold()
                 C.fdReset      = true
                 C.lastAutoTime = 0
                 C.inAutoAim    = false
@@ -677,6 +774,16 @@ ExsarAddon.RegisterModule({
             end
         )
         y = y - 55
+
+        y = ExsarAddon.CreateCheckbox(parent, "Auto-shot HOLD warning (orange glow)", 16, y,
+            function() return cbDB().holdWarning ~= false end,
+            function(v)
+                cbDB().holdWarning = v
+                C.holdWarn = v
+                if not v then EndHold() end
+            end
+        )
+        y = y - 30
 
         y = ExsarUI.AddLockCheckbox(parent, y, cbDB, frame, function(v)
             C.locked = v
