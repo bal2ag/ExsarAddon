@@ -775,7 +775,7 @@ ExsarAddon.RegisterModule({
         )
         y = y - 55
 
-        y = ExsarAddon.CreateCheckbox(parent, "Auto-shot HOLD warning (orange glow)", 16, y,
+        ExsarAddon.CreateCheckbox(parent, "Auto-shot HOLD warning (orange glow)", 16, y,
             function() return cbDB().holdWarning ~= false end,
             function(v)
                 cbDB().holdWarning = v

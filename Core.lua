@@ -191,7 +191,10 @@ local function BuildOptions()
         line:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, y)
         y = y - 14
 
-        module.BuildConfig(panel, y)
+        local ok, err = pcall(module.BuildConfig, panel, y)
+        if not ok then
+            print(ADDON_NAME .. ": config build failed for '" .. tostring(module.name) .. "': " .. tostring(err))
+        end
 
         panel:Hide()
         contentPanels[i] = panel
