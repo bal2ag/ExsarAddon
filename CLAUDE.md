@@ -357,7 +357,7 @@ The WoW Classic client uses **Lua 5.1**. Do not use `goto`, `<const>`, `<close>`
 
 ## Interface Version
 
-The `.toc` file uses `## Interface: 20505` (TBC Classic Anniversary). To verify in-game:
+The `.toc` file uses `## Interface: 20506` (TBC Classic Anniversary). To verify in-game:
 ```
 /run print(select(4, GetBuildInfo()))
 ```

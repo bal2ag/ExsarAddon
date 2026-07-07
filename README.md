@@ -1,6 +1,6 @@
 # ExsarAddon
 
-A (highly opinionated) Hunter toolkit addon for World of Warcraft: TBC Classic Anniversary (Interface 20505). It provides a collection of lightweight, movable widgets that surface combat timers, cooldowns, alerts, and status information — everything a BM/survival hunter needs visible at a glance.
+A (highly opinionated) Hunter toolkit addon for World of Warcraft: TBC Classic Anniversary (Interface 20506). It provides a collection of lightweight, movable widgets that surface combat timers, cooldowns, alerts, and status information — everything a BM/survival hunter needs visible at a glance.
 
 This addon was built primarily with [Claude Code](https://code.claude.com/docs/en/overview).
 
