@@ -169,18 +169,38 @@ end
 -- =========================================================
 
 local function ScanTrinkets()
+    local pending = false
     for _, s in ipairs(slots) do
         if s.slotId then
             local itemId = GetInventoryItemID("player", s.slotId)
+            local spellName, spellId
             if itemId and itemId > 0 then
-                local spellName, spellId = GetItemSpell(itemId)
-                s.name = spellName   -- nil if item has no use effect
-                s.id   = spellId
+                spellName, spellId = GetItemSpell(itemId)
+            end
+            -- GetItemSpell returns nil for an uncached item (transient after a
+            -- taxi / zoning) exactly as it does for a passive trinket; probe the
+            -- cache (GetItemInfo ~= nil) to tell them apart.
+            local cached = not (itemId and itemId > 0) or GetItemInfo(itemId) ~= nil
+            local state  = ExsarLogic.TrinketScanState(itemId, spellName, cached)
+            if state == "known" then
+                s.name, s.id = spellName, spellId
+            elseif state == "empty" then
+                s.name, s.id = nil, nil   -- no item, or a cached passive trinket
             else
-                s.name = nil
-                s.id   = nil
+                -- pending: data not loaded -- keep the last-known buff to match so
+                -- the effect keeps showing, request a load, and re-scan on arrival.
+                pending = true
+                if C_Item and C_Item.RequestLoadItemDataByID then
+                    C_Item.RequestLoadItemDataByID(itemId)
+                end
             end
         end
+    end
+    -- Only listen for item-data arrival while something is pending.
+    if pending then
+        frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    else
+        frame:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
     end
 end
 
@@ -313,7 +333,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then UpdateBuffs() end
 
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "GET_ITEM_INFO_RECEIVED" then
+        -- Equipment change, or a previously-uncached trinket's data just arrived
+        -- (GET_ITEM_INFO_RECEIVED, registered by ScanTrinkets only while pending).
         ScanTrinkets()
         UpdateBuffs()
     end

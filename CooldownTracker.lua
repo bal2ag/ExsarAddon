@@ -278,27 +278,46 @@ end
 -- world entry, and whenever equipment changes.
 local function ScanTrinkets()
     local changed = false
+    local pending = false
     for _, tf in ipairs(trinketFrames) do
-        local itemId   = GetInventoryItemID("player", tf.slotId)
-        local wasKnown = tf.known
-        tf.known = false
-        if itemId and itemId > 0 then
-            local spellName = GetItemSpell(itemId)
-            if spellName then
-                tf.known = true
+        local itemId    = GetInventoryItemID("player", tf.slotId)
+        local spellName = itemId and itemId > 0 and GetItemSpell(itemId) or nil
+        -- GetItemSpell returns nil when the item's data isn't cached (transient
+        -- after a taxi / zoning), which is indistinguishable from a passive
+        -- trinket unless we probe the cache: GetItemInfo ~= nil means loaded.
+        local cached = not (itemId and itemId > 0) or GetItemInfo(itemId) ~= nil
+        local state  = ExsarLogic.TrinketScanState(itemId, spellName, cached)
+
+        if state == "pending" then
+            -- Data not loaded yet -- keep the current display, request a load,
+            -- and re-scan when GET_ITEM_INFO_RECEIVED fires (registered below).
+            pending = true
+            if C_Item and C_Item.RequestLoadItemDataByID then
+                C_Item.RequestLoadItemDataByID(itemId)
+            end
+        else
+            local wasKnown = tf.known
+            tf.known = (state == "known")
+            if tf.known then
                 -- Refresh texture in case the item changed
                 local tex = GetInventoryItemTexture("player", tf.slotId)
                 if tex then tf.icon:SetTexture(tex) end
+            else
+                tf.icon:SetTexture(nil)
+                tf.icon:SetDesaturated(false)
+                tf.icon:SetAlpha(1.0)
+                tf.cooldown:SetCooldown(0, 0)
+                tf.text:SetText("")
             end
+            if tf.known ~= wasKnown then changed = true end
         end
-        if not tf.known then
-            tf.icon:SetTexture(nil)
-            tf.icon:SetDesaturated(false)
-            tf.icon:SetAlpha(1.0)
-            tf.cooldown:SetCooldown(0, 0)
-            tf.text:SetText("")
-        end
-        if tf.known ~= wasKnown then changed = true end
+    end
+    -- Only listen for item-data arrival while something is actually pending,
+    -- so we don't re-scan on every unrelated GET_ITEM_INFO_RECEIVED.
+    if pending then
+        mainFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    else
+        mainFrame:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
     end
     if changed then ApplyLayout(cDB().groupGap or GROUP_GAP) end
 end
@@ -423,7 +442,9 @@ mainFrame:SetScript("OnEvent", function(self, event, arg1)
         UpdateCooldowns()
         ScanTrinkets()
         UpdateTrinketCooldowns()
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "GET_ITEM_INFO_RECEIVED" then
+        -- Equipment change, or a previously-uncached trinket's data just arrived
+        -- (GET_ITEM_INFO_RECEIVED, registered by ScanTrinkets only while pending).
         ScanTrinkets()
         UpdateTrinketCooldowns()
     else

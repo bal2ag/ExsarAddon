@@ -317,6 +317,34 @@ describe("CooldownState", function()
 end)
 
 -- =========================================================
+-- TrinketScanState
+-- =========================================================
+
+describe("TrinketScanState", function()
+    it("returns 'empty' when slot has no item", function()
+        assert.are.equal("empty", Logic.TrinketScanState(nil, nil, true))
+        assert.are.equal("empty", Logic.TrinketScanState(0, nil, true))
+    end)
+
+    it("returns 'known' when the item has an on-use spell", function()
+        assert.are.equal("known", Logic.TrinketScanState(12345, "Some Use Effect", true))
+    end)
+
+    it("returns 'known' even if cache probe reads uncached (spell already known)", function()
+        assert.are.equal("known", Logic.TrinketScanState(12345, "Some Use Effect", false))
+    end)
+
+    it("returns 'pending' when item is equipped but data not cached", function()
+        -- transient after taxi / zoning: GetItemSpell nil purely because uncached
+        assert.are.equal("pending", Logic.TrinketScanState(12345, nil, false))
+    end)
+
+    it("returns 'empty' for a cached passive trinket (no use effect)", function()
+        assert.are.equal("empty", Logic.TrinketScanState(12345, nil, true))
+    end)
+end)
+
+-- =========================================================
 -- CooldownRemaining
 -- =========================================================
 

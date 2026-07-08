@@ -99,6 +99,25 @@ function ExsarLogic.CooldownState(start, duration)
     return "ready"
 end
 
+--- Classify a trinket slot from its equipped item's cache state.
+-- Distinguishes "the item has no on-use effect" from "the item's data is not
+-- cached yet" -- the latter happens transiently after a taxi flight or zoning,
+-- when GetItemSpell returns nil purely because the client hasn't loaded the
+-- item. Treating that as "no trinket" wipes the icon and it never comes back
+-- until an equip change re-scans; classifying it as "pending" lets the caller
+-- keep the current display and retry when the data arrives.
+-- @param itemId     GetInventoryItemID for the slot (nil/0 = empty slot)
+-- @param spellName  GetItemSpell(itemId) result (a use-effect spell name, or nil)
+-- @param cached     whether the item's data is loaded (GetItemInfo ~= nil)
+-- @return "known" (has on-use effect -> show), "empty" (nothing to show ->
+--         hide), or "pending" (data not cached yet -> keep current, retry)
+function ExsarLogic.TrinketScanState(itemId, spellName, cached)
+    if not itemId or itemId <= 0 then return "empty" end
+    if spellName then return "known" end
+    if not cached then return "pending" end
+    return "empty"
+end
+
 --- Calculate remaining time from cooldown start/duration and current time.
 function ExsarLogic.CooldownRemaining(start, duration, now)
     if not start or not duration then return 0 end
