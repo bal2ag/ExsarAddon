@@ -360,9 +360,9 @@ Crossed-swords icon showing melee range status. Displays a cooldown sweep for yo
 
 Sweep effect for the current GCD.
 
-- **Appearance:** A circular sweep effect (no icon — just the sweep itself) with a pulsating blue glow ring behind it, and a countdown timer in the center
+- **Appearance:** A single solid, fully-opaque circle (no icon) swept away by the cooldown pie as the GCD elapses. High-contrast so it stays obvious when spell and particle effects are erupting behind it — and it shrinks and disappears with the GCD, never lingering. No timer text (the GCD is a fixed duration)
 - **Triggered by:** Probes the GCD via Wing Clip's cooldown (which has no cooldown of its own, so it only ever returns the GCD). Fires on `SPELL_UPDATE_COOLDOWN` events.
-- **Sweep color:** Grey during the GCD, transitions to blue when the remaining time enters the spell queue window — indicating you can queue your next ability
+- **Circle color:** Solid white during the GCD, changes to solid light blue when the remaining time enters the spell queue window — indicating you can queue your next ability
 - **Hidden when:** GCD is not active (and widget is locked)
 
 <!-- ![Global Cooldown Tracker](screenshots/gcd-tracker.png) -->
