@@ -25,9 +25,24 @@ local RAPTOR_STRIKE_IDS = {
 
 -- Feign Death cancels the current melee swing cycle (auto-attack stops while
 -- feigning). The cycle restarts when the FD buff fades, mirroring the ranged
--- swing timer's FD handling. (Aimed Shot's cooldown reset is ranged-only and
--- has no melee analogue, so it is not tracked here.)
+-- swing timer's FD handling.
 local FEIGN_DEATH_ID = 5384
+
+-- Aimed Shot resets the melee swing timer when it lands (verified in-game): the
+-- server restarts the auto-attack swing cycle, just as it resets the ranged
+-- cooldown (see RangedSwingTimer's AIMED_SHOT_IDS). So on an Aimed Shot success
+-- we restart the melee cycle a full weapon speed from now. Keep this table in
+-- sync with RangedSwingTimer.lua / CastBar.lua. Rank 1 is 19434 — NOT 13954.
+local AIMED_SHOT_IDS = {
+    [19434] = true,   -- Rank 1
+    [20900] = true,   -- Rank 2
+    [20901] = true,   -- Rank 3
+    [20902] = true,   -- Rank 4
+    [20903] = true,   -- Rank 5
+    [20904] = true,   -- Rank 6
+    [27065] = true,   -- Rank 7
+}
+local AIMED_SHOT_NAME_ID = 19434   -- used only to resolve the localized name
 
 -- =========================================================
 -- Runtime state
@@ -42,6 +57,7 @@ local M = {
     swingActive = false,   -- true once we've seen at least one swing this session
     feigning    = false,   -- Feign Death buff is up; cycle restarts when it fades
     feignDeathName = "Feign Death",
+    aimedShotName  = "Aimed Shot",
 }
 
 local function RefreshSpeed()
@@ -496,6 +512,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         M.feignDeathName = GetSpellInfo(FEIGN_DEATH_ID) or "Feign Death"
+        M.aimedShotName  = GetSpellInfo(AIMED_SHOT_NAME_ID) or "Aimed Shot"
         RefreshSpeed()
         UpdateState()
 
@@ -517,6 +534,20 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 M.feigning    = true
                 M.swingActive = false
                 M.lastSwing   = 0
+                UpdateState()
+                return
+            end
+
+            -- Aimed Shot landing resets the melee swing cycle (verified
+            -- in-game): restart it a full weapon speed from now so the sweep
+            -- counts down to the next real swing rather than lingering on the
+            -- pre-Aimed timer. Mirrors RangedSwingTimer's Aimed Shot reset.
+            local isAimedShot = (arg2 == M.aimedShotName)
+                or AIMED_SHOT_IDS[arg3]
+                or AIMED_SHOT_IDS[arg5]
+            if isAimedShot then
+                M.lastSwing   = GetTime()
+                M.swingActive = true
                 UpdateState()
             end
         end
