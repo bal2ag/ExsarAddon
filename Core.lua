@@ -115,6 +115,62 @@ end
 local OPTIONS_CATEGORY
 local ToggleConfig  -- forward declaration
 
+-- Per-module sidebar icons (reduces the mental load of scanning ~30 names).
+-- Keyed by module name; values are Interface\Icons leaf names, or a full
+-- "Interface\..." path. A module may instead set its own `icon` field on the
+-- RegisterModule table (a leaf name, full path, or spellID/itemID number),
+-- which takes precedence over this map. WoW silently shows a "?" texture for a
+-- bad path, so a wrong entry is cosmetic, never fatal.
+local MODULE_ICONS = {
+    ["Active Effects Tracker"]   = "Spell_Nature_TimeStop",
+    ["Aggro Alert"]              = "Ability_Creature_Cursed_05",
+    ["Ammo Tracker"]             = "INV_Misc_Ammo_Bullet_02",
+    ["Aspect Tracker"]           = "Ability_Mount_WhiteTiger",
+    ["Aspects"]                  = "Spell_Nature_RavenForm",
+    ["Cast Bar"]                 = "Ability_Hunter_AimedShot",
+    ["Consumable Buffs"]         = "INV_Potion_51",
+    ["Cooldown Tracker"]         = "INV_Misc_PocketWatch_02",
+    ["Cooldowns"]                = "Ability_Hunter_Readiness",
+    ["Core Combat"]              = "Ability_Marksmanship",
+    ["Food & Drink"]             = "INV_Misc_Food_15",
+    ["Global Cooldown Tracker"]  = "INV_Misc_PocketWatch_01",
+    ["Kill Command Alert"]       = "Ability_Hunter_KillCommand",
+    ["Melee Range Indicator"]    = "Ability_DualWield",
+    ["Mend Pet Tracker"]         = "Ability_Hunter_MendPet",
+    ["Mount Widget"]             = "Ability_Mount_JungleTiger",
+    ["Pet Aggressive Alert"]     = "Ability_Druid_ChallangingRoar",
+    ["Pet Happiness"]            = "Ability_Hunter_BeastTaming",
+    ["Pet Info"]                 = "Ability_Hunter_BeastCall",
+    ["Pet Management"]           = "Ability_Hunter_Pet_Cat",
+    ["Player Info"]              = "INV_Misc_GroupLooking",
+    ["Raid Debuff Tracker"]      = "Ability_Warrior_Sunder",
+    ["Raid Target Widget"]       = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_1",
+    ["Range to Target"]          = "Ability_Hunter_SniperShot",
+    ["Ranged Swing Timer"]       = "INV_Weapon_Rifle_01",
+    ["Rotation Helper"]          = "Ability_Marksmanship",
+    ["Target Debuff Tracker"]    = "Spell_Nature_CorrosiveBreath",
+    ["Target Info"]              = "Spell_Holy_MindVision",
+    ["Traps"]                    = "Spell_Frost_ChainsOfIce",
+    ["Usable Items"]             = "INV_Potion_54",
+    ["Utilities"]                = "Ability_Hunter_Misdirection",
+}
+
+-- Resolve a module's icon (explicit `module.icon` overrides the name map) to a
+-- texture path, or nil if none. Rendered as a left-anchored texture on the nav
+-- button (not inline in the centered label, which would make the icon's screen
+-- position drift with the text length).
+local function ModuleIconPath(module)
+    local icon = module.icon or MODULE_ICONS[module.name]
+    if not icon then return nil end
+    if type(icon) == "number" then
+        return (GetSpellTexture and GetSpellTexture(icon))
+            or (GetItemIcon and GetItemIcon(icon))
+    elseif icon:find("\\") then
+        return icon                       -- already a full texture path
+    end
+    return "Interface\\Icons\\" .. icon
+end
+
 local Options = CreateFrame("Frame", ADDON_NAME .. "Options", UIParent)
 Options.name = ADDON_NAME
 
@@ -156,20 +212,61 @@ local function BuildOptions()
         end
     end
 
-    -- Sidebar navigation buttons, one per module
-    local navY = -10
+    -- Sidebar navigation is scrollable: with ~26 modules the button list is
+    -- taller than the Interface Options canvas, so the bottom entries (e.g.
+    -- "Usable Items") would otherwise bleed off-screen and be unclickable.
+    local navScroll = CreateFrame("ScrollFrame", ADDON_NAME .. "NavScroll", Options,
+                                  "UIPanelScrollFrameTemplate")
+    navScroll:SetPoint("TOPLEFT",     Options, "TOPLEFT",     0, -8)
+    navScroll:SetPoint("BOTTOMLEFT",  Options, "BOTTOMLEFT",  0,  8)
+    navScroll:SetWidth(SIDEBAR_W - 4)
+    -- The template's scrollbar sits just inside the right edge of the scroll frame.
+
+    local navChild = CreateFrame("Frame", ADDON_NAME .. "NavChild", navScroll)
+    navChild:SetWidth(SIDEBAR_W - 4)
+    navChild:SetHeight(1)
+    navScroll:SetScrollChild(navChild)
+
+    -- Sidebar navigation buttons, one per module. Long widget names overflow a
+    -- fixed single-line UIPanelButtonTemplate, so wrap each button's font string
+    -- to the button width and grow the button height to fit the wrapped text.
+    local BTN_W = SIDEBAR_W - 30
+    local navY = -2
     for i, module in ipairs(registeredModules) do
-        local btn = CreateFrame("Button", ADDON_NAME .. "NavBtn" .. i, Options,
+        local btn = CreateFrame("Button", ADDON_NAME .. "NavBtn" .. i, navChild,
                                 "UIPanelButtonTemplate")
-        btn:SetPoint("TOPLEFT", Options, "TOPLEFT", 6, navY)
-        btn:SetWidth(SIDEBAR_W - 12)
-        btn:SetHeight(24)
+        btn:SetPoint("TOPLEFT", navChild, "TOPLEFT", 6, navY)
+        btn:SetWidth(BTN_W)
+
+        -- Icon: a fixed texture pinned to the left edge, independent of the
+        -- centered label, so it doesn't shift with the widget name's length.
+        local iconPath = ModuleIconPath(module)
+        if iconPath then
+            local tex = btn:CreateTexture(nil, "ARTWORK")
+            tex:SetSize(16, 16)
+            tex:SetPoint("LEFT", btn, "LEFT", 4, 0)
+            tex:SetTexture(iconPath)
+        end
+
+        -- Inset the centered label past the icon so long names can't overlap it.
+        local fs = btn:GetFontString()
+        fs:ClearAllPoints()
+        fs:SetPoint("LEFT",  btn, "LEFT",  iconPath and 22 or 6, 0)
+        fs:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+        fs:SetWordWrap(true)
+        fs:SetMaxLines(2)
+        fs:SetJustifyH("CENTER")
         btn:SetText(module.name)
+
+        local h = math.max(24, math.ceil(fs:GetStringHeight()) + 10)
+        btn:SetHeight(h)
+
         local idx = i
         btn:SetScript("OnClick", function() SelectModule(idx) end)
         navButtons[i] = btn
-        navY = navY - 28
+        navY = navY - (h + 4)
     end
+    navChild:SetHeight(math.max(1, -navY + 2))
 
     -- Content panels: one per module, shown/hidden on nav selection
     for i, module in ipairs(registeredModules) do

@@ -114,7 +114,7 @@ Items with a `ranks` field (array of `{ name, id, buffId }` ordered highest-firs
 Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weightstone) are tracked via `GetWeaponEnchantInfo()` instead of the buff list. Both weapon hands are read; `ExsarLogic.MinWeaponEnchantRemaining(enchantId, ...)` returns the soonest-to-expire hand carrying the matching `enchantId`, so a stone applied to a dual-wield pair shows the timer that will run out first. `buffDuration` is hardcoded (3600s) for the sweep animation since the API reports only remaining time, not total duration. When the soonest-expiring hand switches, the >2s sweep-start guard catches the jump.
 
 **Core API available to modules:**
-- `ExsarAddon.RegisterModule(module)` — registers the module; `module.BuildConfig(parent, y)` must return the final y position after placing widgets
+- `ExsarAddon.RegisterModule(module)` — registers the module; `module.BuildConfig(parent, y)` must return the final y position after placing widgets. Optional `module.icon` (an `Interface\Icons` leaf name, a full texture path, or a spellID/itemID number) sets the module's sidebar icon in the config panel; if omitted, `Core.lua`'s central `MODULE_ICONS` map (keyed by module name) supplies one. The config sidebar is a scrollable list (`UIPanelScrollFrameTemplate`) of word-wrapped, icon-prefixed nav buttons — needed because ~30 modules overflow the Interface Options canvas height
 - `ExsarAddon.AddSlashCommand(cmd, fn)` — adds a `/exsar <cmd>` handler
 - `ExsarAddon.CreateSlider(parent, label, x, y, min, max, step, getter, setter)`
 - `ExsarAddon.CreateCheckbox(parent, label, x, y, getter, setter)`
