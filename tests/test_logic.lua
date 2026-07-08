@@ -2107,3 +2107,143 @@ describe("DevilsaurStage", function()
     end)
 end)
 
+
+-- =========================================================
+-- HastedCastTime
+-- =========================================================
+
+describe("HastedCastTime", function()
+    it("returns baseCast unchanged when speeds unknown", function()
+        assert.are.equal(1.5, Logic.HastedCastTime(1.5, 0, 0))
+        assert.are.equal(1.5, Logic.HastedCastTime(1.5, nil, nil))
+        assert.are.equal(1.5, Logic.HastedCastTime(1.5, 1.5, 0))
+    end)
+
+    it("returns baseCast when unhasted (hastedSpeed == baseSpeed)", function()
+        assert.is_true(approx(1.5, Logic.HastedCastTime(1.5, 2.17, 2.17)))
+    end)
+
+    it("shortens the cast proportionally to ranged haste", function()
+        -- 2.17 base hasted to 1.8925 => 15% haste => 1.5 / 1.15 = 1.3043
+        assert.is_true(approx(1.5 * 1.8925 / 2.17, Logic.HastedCastTime(1.5, 1.8925, 2.17)))
+        assert.is_true(approx(1.3043, Logic.HastedCastTime(1.5, 1.8925, 2.17), 0.01))
+    end)
+end)
+
+-- =========================================================
+-- WeaveNowState
+-- =========================================================
+
+describe("WeaveNowState", function()
+    local function state(o)
+        local show, rem = Logic.WeaveNowState(o)
+        return show, rem
+    end
+
+    it("is off when melee swing is not ready", function()
+        assert.is_false((state({ meleeReady = false, timeToAuto = 1.0, weaveCost = 0.4, steadyCastTime = 1.5 })))
+    end)
+
+    it("is off while casting (moving would cancel the cast)", function()
+        assert.is_false((state({ meleeReady = true, casting = true, timeToAuto = 1.0, weaveCost = 0.4, steadyCastTime = 1.5 })))
+    end)
+
+    it("is off when there is no auto cycle (timeToAuto nil)", function()
+        assert.is_false((state({ meleeReady = true, timeToAuto = nil, weaveCost = 0.4, steadyCastTime = 1.5 })))
+    end)
+
+    it("is off when there isn't enough time to weave before the auto", function()
+        assert.is_false((state({ meleeReady = true, timeToAuto = 0.3, weaveCost = 0.4, steadyCastTime = 1.5 })))
+    end)
+
+    it("is off right after an auto with room for a shot and not on GCD (should shoot, not weave)", function()
+        -- slow regime: 2.17s to auto, can fit a 1.5s Steady, off GCD -> shoot first
+        assert.is_false((state({ meleeReady = true, gcdRemaining = 0, timeToAuto = 2.17, weaveCost = 0.4, steadyCastTime = 1.5 })))
+    end)
+
+    it("is off at the start of a fresh cycle while the previous GCD tail drains", function()
+        -- auto just fired (2.17s ahead) with only 0.2s of the last Steady's GCD
+        -- left: a full Steady still fits (2.17 - 0.2 = 1.97 >= 1.5) -> cast, don't
+        -- weave. This is the "cue flashes for an instant right after the auto" fix.
+        assert.is_false((state({ meleeReady = true, gcdRemaining = 0.2, timeToAuto = 2.17, weaveCost = 0.4, steadyCastTime = 1.5 })))
+    end)
+
+    it("is ON in the slow post-cast tail (no room for a shot before the auto)", function()
+        -- Steady done, ~0.67s to auto, off GCD, can't fit a 1.5s Steady -> weave
+        local show, rem = state({ meleeReady = true, gcdRemaining = 0, timeToAuto = 0.67, weaveCost = 0.4, steadyCastTime = 1.5 })
+        assert.is_true(show)
+        assert.is_true(approx(0.27, rem))
+    end)
+
+    it("is ON in the arcane/multi GCD gap (locked out, leftover won't fit a Steady)", function()
+        -- just fired an instant shot: 2.0s to auto but 1.5s GCD left, so only 0.5s
+        -- of castable time before the auto -> weave the GCD gap
+        local show = state({ meleeReady = true, gcdRemaining = 1.5, timeToAuto = 2.0, weaveCost = 0.4, steadyCastTime = 1.5 })
+        assert.is_true(show)
+    end)
+
+    it("is ON in the fast auto-auto gap (short cycle, no room for a shot)", function()
+        -- giga-haste: 0.7s to auto, off GCD, hasted Steady ~1.0s doesn't fit -> weave
+        local show = state({ meleeReady = true, gcdRemaining = 0, timeToAuto = 0.7, weaveCost = 0.4, steadyCastTime = 1.0 })
+        assert.is_true(show)
+    end)
+
+    it("window remaining is timeToAuto minus weaveCost", function()
+        local _, rem = state({ meleeReady = true, gcdRemaining = 1.5, timeToAuto = 1.2, weaveCost = 0.4, steadyCastTime = 1.5 })
+        assert.is_true(approx(0.8, rem))
+    end)
+end)
+
+-- =========================================================
+-- HoldCue (anti-flicker hysteresis)
+-- =========================================================
+
+describe("HoldCue", function()
+    it("shows immediately and sets holdUntil when raw is on", function()
+        local shown, hu = Logic.HoldCue(true, 100, 0, 0.3)
+        assert.is_true(shown)
+        assert.are.equal(100.3, hu)
+    end)
+
+    it("keeps showing after raw goes off, until holdUntil passes", function()
+        local _, hu = Logic.HoldCue(true, 100, 0, 0.3)   -- holdUntil = 100.3
+        local shown = Logic.HoldCue(false, 100.2, hu, 0.3)
+        assert.is_true(shown)                            -- 100.2 < 100.3 still held
+        local shown2 = Logic.HoldCue(false, 100.4, hu, 0.3)
+        assert.is_false(shown2)                          -- 100.4 >= 100.3 released
+    end)
+
+    it("re-arms the hold each frame raw stays on", function()
+        local _, hu1 = Logic.HoldCue(true, 100, 0, 0.3)
+        local _, hu2 = Logic.HoldCue(true, 100.5, hu1, 0.3)
+        assert.are.equal(100.8, hu2)
+    end)
+
+    it("does not show when never armed", function()
+        assert.is_false((Logic.HoldCue(false, 100, 0, 0.3)))
+        assert.is_false((Logic.HoldCue(false, 100, nil, nil)))
+    end)
+end)
+
+-- =========================================================
+-- ShouldReactivateAuto
+-- =========================================================
+
+describe("ShouldReactivateAuto", function()
+    it("fires when auto is in range but auto-repeat is off", function()
+        assert.is_true(Logic.ShouldReactivateAuto(1, false, true))
+    end)
+
+    it("is silent when auto-repeat is on (kiting merely delays)", function()
+        assert.is_false(Logic.ShouldReactivateAuto(1, true, true))
+    end)
+
+    it("is silent in melee/dead zone or out of shooting range (in-range ~= 1)", function()
+        assert.is_false(Logic.ShouldReactivateAuto(0, false, true))
+        assert.is_false(Logic.ShouldReactivateAuto(nil, false, true))
+    end)
+
+    it("is silent with no attackable target", function()
+        assert.is_false(Logic.ShouldReactivateAuto(1, false, false))
+    end)
+end)

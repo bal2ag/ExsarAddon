@@ -1096,6 +1096,337 @@ function ExsarUI.GetAutoShotWindUpTime()
     return 0.5 + GetLatency()
 end
 
+-- =========================================================
+-- Shared range probe
+-- =========================================================
+
+--- Probe a ladder of range checkers against a unit → distance bracket.
+-- Extracted from RangeToTargetWidget so multiple range widgets share the loop.
+-- Each checker is { range=, spell= | item= }: spell entries use IsSpellInRange,
+-- item entries use IsItemInRange. Normalizes 1/0/nil and true/false/nil into the
+-- true/false/nil results ComputeRangeBracket expects (nil = unusable → skipped).
+-- @param unit      unit token to check against
+-- @param checkers  array of { range, spell= | item= } ascending by range
+-- @param results   optional reusable results table (avoids garbage per poll)
+-- @return minR, maxR (from ExsarLogic.ComputeRangeBracket)
+function ExsarUI.ProbeRangeBracket(unit, checkers, results)
+    results = results or {}
+    for i, checker in ipairs(checkers) do
+        local inRange
+        if checker.spell then
+            inRange = IsSpellInRange(checker.spell, unit)
+        else
+            inRange = IsItemInRange(checker.item, unit)
+        end
+        if inRange == 1 or inRange == true then
+            results[i] = true
+        elseif inRange == 0 or inRange == false then
+            results[i] = false
+        else
+            results[i] = nil
+        end
+    end
+    return ExsarLogic.ComputeRangeBracket(checkers, results)
+end
+
+-- =========================================================
+-- Shared auto-shot cycle tracker
+-- =========================================================
+-- Maintains the ranged auto-shot cycle state from the game's events so multiple
+-- widgets read one source of truth instead of each re-deriving it. Mirrors
+-- RangedSwingTimer's proven event handling — including the Aimed Shot cycle reset
+-- and the Feign Death cancel — but exposes state rather than drawing.
+-- (RangedSwingTimer predates this and keeps its own copy; it could adopt this
+-- tracker later.) Use ExsarUI.GetAutoShotTracker() for the shared singleton.
+--
+-- Returns a state table T with fields updated live:
+--   T.lastShotTime, T.speed, T.baseSpeed, T.castEnd, T.autoFired, T.autoRepeatOn
+-- and methods:
+--   T:TimeToNextAuto(now)  → seconds until the next auto is due, or nil
+--   T:Overdue(now, ...)    → ExsarLogic.AutoShotDelay(...) for this cycle
+
+local AST_AUTO_SHOT_ID       = 75
+local AST_FEIGN_DEATH_ID     = 5384
+local AST_AIMED_SHOT_IDS     = {
+    [19434] = true, [20900] = true, [20901] = true, [20902] = true,
+    [20903] = true, [20904] = true, [27065] = true,
+}
+local AST_AIMED_SHOT_NAME_ID = 19434
+
+function ExsarUI.CreateAutoShotTracker()
+    local T = {
+        lastShotTime = 0,
+        speed        = 0,
+        baseSpeed    = 0,
+        castEnd      = 0,
+        autoFired    = false,
+        autoRepeatOn = false,
+        feigning     = false,
+        autoShotName   = "Auto Shot",
+        aimedShotName  = "Aimed Shot",
+        feignDeathName = "Feign Death",
+    }
+
+    local function RefreshSpeed()
+        local speed = select(1, UnitRangedDamage("player"))
+        T.speed = (type(speed) == "number" and speed > 0) and speed or 0
+    end
+    local function RefreshAll()
+        T.baseSpeed = ExsarUI.GetBaseRangedSpeed()
+        RefreshSpeed()
+    end
+
+    function T:TimeToNextAuto(now)
+        if self.speed <= 0 or self.lastShotTime <= 0 then return nil end
+        return self.lastShotTime + self.speed - now
+    end
+    function T:Overdue(now, predictGrace, overdueGrace)
+        if not self.autoFired then return nil end
+        return ExsarLogic.AutoShotDelay(now, self.lastShotTime, self.speed,
+            self.castEnd, predictGrace, overdueGrace)
+    end
+
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:RegisterEvent("START_AUTOREPEAT_SPELL")
+    f:RegisterEvent("STOP_AUTOREPEAT_SPELL")
+    f:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    f:RegisterEvent("UNIT_SPELLCAST_START")
+    f:RegisterEvent("UNIT_SPELLCAST_FAILED")
+    f:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+    pcall(function() f:RegisterEvent("UNIT_SPELLCAST_STOP") end)
+    f:RegisterEvent("UNIT_AURA")
+    f:RegisterEvent("UNIT_ATTACK_SPEED")
+    f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+    f:RegisterEvent("SPELLS_CHANGED")
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+    f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, _, arg5)
+        if event == "PLAYER_ENTERING_WORLD" then
+            T.autoShotName   = GetSpellInfo(AST_AUTO_SHOT_ID)       or "Auto Shot"
+            T.aimedShotName  = GetSpellInfo(AST_AIMED_SHOT_NAME_ID) or "Aimed Shot"
+            T.feignDeathName = GetSpellInfo(AST_FEIGN_DEATH_ID)     or "Feign Death"
+            RefreshAll()
+
+        elseif event == "START_AUTOREPEAT_SPELL" then
+            T.autoRepeatOn = true
+            if T.lastShotTime == 0 then T.lastShotTime = GetTime() end
+
+        elseif event == "STOP_AUTOREPEAT_SPELL" then
+            T.autoRepeatOn = false
+
+        elseif event == "UNIT_SPELLCAST_START" then
+            if arg1 == "player" then
+                local _, _, _, _, endMS = UnitCastingInfo("player")
+                if type(endMS) == "number" and endMS > 0 then
+                    T.castEnd = endMS / 1000
+                end
+            end
+
+        elseif event == "UNIT_SPELLCAST_STOP"
+            or event == "UNIT_SPELLCAST_FAILED"
+            or event == "UNIT_SPELLCAST_INTERRUPTED" then
+            if arg1 == "player" then T.castEnd = 0 end
+
+        elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+            if arg1 == "player" then
+                T.castEnd = 0
+                local isAutoShot = (arg2 == T.autoShotName)
+                    or (arg3 == AST_AUTO_SHOT_ID) or (arg5 == AST_AUTO_SHOT_ID)
+                if isAutoShot then
+                    T.lastShotTime = GetTime()
+                    T.autoFired    = true
+                    RefreshSpeed()
+                end
+                local isAimedShot = (arg2 == T.aimedShotName)
+                    or AST_AIMED_SHOT_IDS[arg3] or AST_AIMED_SHOT_IDS[arg5]
+                if isAimedShot then
+                    T.lastShotTime = GetTime()
+                    RefreshSpeed()
+                end
+                local isFeignDeath = (arg2 == T.feignDeathName)
+                    or (arg3 == AST_FEIGN_DEATH_ID) or (arg5 == AST_FEIGN_DEATH_ID)
+                if isFeignDeath then
+                    T.feigning     = true
+                    T.lastShotTime = 0
+                    T.autoRepeatOn = false
+                    T.autoFired    = false
+                end
+            end
+
+        elseif event == "UNIT_AURA" then
+            if arg1 == "player" then
+                if T.feigning and not ExsarUI.PlayerHasBuff(T.feignDeathName) then
+                    T.feigning     = false
+                    T.lastShotTime = GetTime()
+                end
+                RefreshAll()
+            end
+
+        elseif event == "UNIT_ATTACK_SPEED" then
+            if arg1 == "player" then RefreshAll() end
+
+        elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+            RefreshAll()
+
+        elseif event == "SPELLS_CHANGED" then
+            RefreshAll()
+
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            T.autoFired = false
+        end
+    end)
+
+    RefreshAll()
+    return T
+end
+
+local sharedAutoShotTracker
+--- Get the shared auto-shot cycle tracker (lazily created singleton).
+function ExsarUI.GetAutoShotTracker()
+    if not sharedAutoShotTracker then
+        sharedAutoShotTracker = ExsarUI.CreateAutoShotTracker()
+    end
+    return sharedAutoShotTracker
+end
+
+-- =========================================================
+-- Shared melee-swing tracker
+-- =========================================================
+-- Tracks the main-hand melee auto-attack swing cycle from the combat log (plus
+-- the on-next-swing Raptor Strike, and the Aimed Shot / Feign Death resets), so
+-- widgets can ask "is the swing ready?" without each re-implementing the parse.
+-- Mirrors MeleeRangeIndicator's proven swing detection but exposes state.
+-- (MeleeRangeIndicator predates this and keeps its own copy.) Use
+-- ExsarUI.GetMeleeSwingTracker() for the shared singleton.
+--
+-- Returns a state table M with fields M.speed, M.lastSwing, M.swingActive and:
+--   M:Ready(now, lookahead)  → true if a step-in would produce a white swing
+--                              (never swung yet ⇒ ready; else past the cycle,
+--                              lookahead lets it read ready slightly early)
+
+local MST_RAPTOR_STRIKE_IDS = {
+    [2973] = true, [14260] = true, [14261] = true, [14262] = true,
+    [14263] = true, [14264] = true, [27014] = true,
+}
+
+function ExsarUI.CreateMeleeSwingTracker()
+    local M = {
+        speed          = 0,
+        lastSwing      = 0,
+        swingActive    = false,
+        feigning       = false,
+        feignDeathName = "Feign Death",
+        aimedShotName  = "Aimed Shot",
+    }
+
+    local function RefreshSpeed()
+        local speed = select(1, UnitAttackSpeed("player"))
+        if type(speed) == "number" and speed > 0 then M.speed = speed end
+    end
+
+    local function OnSwing()
+        local now = GetTime()
+        if now - M.lastSwing < 0.15 then return end
+        M.lastSwing   = now
+        M.swingActive = true
+    end
+
+    function M:Ready(now, lookahead)
+        if not self.swingActive then return true end
+        if self.speed <= 0 then return true end
+        return (now - self.lastSwing) >= (self.speed - (lookahead or 0))
+    end
+
+    -- Optional callbacks fired when a melee attack LANDS (white swing or Raptor
+    -- Strike connects — not a miss/dodge/parry). Consumers register via
+    -- M:OnLanded(fn); used for landed-weave feedback. Swing TIMING still advances
+    -- on both hits and misses (OnSwing), so this is a separate, additive signal.
+    M.landedCallbacks = {}
+    function M:OnLanded(fn) self.landedCallbacks[#self.landedCallbacks + 1] = fn end
+    local function FireLanded()
+        for _, fn in ipairs(M.landedCallbacks) do fn() end
+    end
+
+    local clog = CreateFrame("Frame")
+    clog:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    clog:SetScript("OnEvent", function()
+        local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId =
+            CombatLogGetCurrentEventInfo()
+        if casterGUID ~= UnitGUID("player") then return end
+        if subEvent == "SWING_DAMAGE" then
+            OnSwing(); FireLanded()
+        elseif subEvent == "SWING_MISSED" then
+            OnSwing()
+        elseif subEvent == "SPELL_DAMAGE" then
+            if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing(); FireLanded() end
+        elseif subEvent == "SPELL_MISSED" then
+            if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing() end
+        end
+    end)
+
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:RegisterEvent("PLAYER_DEAD")
+    f:RegisterEvent("UNIT_AURA")
+    f:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+    f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, _, arg5)
+        if event == "PLAYER_ENTERING_WORLD" then
+            M.feignDeathName = GetSpellInfo(AST_FEIGN_DEATH_ID)     or "Feign Death"
+            M.aimedShotName  = GetSpellInfo(AST_AIMED_SHOT_NAME_ID) or "Aimed Shot"
+            RefreshSpeed()
+
+        elseif event == "PLAYER_DEAD" then
+            M.swingActive = false
+            M.lastSwing   = 0
+
+        elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+            if arg1 == "player" then
+                local isFeignDeath = (arg2 == M.feignDeathName)
+                    or (arg3 == AST_FEIGN_DEATH_ID) or (arg5 == AST_FEIGN_DEATH_ID)
+                if isFeignDeath then
+                    M.feigning    = true
+                    M.swingActive = false
+                    M.lastSwing   = 0
+                    return
+                end
+                local isAimedShot = (arg2 == M.aimedShotName)
+                    or AST_AIMED_SHOT_IDS[arg3] or AST_AIMED_SHOT_IDS[arg5]
+                if isAimedShot then
+                    M.lastSwing   = GetTime()
+                    M.swingActive = true
+                end
+            end
+
+        elseif event == "UNIT_AURA" then
+            if arg1 == "player" then
+                if M.feigning and not ExsarUI.PlayerHasBuff(M.feignDeathName) then
+                    M.feigning    = false
+                    M.lastSwing   = GetTime()
+                    M.swingActive = true
+                end
+                RefreshSpeed()
+            end
+
+        elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+            RefreshSpeed()
+        end
+    end)
+
+    RefreshSpeed()
+    return M
+end
+
+local sharedMeleeSwingTracker
+--- Get the shared melee-swing tracker (lazily created singleton).
+function ExsarUI.GetMeleeSwingTracker()
+    if not sharedMeleeSwingTracker then
+        sharedMeleeSwingTracker = ExsarUI.CreateMeleeSwingTracker()
+    end
+    return sharedMeleeSwingTracker
+end
+
 function ExsarUI.AddSlashReset(cmd, frame, dbFunc, name, defaultX, defaultY)
     ExsarAddon.AddSlashCommand(cmd, function()
         frame:ClearAllPoints()

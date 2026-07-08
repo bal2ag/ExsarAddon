@@ -886,6 +886,101 @@ function ExsarLogic.DevilsaurStage(equippedId, buffOnPet, hasInBags, toothId)
     return "absent"
 end
 
+-- =========================================================
+-- Melee weave helper + auto-shot monitor
+-- =========================================================
+
+--- Compute a haste-adjusted cast time from a base cast and the ranged speeds.
+-- Ranged casts (Steady Shot, etc.) are shortened by ranged haste; the haste
+-- multiplier is baseSpeed/hastedSpeed (since hastedSpeed = baseSpeed/haste), so
+-- the hasted cast = baseCast * hastedSpeed / baseSpeed. Falls back to baseCast
+-- when the speeds are unknown. Pure.
+-- @param baseCast     unhasted cast time (e.g. 1.5 for Steady Shot)
+-- @param hastedSpeed  current hasted ranged weapon speed (UnitRangedDamage)
+-- @param baseSpeed    base (unhasted) ranged weapon speed
+-- @return number  hasted cast time in seconds
+function ExsarLogic.HastedCastTime(baseCast, hastedSpeed, baseSpeed)
+    if not baseSpeed or baseSpeed <= 0 or not hastedSpeed or hastedSpeed <= 0 then
+        return baseCast
+    end
+    return baseCast * hastedSpeed / baseSpeed
+end
+
+--- Decide whether the "WEAVE NOW" cue should show, and how long its window lasts.
+-- Condition-based (not rotation-based). Weave when it won't cost a shot and
+-- won't clip the next auto:
+--   * melee swing ready (a step-in actually produces a white swing),
+--   * not mid-cast (moving cancels a Steady/Aimed cast — never cue then),
+--   * enough time before the next auto to weave (timeToAuto > weaveCost), and
+--   * there is no room to fit a shot before the auto, ACCOUNTING for the GCD
+--     lockout: (timeToAuto - gcdRemaining) < steadyCastTime.
+-- Subtracting the remaining GCD is the precise form of the old "on GCD OR no
+-- room" rule. It still lights the cue in the GCD gap after an instant
+-- Arcane/Multi (you're locked out of casting and the leftover won't fit a
+-- Steady) and in the fast auto-auto gap, but NOT at the very start of a fresh
+-- auto cycle while the previous shot's GCD tail is still draining — there a full
+-- Steady still fits, so you should cast it, not weave (that was the "cue flashes
+-- for an instant right after the auto" case). The window countdown self-scales
+-- with haste for free.
+-- @param o table {
+--   meleeReady, casting  (booleans),
+--   timeToAuto     number|nil  seconds until the next auto is due (nil = no cycle),
+--   gcdRemaining   number      seconds left on the GCD (0 if not on GCD),
+--   weaveCost      number      step-in+swing+step-out budget (window lower bound),
+--   steadyCastTime number      hasted Steady cast — the "can I fit a shot?" bar }
+-- @return show (bool), windowRemaining (seconds left to START the weave; 0 when hidden)
+function ExsarLogic.WeaveNowState(o)
+    o = o or {}
+    if not o.meleeReady then return false, 0 end
+    if o.casting then return false, 0 end
+    local tta = o.timeToAuto
+    if not tta then return false, 0 end
+    local weaveCost = o.weaveCost or 0.4
+    if tta <= weaveCost then return false, 0 end
+    local gcdRem = o.gcdRemaining or 0
+    if gcdRem < 0 then gcdRem = 0 end
+    local roomForShot = (tta - gcdRem) >= (o.steadyCastTime or 1.5)
+    if roomForShot then return false, 0 end
+    return true, tta - weaveCost
+end
+
+--- Anti-flicker hold for a binary cue. Once the raw condition turns on, keep the
+-- cue shown for at least minOnTime seconds so jittery inputs near a boundary
+-- (predicted auto-due, GCD edges, cast start/stop all carry event latency) can't
+-- strobe it. The cue is meant to read as a stable "window open" state, not a
+-- twitching light. Pure — the caller threads holdUntil back in each frame.
+-- @param rawOn      bool    the instantaneous condition this frame
+-- @param now        number  GetTime()
+-- @param holdUntil  number  previous returned hold-until timestamp (0/nil = none)
+-- @param minOnTime  number  minimum seconds to keep the cue on after raw goes off
+-- @return shown (bool), newHoldUntil (number)
+function ExsarLogic.HoldCue(rawOn, now, holdUntil, minOnTime)
+    holdUntil = holdUntil or 0
+    if rawOn then
+        return true, now + (minOnTime or 0)
+    end
+    if now < holdUntil then
+        return true, holdUntil
+    end
+    return false, holdUntil
+end
+
+--- Whether the "REACTIVATE AUTO!" alarm should show. Pure.
+-- Fires when autos physically COULD fire at the target (Auto Shot reports in
+-- range — 1 means past the 5yd dead zone and within shooting range) but
+-- auto-repeat is currently OFF: i.e. you disabled or forgot your auto shot.
+-- Keyed on auto-repeat being off (not on "overdue") so it does not false-alarm
+-- while kiting with auto-repeat still on (autos merely delayed, not disabled).
+-- @param autoShotInRange  IsSpellInRange("Auto Shot", "target"): 1 / 0 / nil
+-- @param autoRepeatOn     bool  auto-repeat currently toggled on
+-- @param hasTarget        bool  an attackable target exists
+-- @return bool
+function ExsarLogic.ShouldReactivateAuto(autoShotInRange, autoRepeatOn, hasTarget)
+    if not hasTarget then return false end
+    if autoRepeatOn then return false end
+    return autoShotInRange == 1
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

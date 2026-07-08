@@ -37,6 +37,8 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Ammo Tracker](#ammo-tracker)
   - [Rotation Helper](#rotation-helper)
   - [Range to Target](#range-to-target)
+  - [Auto Shot Monitor](#auto-shot-monitor)
+  - [Melee Weave Helper](#melee-weave-helper)
   - [Pet Management](#pet-management)
   - [Aspects](#aspects)
   - [Traps](#traps)
@@ -493,6 +495,35 @@ Shows an estimated distance bracket to your current target (e.g. "5-8 yd") with 
 - **Shown when:** You have an attackable target (or the widget is unlocked for positioning); hidden otherwise.
 
 <!-- ![Range to Target](screenshots/range-to-target.png) -->
+
+### Auto Shot Monitor
+
+![Supported](https://img.shields.io/badge/Supported-green)
+
+A general auto-shot health readout — not melee-weave-specific. Clipping delays your autos in any Steady-Shot rotation (from casts alone), and it's easy to accidentally toggle auto shot off on any fight, so this surfaces both problems anywhere.
+
+- **Overdue readout:** A prominent counter of how late your next Auto Shot is. Orange **Auto overdue +x** ticks up live when a shot is past due but hasn't fired (weaving, moving, mistimed re-fire). Red **CLIP** shows the predicted delay when a cast in progress will finish past the due time. (This is the same value the Ranged Swing Timer shows inline, just bigger and independently placeable.)
+- **REACTIVATE AUTO! alarm:** A pulsing red warning when your target is in Auto Shot range but auto-repeat is **off** — i.e. you disabled or forgot your auto shot. It keys on auto-repeat being off (not on lateness), so it never false-alarms while you're intentionally kiting with auto still on.
+- **Context toggles:** Independently enable/disable it in solo, party, and raid.
+- **Shown when:** Enabled for your current group context and you're in combat with an attackable target; it only draws when there's something to report, so it stays silent on a clean rotation. Unlock it and it shows a dimmed preview of its real readout so you can position it accurately.
+
+<!-- ![Auto Shot Monitor](screenshots/auto-shot-monitor.png) -->
+
+### Melee Weave Helper
+
+![Experimental](https://img.shields.io/badge/Experimental-orange)
+
+A single **WEAVE NOW!** cue that lights up when it's a good moment to step in for a melee weave, with a countdown of how long the window stays open. It's a **training aid** to build the timing intuition — forgiving by design, not a frame-perfect metronome (the Auto Shot Monitor's overdue counter is your honest scorecard for when a weave ran late).
+
+- **When it lights:** Whenever weaving won't cost you a shot and won't clip your auto — your melee swing is ready, you're not mid-cast, and there's room before the next auto. It's **condition-based, not tied to a specific rotation**, so it works across haste levels automatically: it fires in the GCD gap after an instant Arcane/Multi-Shot, in the sliver after a Steady finishes, and in the auto-auto gap at high haste.
+- **Countdown:** A green bar drains (turning orange as it closes) alongside a numeric readout, showing how long you have to start the weave. The window is naturally wide at slow weapon speeds and tight when hasted.
+- **Stays steady:** A short anti-flicker hold keeps the cue from strobing near the edges, so it reads as "the window is open," not a twitching light.
+- **Hit / miss feedback:** An animated comic-pop **HIT!** (green) flashes when a melee attack lands — so you get instant confirmation you actually connected, which is hard to read off the swing timer alone — and a **MISS!** (red) pops when a weave window runs out without a swing. Toggle it with the "Hit / miss feedback text" checkbox.
+- **Only when you're weaving:** The cue only appears when you're actually in weave range (within ~8 yards of the target), so it self-silences on pure-ranged fights — no need to toggle it off and on per fight.
+- **Positioning:** Unlock it and it shows a dimmed preview of the real cue (text + a partly-full bar) so you can place it accurately.
+- **Context toggles + tuning:** Enable/disable per solo/party/raid, and tune the timing knobs (weave cost, shot-fit buffer, melee-ready lookahead, anti-flicker hold) with config sliders — defaulted to realistic values grounded in the actual timings, so you can nudge them to taste at a target dummy.
+
+<!-- ![Melee Weave Helper](screenshots/melee-weave-helper.png) -->
 
 ### Pet Management
 

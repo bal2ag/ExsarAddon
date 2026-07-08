@@ -1,0 +1,435 @@
+-- MeleeWeaveHelper module
+-- A single binary "WEAVE NOW!" cue for melee weaving, plus a countdown of how
+-- long the weave window stays open. This is a TRAINING tool, not a metronome:
+-- it's meant to be a stable, forgiving target you grow into (the honest
+-- correction lives in AutoShotMonitor's overdue readout, not here).
+--
+-- The cue is condition-based, NOT rotation-based (see ExsarLogic.WeaveNowState):
+--   WEAVE NOW = melee swing ready · not casting · weaveCost < time-to-next-auto
+--               · ( on GCD  OR  time-to-auto < hasted Steady cast )
+-- The final OR is the crux — it lights the cue whenever weaving won't cost you a
+-- shot: you're GCD-locked anyway (arcane/multi gap), OR there isn't room to fit a
+-- shot before the auto (the slow post-cast tail AND the fast auto-auto gap). The
+-- window countdown self-scales with haste for free (wide when slow, tight when
+-- hasted). Hysteresis (ExsarLogic.HoldCue) holds the cue steady against input
+-- jitter so it reads as "window open", not a strobing light.
+--
+-- Gated on being in weave range (<= 8yd — you can't weave from afar) and on the
+-- solo/party/raid context, so it self-silences on pure-ranged fights with no
+-- toggling. Settings stored under ExsarAddonDB.meleeWeave.
+
+local ADDON_NAME = "ExsarAddon"
+
+local mwDB = ExsarUI.MakeDB("meleeWeave")
+
+-- =========================================================
+-- Constants + tunable defaults (all overridable via config sliders)
+-- =========================================================
+
+local POLL_INTERVAL   = 0.05
+local GCD_PROBE_SPELL = "Wing Clip"   -- no cooldown of its own → reports the GCD
+local STEADY_BASE_CAST = 1.5
+-- When the GCD jumps up (a new GCD just started) it may be the first frame of a
+-- cast whose UNIT_SPELLCAST_START hasn't dispatched yet -- GetSpellCooldown can
+-- report the GCD a frame before UnitCastingInfo sees the cast. Suppress the cue
+-- for this long after a GCD jump so that race can't flash it at cast start.
+local GCD_SETTLE = 0.15
+
+-- Realistic defaults, grounded in the actual weave / auto-shot timings (tune at
+-- the dummy). The cue still reads as forgiving because of the anti-flicker hold
+-- and because AutoShotMonitor's overdue counter — not this cue — is the honest
+-- scorecard. Knob directions: raising weaveCost/shotFitBuffer lights the cue in
+-- MORE of the cycle; lowering them defers more to shooting.
+local DEF_WEAVE_COST    = 0.4    -- in + swing + out (the timing reference's ~0.4s weave)
+local DEF_SHOT_FIT_BUF  = 0.1    -- reaction/latency margin on "cast finishes before the auto is due"
+local DEF_MELEE_LOOK    = 0.1    -- step-in lead so the swing is ready as you arrive
+local DEF_CUE_MIN_ON    = 0.1    -- minimal anti-flicker hold (bridges event jitter)
+
+local WEAVE_MAX_YD = 8           -- weave range = melee (<=5) + weave band (5-8)
+
+-- In-weave-range probe: Wing Clip (5yd) + an 8yd item. Only these two thresholds
+-- matter for the <=8yd gate; degrades to melee-only if the item is unavailable.
+local WEAVE_CHECKERS = {
+    { range = 5, spell = "Wing Clip" },
+    { range = 8, item  = 34368 },        -- Attuned Crystal Cores
+}
+
+local FRAME_W = 140
+local FRAME_H = 44
+local BAR_MAX_W = FRAME_W - 16
+local BAR_H = 12
+
+local COLOR_CUE     = { 0.25, 0.95, 0.35 }   -- green "WEAVE NOW!"
+local COLOR_BAR_OK  = { 0.20, 0.85, 0.30 }   -- bar green (plenty of window left)
+local COLOR_BAR_LOW = { 1.00, 0.60, 0.10 }   -- bar orange (window closing)
+
+local PREVIEW_ALPHA = 0.45   -- dimmed static preview shown while unlocked
+
+-- Comic-pop feedback text (landed weave / missed window)
+local COLOR_HIT   = { 0.30, 1.00, 0.35 }   -- green "HIT!"
+local COLOR_MISS  = { 1.00, 0.25, 0.20 }   -- red "MISS!"
+local POP_DUR     = 0.8    -- total pop lifetime (s)
+local POP_RISE    = 35     -- how far the text floats up over its life (px)
+
+-- =========================================================
+-- State
+-- =========================================================
+
+local S = {
+    holdUntil     = 0,     -- ExsarLogic.HoldCue hysteresis timestamp
+    shown         = false,
+    windowMax     = 0.01,  -- window length captured when the cue opened (for the bar)
+    weaveCost     = DEF_WEAVE_COST,  -- cached each poll so the per-frame render is cheap
+    lastNumStr    = "",
+    gcdRemPrev    = 0,     -- GCD remaining last poll (to detect a rising/refreshed GCD)
+    gcdSettleUntil = 0,    -- suppress the cue until this time after a GCD jump (cast-start race)
+    windowOpen      = false,  -- raw weave window open (for hit/miss feedback lifecycle)
+    hitDuringWindow = false,  -- a melee landed while the current window was open
+    popActive       = false,  -- comic-pop feedback animation running
+    popStart        = 0,
+}
+
+local results = {}   -- reused range-probe results
+local auto  = ExsarUI.GetAutoShotTracker()
+local melee = ExsarUI.GetMeleeSwingTracker()
+
+-- =========================================================
+-- Frame + visuals
+-- =========================================================
+
+local frame = CreateFrame("Frame", ADDON_NAME .. "MeleeWeaveFrame", UIParent)
+frame:SetSize(FRAME_W, FRAME_H)
+ExsarUI.SetupMovableFrame(frame, mwDB, { bgAlpha = 0 })
+frame:Hide()
+
+local weaveText = frame:CreateFontString(nil, "OVERLAY")
+weaveText:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE, THICKOUTLINE")
+weaveText:SetPoint("TOP", frame, "TOP", 0, -3)
+weaveText:SetTextColor(COLOR_CUE[1], COLOR_CUE[2], COLOR_CUE[3], 1)
+weaveText:SetText("WEAVE NOW!")
+weaveText:Hide()
+
+-- Countdown bar (drains right→left as the window closes)
+local barBg = frame:CreateTexture(nil, "ARTWORK")
+barBg:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -26)
+barBg:SetSize(BAR_MAX_W, BAR_H)
+barBg:SetColorTexture(0.1, 0.1, 0.1, 0.7)
+barBg:Hide()
+
+local barFill = frame:CreateTexture(nil, "OVERLAY")
+barFill:SetPoint("TOPLEFT", barBg, "TOPLEFT", 0, 0)
+barFill:SetSize(BAR_MAX_W, BAR_H)
+barFill:SetColorTexture(COLOR_BAR_OK[1], COLOR_BAR_OK[2], COLOR_BAR_OK[3], 0.9)
+barFill:Hide()
+
+local numText = frame:CreateFontString(nil, "OVERLAY")
+numText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+numText:SetPoint("CENTER", barBg, "CENTER", 0, 0)
+numText:SetTextColor(1, 1, 1, 1)
+numText:Hide()
+
+-- Comic-pop feedback text ("HIT!" / "MISS!"). On its own UIParent-child frame so
+-- it fires even when the widget frame is hidden (e.g. locked with no cue up), and
+-- it tracks the widget's position by anchoring to it. Hand-animated (scale pop +
+-- float-up + fade) in an OnUpdate.
+local popFrame = CreateFrame("Frame", nil, UIParent)
+popFrame:SetSize(10, 10)
+popFrame:SetFrameStrata("HIGH")
+popFrame:SetPoint("CENTER", frame, "CENTER", 0, 20)
+popFrame:Hide()
+
+local popText = popFrame:CreateFontString(nil, "OVERLAY")
+popText:SetFont("Fonts\\FRIZQT__.TTF", 30, "THICKOUTLINE")
+popText:SetPoint("CENTER", popFrame, "CENTER", 0, 0)
+
+local function TriggerPop(text, color)
+    if mwDB().feedback == false then return end
+    popText:SetText(text)
+    popText:SetTextColor(color[1], color[2], color[3], 1)
+    S.popStart  = GetTime()
+    S.popActive = true
+    popFrame:SetAlpha(1)
+    popFrame:SetScale(mwDB().scale or 1)
+    popFrame:Show()
+end
+
+popFrame:SetScript("OnUpdate", function()
+    if not S.popActive then return end
+    local t = GetTime() - S.popStart
+    if t >= POP_DUR then
+        S.popActive = false
+        popFrame:Hide()
+        return
+    end
+    -- Snappy overshoot pop: 0.6 → 1.3 (0.10s) → settle to 1.0 (by 0.18s).
+    local s
+    if t < 0.10 then
+        s = 0.6 + 0.7 * (t / 0.10)
+    elseif t < 0.18 then
+        s = 1.3 - 0.3 * ((t - 0.10) / 0.08)
+    else
+        s = 1.0
+    end
+    popFrame:SetScale(s * (mwDB().scale or 1))
+    -- Float up, and fade out over the back half.
+    popFrame:SetPoint("CENTER", frame, "CENTER", 0, 20 + POP_RISE * (t / POP_DUR))
+    local a = 1
+    if t > 0.45 then a = 1 - (t - 0.45) / (POP_DUR - 0.45) end
+    popFrame:SetAlpha(a)
+end)
+
+-- =========================================================
+-- Config accessors (read live so slider edits apply immediately)
+-- =========================================================
+
+local function num(key, default)
+    local v = mwDB()[key]
+    return type(v) == "number" and v or default
+end
+
+-- =========================================================
+-- Group context + target helpers
+-- =========================================================
+
+local function GetGroupContext()
+    if IsInRaid() then return "raid" end
+    if IsInGroup() then return "party" end
+    return "solo"
+end
+
+local function ContextEnabled()
+    local db = mwDB()
+    return ExsarLogic.AggroAlertEnabled(
+        GetGroupContext(),
+        db.enableSolo ~= false,
+        db.enableParty ~= false,
+        db.enableRaid ~= false
+    )
+end
+
+local function HasAttackableTarget()
+    return UnitExists("target") and not UnitIsDead("target")
+        and UnitCanAttack("player", "target")
+end
+
+-- Fired by the shared melee tracker when a melee attack lands (white swing or
+-- Raptor Strike connects). Confirms a landed weave with a green "HIT!" pop and
+-- suppresses the MISS for the current window.
+local function OnMeleeLanded()
+    if mwDB().feedback == false then return end
+    S.hitDuringWindow = true
+    if ContextEnabled() and UnitAffectingCombat("player") and HasAttackableTarget() then
+        TriggerPop("HIT!", COLOR_HIT)
+    end
+end
+melee:OnLanded(OnMeleeLanded)
+
+-- =========================================================
+-- Cue rendering
+-- =========================================================
+
+local function HideCue()
+    if S.lastNumStr ~= "" then S.lastNumStr = ""; numText:Hide() end
+    weaveText:Hide()
+    barBg:Hide()
+    barFill:Hide()
+end
+
+local function ShowCue(windowRem)
+    weaveText:Show()
+    barBg:Show()
+
+    local frac = 0
+    if S.windowMax > 0 then
+        frac = windowRem / S.windowMax
+        if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+    end
+    barFill:SetWidth(math.max(0.01, frac * BAR_MAX_W))
+    local c = frac > 0.33 and COLOR_BAR_OK or COLOR_BAR_LOW
+    barFill:SetColorTexture(c[1], c[2], c[3], 0.9)
+    barFill:Show()
+
+    local rem = windowRem > 0 and windowRem or 0
+    local str = string.format("%.1fs", rem)
+    if str ~= S.lastNumStr then
+        S.lastNumStr = str
+        numText:SetText(str)
+        numText:Show()
+    end
+end
+
+-- Static, dimmed preview shown while unlocked so the widget's real footprint
+-- (cue text + a partly-full countdown bar) is visible for positioning.
+local function ShowPreviewContent()
+    S.windowMax = 1.0
+    ShowCue(0.6)
+end
+
+-- =========================================================
+-- Update
+-- =========================================================
+
+local function UpdateDisplay()
+    local unlocked = not mwDB().locked
+    local now = GetTime()
+    S.weaveCost = num("weaveCost", DEF_WEAVE_COST)
+
+    -- GCD tracking runs every poll (not just in weave range) so the jump-detection
+    -- state stays fresh. A GCD that jumps UP means a new GCD just started, which
+    -- may be a cast whose UNIT_SPELLCAST_START hasn't dispatched yet — arm a short
+    -- settle so the cast-start race can't flash the cue.
+    local gcdStart, gcdDur = GetSpellCooldown(GCD_PROBE_SPELL)
+    local gcdRem = 0
+    if gcdStart and gcdStart > 0 and gcdDur and gcdDur > 0 then
+        gcdRem = (gcdStart + gcdDur) - now
+        if gcdRem < 0 then gcdRem = 0 end
+    end
+    if gcdRem > S.gcdRemPrev + 0.05 then
+        S.gcdSettleUntil = now + GCD_SETTLE
+    end
+    S.gcdRemPrev = gcdRem
+    local casting = UnitCastingInfo("player") ~= nil or now < S.gcdSettleUntil
+    local timeToAuto = auto:TimeToNextAuto(now)
+
+    local rawOn, windowRem = false, 0
+    if ContextEnabled() and UnitAffectingCombat("player") and HasAttackableTarget() then
+        local _, maxR = ExsarUI.ProbeRangeBracket("target", WEAVE_CHECKERS, results)
+        if maxR ~= nil and maxR <= WEAVE_MAX_YD then
+            local steadyCast = ExsarLogic.HastedCastTime(STEADY_BASE_CAST, auto.speed, auto.baseSpeed)
+                + num("shotFitBuffer", DEF_SHOT_FIT_BUF)
+            rawOn, windowRem = ExsarLogic.WeaveNowState({
+                meleeReady     = melee:Ready(now, num("meleeReadyLookahead", DEF_MELEE_LOOK)),
+                casting        = casting,
+                gcdRemaining   = gcdRem,
+                timeToAuto     = timeToAuto,
+                weaveCost      = S.weaveCost,
+                steadyCastTime = steadyCast,
+            })
+        end
+    end
+
+    -- Hit/miss feedback lifecycle, keyed on the RAW window (not the hysteresis
+    -- display). MISS fires only when the window truly EXPIRED (the countdown
+    -- reached 0: timeToAuto fell to weaveCost) with no landed swing during it —
+    -- not when it closed because you cast or stepped out of range.
+    if mwDB().feedback == false then
+        S.windowOpen = false
+    elseif rawOn then
+        if not S.windowOpen then
+            S.windowOpen = true
+            S.hitDuringWindow = false
+        end
+    elseif S.windowOpen then
+        S.windowOpen = false
+        local expired = (not casting)
+            and (timeToAuto == nil or timeToAuto <= S.weaveCost + 0.05)
+        if expired and not S.hitDuringWindow then
+            TriggerPop("MISS!", COLOR_MISS)
+        end
+    end
+
+    local shown
+    shown, S.holdUntil = ExsarLogic.HoldCue(rawOn, now, S.holdUntil, num("cueMinOnTime", DEF_CUE_MIN_ON))
+
+    -- Capture the window length as the cue opens, so the bar drains from full.
+    if shown and not S.shown then
+        S.windowMax = windowRem > 0 and windowRem or 0.01
+    end
+    S.shown = shown
+
+    if shown then
+        frame:SetAlpha(1)
+        frame:Show()
+        ShowCue(windowRem)
+    elseif unlocked then
+        frame:SetAlpha(PREVIEW_ALPHA)
+        ShowPreviewContent()
+        frame:Show()
+    else
+        HideCue()
+        frame:Hide()
+    end
+end
+
+-- =========================================================
+-- Polling + events
+-- =========================================================
+
+ExsarUI.CreatePoller(nil, POLL_INTERVAL, UpdateDisplay)
+
+-- Render the countdown bar every frame: the 0.05s poll only makes the show/hide
+-- decision (range/GCD/cast checks don't need 60fps), but windowRemaining is
+-- recomputed live from the auto cycle here so the bar drains smoothly, not steppy.
+frame:SetScript("OnUpdate", function()
+    if not S.shown then return end
+    local tta = auto:TimeToNextAuto(GetTime())
+    ShowCue(tta and (tta - S.weaveCost) or 0)
+end)
+
+frame:RegisterEvent("ADDON_LOADED")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+frame:SetScript("OnEvent", function(self, event, arg1)
+    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+        ExsarUI.RestorePosition(self, mwDB, 0, -180)
+        if not mwDB().locked then frame:Show() end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        UpdateDisplay()
+    end
+end)
+
+-- =========================================================
+-- Slash sub-command
+-- =========================================================
+
+ExsarUI.AddSlashReset("weavereset", frame, mwDB, "Melee weave helper", 0, -180)
+
+-- =========================================================
+-- Register with Core
+-- =========================================================
+
+local function AddKnobSlider(parent, y, label, key, minV, maxV, default)
+    ExsarAddon.CreateSlider(parent, label, 16, y, minV, maxV, 0.05,
+        function() return num(key, default) end,
+        function(v) mwDB()[key] = math.floor(v * 20 + 0.5) / 20 end
+    )
+    return y - 55
+end
+
+ExsarAddon.RegisterModule({
+    name = "Melee Weave Helper",
+    BuildConfig = function(parent, y)
+        ExsarAddon.CreateCheckbox(parent, "Enable in solo", 16, y,
+            function() return mwDB().enableSolo ~= false end,
+            function(v) mwDB().enableSolo = v; UpdateDisplay() end
+        )
+        y = y - 30
+        ExsarAddon.CreateCheckbox(parent, "Enable in party", 16, y,
+            function() return mwDB().enableParty ~= false end,
+            function(v) mwDB().enableParty = v; UpdateDisplay() end
+        )
+        y = y - 30
+        ExsarAddon.CreateCheckbox(parent, "Enable in raid", 16, y,
+            function() return mwDB().enableRaid ~= false end,
+            function(v) mwDB().enableRaid = v; UpdateDisplay() end
+        )
+        y = y - 30
+
+        ExsarAddon.CreateCheckbox(parent, "Hit / miss feedback text", 16, y,
+            function() return mwDB().feedback ~= false end,
+            function(v) mwDB().feedback = v end
+        )
+        y = y - 30
+
+        y = AddKnobSlider(parent, y, "Weave cost (window/clip buffer, s)", "weaveCost", 0.2, 0.8, DEF_WEAVE_COST)
+        y = AddKnobSlider(parent, y, "Shot-fit buffer (s)", "shotFitBuffer", 0.0, 0.5, DEF_SHOT_FIT_BUF)
+        y = AddKnobSlider(parent, y, "Melee-ready lookahead (s)", "meleeReadyLookahead", 0.0, 0.4, DEF_MELEE_LOOK)
+        y = AddKnobSlider(parent, y, "Cue hold / anti-flicker (s)", "cueMinOnTime", 0.0, 0.5, DEF_CUE_MIN_ON)
+
+        y = ExsarUI.AddScaleSlider(parent, y, mwDB, frame)
+        y = ExsarUI.AddLockCheckbox(parent, y, mwDB, frame, function()
+            UpdateDisplay()
+        end)
+        y = ExsarUI.AddResetButton(parent, y, mwDB, frame, "Melee weave helper", 0, -180)
+        return y
+    end,
+})

@@ -144,24 +144,7 @@ local function UpdateDisplay()
     movableBg:Hide()
     frame:Show()
 
-    for i, checker in ipairs(CHECKERS) do
-        local inRange
-        if checker.spell then
-            inRange = IsSpellInRange(checker.spell, "target")
-        else
-            inRange = IsItemInRange(checker.item, "target")
-        end
-        -- IsSpellInRange returns 1/0/nil; IsItemInRange returns boolean/nil.
-        if inRange == 1 or inRange == true then
-            results[i] = true
-        elseif inRange == 0 or inRange == false then
-            results[i] = false
-        else
-            results[i] = nil
-        end
-    end
-
-    local minR, maxR = ExsarLogic.ComputeRangeBracket(CHECKERS, results)
+    local minR, maxR = ExsarUI.ProbeRangeBracket("target", CHECKERS, results)
     local zone = ExsarLogic.RangeZone(minR, maxR, nil, nil, rangedMax)
 
     rangeText:SetText(ExsarLogic.FormatRangeBracket(minR, maxR))
