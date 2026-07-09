@@ -47,7 +47,6 @@ read_globals = {
     "date",
     "CombatLogGetCurrentEventInfo",
     "GetCVar",
-    "GetCVarBool",
     "GetInventoryItemCooldown",
     "GetInventoryItemCount",
     "GetInventoryItemID",

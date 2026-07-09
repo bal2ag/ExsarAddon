@@ -1711,21 +1711,6 @@ local AB_ICON_GAP  = 4
 local AB_PADDING   = 6
 local AB_GCD_PROBE = "Wing Clip"  -- no CD of its own -> GetSpellCooldown = GCD only
 
--- Which click state the secure slot buttons listen on. A button registered for
--- BOTH "AnyUp" and "AnyDown" is an "action with up and down states". Binding a
--- mousewheel key to one still works at runtime (SetOverrideBindingClick installs
--- it), but the client rejects that pairing whenever it revalidates the binding
--- set -- which the Key Bindings UI does on every edit, so with a wheel key on
--- any bar slot, editing an UNRELATED key errors with "Can't bind mousewheel to
--- actions with up and down states" and the edit is not saved. So register
--- exactly one state, the way Blizzard's own action buttons do. The CVar is 1 by
--- default on Anniversary, which is the only state SecureActionButton_OnClick
--- acts on there; registering only "AnyUp" under that default silently does
--- nothing (the original reason both were registered).
-local function AB_ClickType()
-    return GetCVarBool("ActionButtonUseKeyDown") and "AnyDown" or "AnyUp"
-end
-
 -- Marching-ants active indicator (opts.activeAnts) -- standard params.
 local AB_DASH_BORDER_W = 2
 local AB_DASH_COUNT    = 16
@@ -1867,7 +1852,7 @@ function ExsarUI.CreateActionBar(opts)
         local btn = CreateFrame("Button", buttonPrefix .. i, frame,
                                 "SecureActionButtonTemplate")
         btn:SetSize(AB_ICON_SIZE, AB_ICON_SIZE)
-        btn:RegisterForClicks(AB_ClickType())
+        btn:RegisterForClicks("AnyUp", "AnyDown")  -- both required on Anniversary
         s.btn = btn
 
         -- Initial secure attributes (we are out of combat at file load). A
@@ -2514,18 +2499,7 @@ function ExsarUI.CreateActionBar(opts)
         end)
     end
 
-    -- Re-register the slot buttons if ActionButtonUseKeyDown flips. Protected,
-    -- so it is skipped in combat and retried on PLAYER_REGEN_ENABLED.
-    local clickType = AB_ClickType()
-    local function RefreshClickType()
-        local want = AB_ClickType()
-        if want == clickType or InCombatLockdown() then return end
-        clickType = want
-        for _, s in ipairs(slots) do s.btn:RegisterForClicks(want) end
-    end
-
     -- ---------- events ----------
-    frame:RegisterEvent("CVAR_UPDATE")
     frame:RegisterEvent("ADDON_LOADED")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -2550,13 +2524,10 @@ function ExsarUI.CreateActionBar(opts)
             ApplyLayout()
             Refresh()
         elseif event == "PLAYER_REGEN_ENABLED" then
-            RefreshClickType()
             ApplyAttributes()
             ResolveActiveAll()
             ApplyLayout()
             Refresh()
-        elseif event == "CVAR_UPDATE" then
-            RefreshClickType()
         elseif event == "UNIT_PET" or event == "UNIT_AURA" then
             if arg1 == "player" then Refresh() end
         else
