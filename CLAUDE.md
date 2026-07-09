@@ -390,10 +390,17 @@ The `.toc` file uses `## Interface: 20506` (TBC Classic Anniversary). To verify 
 
 ## SecureActionButtonTemplate in TBC Classic Anniversary
 
-TBC Classic Anniversary uses the modern WoW client with `ActionButtonUseKeyDown = 1` by default. `SecureActionButton_OnClick` only fires on **down** events, so buttons registered with only `"AnyUp"` silently do nothing. Always use:
+TBC Classic Anniversary uses the modern WoW client with `ActionButtonUseKeyDown = 1` by default. `SecureActionButton_OnClick` only fires on **down** events, so buttons registered with only `"AnyUp"` silently do nothing.
+
+For a **click-only** button (never keybound), register both:
 ```lua
 btn:RegisterForClicks("AnyUp", "AnyDown")
 ```
+For a button reached by a **keybinding** (anything driven by `ExsarUI.SetupKeybindBridge`), register exactly **one** state, chosen off the CVar the way Blizzard's own action buttons do:
+```lua
+btn:RegisterForClicks(GetCVarBool("ActionButtonUseKeyDown") and "AnyDown" or "AnyUp")
+```
+A button registered for both is an "action with up and down states", and a **mousewheel key cannot be bound to one**. The wheel override installs and fires fine at runtime, so this looks harmless — but the client revalidates the binding set on every edit in the Key Bindings UI, and with a wheel key on any bar slot that revalidation fails: editing an *unrelated* key (a numpad key, say) errors with `Can't bind mousewheel to actions with up and down states`, clears the key from its old action, and never saves the new one. `ExsarUI.CreateActionBar` therefore uses `AB_ClickType()` and re-registers all slots on `CVAR_UPDATE` (protected — deferred out of combat via `PLAYER_REGEN_ENABLED`).
 Avoid adding non-secure `SetScript("OnClick")` or `HookScript("OnClick")` to a `SecureActionButtonTemplate` button — this can taint the button and prevent the secure action. Use `PreClick`/`PostClick` for any surrounding logic instead. Also avoid cross-parent `SetAllPoints` anchoring on secure buttons (e.g. a UIParent-child secure button anchored to a child of a custom frame) — the anchor silently fails and `GetCenter()` returns nil.
 
 ## SavedVariables
