@@ -91,6 +91,8 @@ read_globals = {
     "PlaySoundFile",
     "SetOverrideBindingClick",
     "ClearOverrideBindings",
+    "SaveBindings",
+    "GetCurrentBindingSet",
     "IsUsableSpell",
     "SetPortraitTexture",
     "UnitAffectingCombat",

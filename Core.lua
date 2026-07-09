@@ -23,6 +23,43 @@ function ExsarAddon.AddSlashCommand(cmd, fn)
 end
 
 -- =========================================================
+-- Keybinding diagnostics (temporary; see ExsarUI.SetupKeybindBridge)
+-- =========================================================
+
+-- Print every override-binding install the bridge performs, with its keys.
+ExsarAddon.AddSlashCommand("bindebug", function()
+    ExsarAddonDB.bindDebug = not ExsarAddonDB.bindDebug
+    print(ADDON_NAME .. ": bind debug " .. (ExsarAddonDB.bindDebug and "ON" or "OFF"))
+end)
+
+-- Stop installing CLICK overrides entirely, keeping the Bindings.xml named
+-- bindings and the on-icon key labels. Bar keybinds stop working while on.
+ExsarAddon.AddSlashCommand("nobridge", function()
+    ExsarAddonDB.bindBridgeOff = not ExsarAddonDB.bindBridgeOff
+    if InCombatLockdown() then
+        print(ADDON_NAME .. ": leave combat first")
+        return
+    end
+    -- Re-run every bridge so the change takes effect now, not on the next event.
+    ClearOverrideBindings(UIParent)
+    for _, name in ipairs({
+        "ExsarAddonUsableItemsFrame", "ExsarAddonPetManagementFrame",
+        "ExsarAddonAspectsFrame", "ExsarAddonTrapsFrame",
+        "ExsarAddonCooldownsFrame", "ExsarAddonCoreCombatFrame",
+        "ExsarAddonUtilitiesFrame",
+    }) do
+        local f = _G[name]
+        if f then ClearOverrideBindings(f) end
+    end
+    print(ADDON_NAME .. ": CLICK overrides " ..
+        (ExsarAddonDB.bindBridgeOff and "DISABLED (bar keys dead)" or "ENABLED"))
+    if not ExsarAddonDB.bindBridgeOff then
+        -- UPDATE_BINDINGS makes every bridge reinstall.
+        SaveBindings(GetCurrentBindingSet())
+    end
+end)
+
+-- =========================================================
 -- Config widget helpers (available to all modules)
 -- =========================================================
 
