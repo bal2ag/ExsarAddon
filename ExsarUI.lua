@@ -927,7 +927,33 @@ function ExsarUI.AddScaleSlider(parent, y, dbFunc, frame)
     return y - 55
 end
 
+-- Every widget that has a lock checkbox registers here, so ExsarUI.SetAllLocked
+-- can drive them together. Populated when the config panel is first built (each
+-- module's BuildConfig runs then), which is also when the "Unlock all" button
+-- that consumes it becomes reachable -- so the registry is always complete by
+-- the time anything reads it. Keyed by frame to stay idempotent.
+local lockables = {}
+
+--- Set the lock state of every registered widget at once.
+-- Mirrors what each widget's own lock checkbox does: persists db.locked,
+-- toggles mouse interaction, refreshes the checkbox if the panel is open, and
+-- fires the widget's onLock hook (placeholders, relayout).
+-- @param locked  true to lock all, false to unlock all
+-- @return number of widgets affected
+function ExsarUI.SetAllLocked(locked)
+    local n = 0
+    for _, e in ipairs(lockables) do
+        e.dbFunc().locked = locked
+        e.frame:EnableMouse(not locked)
+        if e.checkbox then e.checkbox:SetChecked(locked) end
+        if e.onLock then e.onLock(locked) end
+        n = n + 1
+    end
+    return n
+end
+
 --- Add a standard lock checkbox to a config panel.
+-- Also registers the widget with ExsarUI.SetAllLocked.
 -- @param parent   config panel frame
 -- @param y        current y offset
 -- @param dbFunc   DB accessor
@@ -935,7 +961,7 @@ end
 -- @param onLock   optional callback(v) called after lock state changes
 -- @return new y offset
 function ExsarUI.AddLockCheckbox(parent, y, dbFunc, frame, onLock)
-    ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
+    local cb = ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
         function() return dbFunc().locked and true or false end,
         function(v)
             dbFunc().locked = v
@@ -943,6 +969,17 @@ function ExsarUI.AddLockCheckbox(parent, y, dbFunc, frame, onLock)
             if onLock then onLock(v) end
         end
     )
+
+    local entry
+    for _, e in ipairs(lockables) do
+        if e.frame == frame then entry = e break end
+    end
+    if not entry then
+        entry = { frame = frame }
+        lockables[#lockables + 1] = entry
+    end
+    entry.dbFunc, entry.onLock, entry.checkbox = dbFunc, onLock, cb
+
     return y - 30
 end
 

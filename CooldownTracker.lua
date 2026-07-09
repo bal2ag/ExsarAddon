@@ -457,17 +457,8 @@ end)
 -- Slash sub-commands
 -- =========================================================
 
-ExsarAddon.AddSlashCommand("lock", function()
-    cDB().locked = true
-    mainFrame:EnableMouse(false)
-    print(ADDON_NAME .. ": Cooldown tracker locked.")
-end)
-
-ExsarAddon.AddSlashCommand("unlock", function()
-    cDB().locked = false
-    mainFrame:EnableMouse(true)
-    print(ADDON_NAME .. ": Cooldown tracker unlocked.")
-end)
+-- /exsar lock and /exsar unlock are global (Core.lua) and cover this widget
+-- along with every other, via its AddLockCheckbox registration.
 
 ExsarUI.AddSlashReset("reset", mainFrame, cDB, "Cooldown tracker", 0, -200)
 

@@ -178,15 +178,9 @@ ExsarAddon.RegisterModule({
         )
         y = y - 55
 
-        ExsarAddon.CreateCheckbox(parent, "Lock widget position", 16, y,
-            function() return aDB().locked and true or false end,
-            function(v)
-                aDB().locked = v
-                frame:EnableMouse(not v)
-                UpdateVisibility()
-            end
-        )
-        y = y - 30
+        y = ExsarUI.AddLockCheckbox(parent, y, aDB, frame, function()
+            UpdateVisibility()
+        end)
 
         y = ExsarUI.AddResetButton(parent, y, aDB, frame, "Pet Aggressive alert", 0, 50)
 

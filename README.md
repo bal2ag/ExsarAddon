@@ -63,7 +63,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
 All widgets are movable and individually configurable.
 
 - **Config panel:** Type `/exsar config` in chat, or open it from the game menu via **Interface > AddOns > ExsarAddon**. The panel has per-widget settings for scale, visibility, sound alerts, and other options.
-- **Moving widgets:** Type `/exsar unlock` to unlock all widgets so you can drag them into position, then `/exsar lock` to lock them in place.
+- **Moving widgets:** Type `/exsar unlock` to unlock all widgets so you can drag them into position, then `/exsar lock` to lock them in place. The config panel has **Unlock all** / **Lock all** buttons above the widget list that do the same thing. Neither works in combat.
 - **Reset positions:** Type `/exsar reset` to reset widget positions to their defaults.
 
 Settings are saved per-character in `ExsarAddonDB` (WoW's SavedVariables system) and persist across sessions.

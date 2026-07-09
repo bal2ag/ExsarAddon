@@ -214,12 +214,30 @@ local function BuildOptions()
         end
     end
 
+    -- Global lock controls, pinned above the (scrolling) module list so they are
+    -- reachable from every module page. Repositioning after a UI-scale reset
+    -- means unlocking ~27 widgets one checkbox at a time otherwise.
+    local BULK_W = (SIDEBAR_W - 18) / 2
+    local unlockAll = CreateFrame("Button", ADDON_NAME .. "UnlockAll", Options,
+                                  "UIPanelButtonTemplate")
+    unlockAll:SetPoint("TOPLEFT", Options, "TOPLEFT", 6, -8)
+    unlockAll:SetSize(BULK_W, 22)
+    unlockAll:SetText("Unlock all")
+    unlockAll:SetScript("OnClick", function() ExsarAddon.SetAllLocked(false) end)
+
+    local lockAll = CreateFrame("Button", ADDON_NAME .. "LockAll", Options,
+                                "UIPanelButtonTemplate")
+    lockAll:SetPoint("LEFT", unlockAll, "RIGHT", 6, 0)
+    lockAll:SetSize(BULK_W, 22)
+    lockAll:SetText("Lock all")
+    lockAll:SetScript("OnClick", function() ExsarAddon.SetAllLocked(true) end)
+
     -- Sidebar navigation is scrollable: with ~26 modules the button list is
     -- taller than the Interface Options canvas, so the bottom entries (e.g.
     -- "Usable Items") would otherwise bleed off-screen and be unclickable.
     local navScroll = CreateFrame("ScrollFrame", ADDON_NAME .. "NavScroll", Options,
                                   "UIPanelScrollFrameTemplate")
-    navScroll:SetPoint("TOPLEFT",     Options, "TOPLEFT",     0, -8)
+    navScroll:SetPoint("TOPLEFT",     Options, "TOPLEFT",     0, -36)
     navScroll:SetPoint("BOTTOMLEFT",  Options, "BOTTOMLEFT",  0,  8)
     navScroll:SetWidth(SIDEBAR_W - 4)
     -- The template's scrollbar sits just inside the right edge of the scroll frame.
@@ -303,6 +321,31 @@ local function BuildOptions()
 end
 
 Options:SetScript("OnShow", BuildOptions)
+
+-- =========================================================
+-- Global lock / unlock
+-- =========================================================
+
+--- Lock or unlock every widget that has a lock checkbox.
+-- Widgets register themselves from their BuildConfig, which only runs when the
+-- config panel is first built -- so build it first, or a call made before the
+-- panel has ever been opened would silently affect nothing.
+function ExsarAddon.SetAllLocked(locked)
+    if InCombatLockdown() then
+        print(ADDON_NAME .. ": can't move widgets in combat")
+        return
+    end
+    BuildOptions()
+    local n = ExsarUI.SetAllLocked(locked)
+    print(ADDON_NAME .. ": " .. (locked and "locked " or "unlocked ") .. n .. " widgets")
+end
+
+local function Unlock() ExsarAddon.SetAllLocked(false) end
+local function Lock()   ExsarAddon.SetAllLocked(true)  end
+ExsarAddon.AddSlashCommand("unlock",    Unlock)
+ExsarAddon.AddSlashCommand("unlockall", Unlock)
+ExsarAddon.AddSlashCommand("lock",      Lock)
+ExsarAddon.AddSlashCommand("lockall",   Lock)
 
 ToggleConfig = function()
     if Settings and Settings.OpenToCategory then

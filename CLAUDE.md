@@ -26,7 +26,7 @@ The `.luacheckrc` config declares all WoW API globals, addon cross-file globals,
 ## In-Game Commands
 
 - `/exsar config` — open the configuration panel (also available via Interface → AddOns)
-- `/exsar lock` / `/exsar unlock` — toggle movement lock on the cooldown tracker widget
+- `/exsar unlock` / `/exsar lock` (aliases `unlockall` / `lockall`) — unlock or lock **every** widget at once, via `ExsarAddon.SetAllLocked`. Also exposed as the "Unlock all" / "Lock all" buttons pinned above the config sidebar. Refused in combat
 - `/exsar reset` — reset the cooldown tracker widget position
 
 ## Architecture
@@ -118,6 +118,7 @@ Items with `weaponEnchant = true` (Adamantite Sharpening Stone, Adamantite Weigh
 **Core API available to modules:**
 - `ExsarAddon.RegisterModule(module)` — registers the module; `module.BuildConfig(parent, y)` must return the final y position after placing widgets. Optional `module.icon` (an `Interface\Icons` leaf name, a full texture path, or a spellID/itemID number) sets the module's sidebar icon in the config panel; if omitted, `Core.lua`'s central `MODULE_ICONS` map (keyed by module name) supplies one. The config sidebar is a scrollable list (`UIPanelScrollFrameTemplate`) of word-wrapped, icon-prefixed nav buttons — needed because ~30 modules overflow the Interface Options canvas height
 - `ExsarAddon.AddSlashCommand(cmd, fn)` — adds a `/exsar <cmd>` handler
+- `ExsarAddon.SetAllLocked(locked)` — lock/unlock every widget that registered a lock checkbox. Builds the config panel first (widgets register from `BuildConfig`, which only runs on the panel's first build, so a call before that would silently affect nothing) and refuses in combat. Delegates to `ExsarUI.SetAllLocked`, which persists `db.locked`, toggles `EnableMouse`, syncs the per-widget checkbox, and fires each widget's `onLock` hook. **A widget joins the registry by calling `ExsarUI.AddLockCheckbox`** — never hand-roll a lock checkbox, or the widget silently opts out of "Unlock all"
 - `ExsarAddon.CreateSlider(parent, label, x, y, min, max, step, getter, setter)`
 - `ExsarAddon.CreateCheckbox(parent, label, x, y, getter, setter)`
 - `ExsarAddon.CreateButton(parent, label, x, y, onClick)`
