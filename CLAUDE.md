@@ -407,7 +407,18 @@ The `Grounded` weave addon mitigates this by firing `/stopattack` on **key up**,
 
 **Consequence for widgets.** The 0.5s is **avoidable, not intrinsic** — so do NOT inflate `MeleeWeaveHelper`'s `weaveCost` to budget for it (0.4s remains the cost of a correctly-executed weave; a larger value would open the cue early on every weave and silently reward bad technique). Instead the delay should be **detected and coached**: the addon owns the weave macro button, so it can timestamp the click and measure click → `SWING_DAMAGE`. A swing landing ≳0.35s late is a positively-identified stale-position retry, and is worth surfacing as its own feedback state.
 
-**Sources.** Hunter Discord, 2026-07-08 (Joosy, Elven), corroborated by combat-log analysis of two sessions. Combat logs **cannot** confirm this directly: the position refreshes that matter are movement key-downs, which emit no combat-log event. A distance-at-press test over the *observable* (spell-cast) refreshes correctly comes back null — fast and slow weaves are indistinguishable there (median 5.34 yd vs 5.13 yd, refresh age 0.28s vs 0.27s). Confirmation requires **intervention** (tap strafe before the macro; watch the fast/slow ratio move), not correlation.
+**Sources.** Hunter Discord, 2026-07-08 (Joosy, Elven), corroborated by combat-log analysis. Combat logs **cannot** confirm this by correlation: the position refreshes that matter are movement key-downs, which emit no combat-log event. A distance-at-press test over the *observable* (spell-cast) refreshes correctly comes back null — fast and slow weaves are indistinguishable there (median 5.34 yd vs 5.13 yd, refresh age 0.28s vs 0.27s).
+
+**CONFIRMED BY INTERVENTION (2026-07-08).** Tapping strafe/backpedal immediately before the macro eliminates the retry mode:
+
+| run | on-CD presses → white swing | white swings per Raptor | fast (non-retry) |
+|---|---|---|---|
+| baseline (mashing, no tap) | 13/62 (21%) | 0.32 | 18% (n=11) |
+| transitional | 17/38 (45%) | 0.50 | 86% (n=14) |
+| tap, 192s run | 12/16 (75%) | 0.63 | **100%** (n=12), max latency 0.12s |
+| tap, 300s run | 19/23 (83%) | **0.83** | 89% (n=19) |
+
+Dead presses (a press yielding no melee attack within 3s) fell 49% → ~9%; 0.83 white swings per Raptor approaches the ~1.0 ceiling implied by the 6s Raptor cooldown against the 3.59s swing cycle. **Caveat:** presses-per-Raptor also drifted down (2.68 → 1.84), so reduced mashing is entangled with the tap; but the ~0.61s retry mode is the tap-specific signature and it went from 82% of swings to 0–11%. The measured press→swing histogram is **empty between 0.2s and 0.5s** across every run, which is what makes `RETRY_THRESHOLD = 0.35` unable to misclassify a borderline swing.
 
 ### Widget Implications
 
