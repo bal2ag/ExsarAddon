@@ -1536,34 +1536,16 @@ function ExsarUI.SetupKeybindBridge(opts)
     local clearOverrideBindings   = deps.ClearOverrideBindings   or ClearOverrideBindings
     local inCombatLockdown        = deps.InCombatLockdown        or InCombatLockdown
 
-    -- Diagnostics (see /exsar bindebug, /exsar nobridge). Read lazily: the DB
-    -- does not exist yet when this runs during file load.
-    local function bindDebug()  return ExsarAddonDB and ExsarAddonDB.bindDebug end
-    local function bridgeOff()  return ExsarAddonDB and ExsarAddonDB.bindBridgeOff end
-
-    local function apply(_, event)
+    local function apply()
         local combat = inCombatLockdown()
-        local dbg = bindDebug()
-        if dbg then
-            print(("|cff00ff00Exsar|r bridge %s: event=%s combat=%s off=%s")
-                :format(bindingPrefix, tostring(event), tostring(combat), tostring(bridgeOff())))
-        end
         if not combat then
             clearOverrideBindings(owner)
         end
-        -- nobridge: keep the Bindings.xml declarations and the on-icon key
-        -- labels, but install no CLICK overrides at all. Isolates whether the
-        -- overrides or the named bindings are responsible for a binding fault.
-        local skipOverrides = combat or bridgeOff()
         for i = 1, count do
             local key1, key2 = getBindingKey(bindingPrefix .. i)
             if onSlotKey then onSlotKey(i, key1) end
-            if not skipOverrides then
+            if not combat then
                 local btn = buttonPrefix .. i
-                if dbg and (key1 or key2) then
-                    print(("  slot %d key1=%s key2=%s -> %s")
-                        :format(i, tostring(key1), tostring(key2), btn))
-                end
                 if key1 then setOverrideBindingClick(owner, true, key1, btn) end
                 if key2 then setOverrideBindingClick(owner, true, key2, btn) end
             end
