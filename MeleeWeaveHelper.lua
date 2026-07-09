@@ -66,9 +66,9 @@ local COLOR_BAR_LOW = { 1.00, 0.60, 0.10 }   -- bar orange (window closing)
 local PREVIEW_ALPHA = 0.45   -- dimmed static preview shown while unlocked
 
 -- Comic-pop feedback text (landed weave / late weave / missed window)
-local COLOR_HIT   = { 0.30, 1.00, 0.35 }   -- green "HIT!"
+local COLOR_HIT   = { 0.30, 1.00, 0.35 }   -- green "WEAVE HIT!"
 local COLOR_LATE  = { 1.00, 0.65, 0.10 }   -- orange "LATE - TAP STRAFE"
-local COLOR_MISS  = { 1.00, 0.25, 0.20 }   -- red "MISS!"
+local COLOR_MISS  = { 1.00, 0.25, 0.20 }   -- red "WEAVE MISS!"
 local POP_DUR       = 0.8  -- total pop lifetime (s)
 local POP_RISE      = 35   -- how far the text floats up over its life (px)
 local POP_FONT_SIZE = 30   -- default pop face
@@ -148,7 +148,7 @@ numText:SetPoint("CENTER", barBg, "CENTER", 0, 0)
 numText:SetTextColor(1, 1, 1, 1)
 numText:Hide()
 
--- Comic-pop feedback text ("HIT!" / "MISS!"). On its own UIParent-child frame so
+-- Comic-pop feedback text ("WEAVE HIT!" / "WEAVE MISS!"). On its own UIParent-child frame so
 -- it fires even when the widget frame is hidden (e.g. locked with no cue up), and
 -- it tracks the widget's position by anchoring to it. Hand-animated (scale pop +
 -- float-up + fade) in an OnUpdate.
@@ -255,7 +255,7 @@ local function OnMeleeLanded(landedTime)
     if isRetry then
         TriggerPop("LATE - TAP STRAFE", COLOR_LATE, POP_FONT_LATE)
     else
-        TriggerPop("HIT!", COLOR_HIT)
+        TriggerPop("WEAVE HIT!", COLOR_HIT)
     end
 end
 melee:OnLanded(OnMeleeLanded)
@@ -376,7 +376,7 @@ local function UpdateDisplay()
     if S.missPending then
         if auto.lastShotTime > S.missAnchor then
             S.missPending = false
-            TriggerPop("MISS!", COLOR_MISS)
+            TriggerPop("WEAVE MISS!", COLOR_MISS)
         elseif now >= S.missDeadline then
             S.missPending = false
         end
