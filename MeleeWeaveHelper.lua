@@ -65,11 +65,28 @@ local COLOR_BAR_LOW = { 1.00, 0.60, 0.10 }   -- bar orange (window closing)
 
 local PREVIEW_ALPHA = 0.45   -- dimmed static preview shown while unlocked
 
--- Comic-pop feedback text (landed weave / missed window)
+-- Comic-pop feedback text (landed weave / late weave / missed window)
 local COLOR_HIT   = { 0.30, 1.00, 0.35 }   -- green "HIT!"
+local COLOR_LATE  = { 1.00, 0.65, 0.10 }   -- orange "LATE - TAP STRAFE"
 local COLOR_MISS  = { 1.00, 0.25, 0.20 }   -- red "MISS!"
-local POP_DUR     = 0.8    -- total pop lifetime (s)
-local POP_RISE    = 35     -- how far the text floats up over its life (px)
+local POP_DUR       = 0.8  -- total pop lifetime (s)
+local POP_RISE      = 35   -- how far the text floats up over its life (px)
+local POP_FONT_SIZE = 30   -- default pop face
+local POP_FONT_LATE = 18   -- the coaching cue is a long string
+
+-- Stale-position melee retry (see CLAUDE.md "The Melee Retry Timer"). Press ->
+-- landed-swing latency is bimodal: ~0.11s when the server's position snapshot
+-- was fresh, ~0.61s when it was stale and `/startattack` had to wait out the
+-- 500ms retry. RETRY_THRESHOLD sits in the empty gap between the two modes.
+local RETRY_THRESHOLD  = 0.35   -- press->swing latency at or above this = a retry
+local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
+
+-- A MISS is only true once the auto shot has actually FIRED: the weave window
+-- closes ~weaveCost before the auto, and a retried swing can still land in that
+-- gap. So arm the MISS at window close and resolve it when the auto lands (or a
+-- swing cancels it). MISS_MAX_WAIT drops a pending MISS if no auto ever comes
+-- (auto-repeat off, target died) rather than stranding it into the next pull.
+local MISS_MAX_WAIT = 1.5
 
 -- =========================================================
 -- State
@@ -87,6 +104,9 @@ local S = {
     hitDuringWindow = false,  -- a melee landed while the current window was open
     popActive       = false,  -- comic-pop feedback animation running
     popStart        = 0,
+    missPending     = false,  -- window expired unweaved; waiting on the auto to confirm
+    missAnchor      = 0,      -- auto.lastShotTime when the MISS was armed
+    missDeadline    = 0,      -- give up on the pending MISS after this time
 }
 
 local results = {}   -- reused range-probe results
@@ -139,11 +159,14 @@ popFrame:SetPoint("CENTER", frame, "CENTER", 0, 20)
 popFrame:Hide()
 
 local popText = popFrame:CreateFontString(nil, "OVERLAY")
-popText:SetFont("Fonts\\FRIZQT__.TTF", 30, "THICKOUTLINE")
+popText:SetFont("Fonts\\FRIZQT__.TTF", POP_FONT_SIZE, "THICKOUTLINE")
 popText:SetPoint("CENTER", popFrame, "CENTER", 0, 0)
 
-local function TriggerPop(text, color)
+-- size defaults to POP_FONT_SIZE; the coaching cue is a longer string and needs
+-- a smaller face to stay on screen.
+local function TriggerPop(text, color, size)
     if mwDB().feedback == false then return end
+    popText:SetFont("Fonts\\FRIZQT__.TTF", size or POP_FONT_SIZE, "THICKOUTLINE")
     popText:SetText(text)
     popText:SetTextColor(color[1], color[2], color[3], 1)
     S.popStart  = GetTime()
@@ -213,12 +236,25 @@ local function HasAttackableTarget()
 end
 
 -- Fired by the shared melee tracker when a melee attack lands (white swing or
--- Raptor Strike connects). Confirms a landed weave with a green "HIT!" pop and
--- suppresses the MISS for the current window.
-local function OnMeleeLanded()
-    if mwDB().feedback == false then return end
+-- Raptor Strike connects), with the landing time. Confirms a landed weave and
+-- suppresses the MISS for the current window — including a MISS already armed
+-- and waiting on the auto shot, since a retried swing lands inside that gap.
+--
+-- The pop distinguishes a clean weave from a stale-position retry: a swing that
+-- took >= RETRY_THRESHOLD from the macro press only landed because the 500ms
+-- melee retry timer fired, which the player can avoid by tapping a movement key
+-- before the macro (it re-snapshots position server-side).
+local function OnMeleeLanded(landedTime)
     S.hitDuringWindow = true
-    if ContextEnabled() and UnitAffectingCombat("player") and HasAttackableTarget() then
+    S.missPending     = false          -- a landed swing is never a miss
+    if not (ContextEnabled() and UnitAffectingCombat("player") and HasAttackableTarget()) then
+        return
+    end
+    local _, isRetry = ExsarLogic.MeleeRetryDelay(
+        melee.lastPress, landedTime or GetTime(), RETRY_THRESHOLD, PRESS_ATTRIB_WIN)
+    if isRetry then
+        TriggerPop("LATE - TAP STRAFE", COLOR_LATE, POP_FONT_LATE)
+    else
         TriggerPop("HIT!", COLOR_HIT)
     end
 end
@@ -313,7 +349,8 @@ local function UpdateDisplay()
     -- reached 0: timeToAuto fell to weaveCost) with no landed swing during it —
     -- not when it closed because you cast or stepped out of range.
     if mwDB().feedback == false then
-        S.windowOpen = false
+        S.windowOpen  = false
+        S.missPending = false
     elseif rawOn then
         if not S.windowOpen then
             S.windowOpen = true
@@ -324,7 +361,24 @@ local function UpdateDisplay()
         local expired = (not casting)
             and (timeToAuto == nil or timeToAuto <= S.weaveCost + 0.05)
         if expired and not S.hitDuringWindow then
+            -- Don't call it yet. The window closes ~weaveCost before the auto
+            -- fires, and a swing delayed by the melee retry timer can still land
+            -- in that gap. Wait for the auto to actually fire (or a swing to
+            -- cancel this) before declaring a miss.
+            S.missPending  = true
+            S.missAnchor   = auto.lastShotTime
+            S.missDeadline = now + MISS_MAX_WAIT
+        end
+    end
+
+    -- Resolve a pending MISS: the auto shot firing is what truly closed the
+    -- window. If no auto arrives (auto-repeat off, target lost), drop it quietly.
+    if S.missPending then
+        if auto.lastShotTime > S.missAnchor then
+            S.missPending = false
             TriggerPop("MISS!", COLOR_MISS)
+        elseif now >= S.missDeadline then
+            S.missPending = false
         end
     end
 

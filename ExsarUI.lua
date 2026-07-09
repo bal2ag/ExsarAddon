@@ -1355,6 +1355,7 @@ function ExsarUI.CreateMeleeSwingTracker()
         feigning       = false,
         feignDeathName = "Feign Death",
         aimedShotName  = "Aimed Shot",
+        lastPress      = 0,   -- GetTime() of the last weave-macro press (see NotePress)
     }
 
     local function RefreshSpeed()
@@ -1375,14 +1376,20 @@ function ExsarUI.CreateMeleeSwingTracker()
         return (now - self.lastSwing) >= (self.speed - (lookahead or 0))
     end
 
+    -- Stamped by the weave-macro button's PostClick (CoreCombatWidget). Lets a
+    -- consumer measure press -> landed-swing latency and so identify a
+    -- stale-position melee retry (see CLAUDE.md "The Melee Retry Timer").
+    function M:NotePress(now) self.lastPress = now or GetTime() end
+
     -- Optional callbacks fired when a melee attack LANDS (white swing or Raptor
-    -- Strike connects — not a miss/dodge/parry). Consumers register via
-    -- M:OnLanded(fn); used for landed-weave feedback. Swing TIMING still advances
-    -- on both hits and misses (OnSwing), so this is a separate, additive signal.
+    -- Strike connects — not a miss/dodge/parry), with the landing time. Consumers
+    -- register via M:OnLanded(fn); used for landed-weave feedback. Swing TIMING
+    -- still advances on both hits and misses (OnSwing), so this is a separate,
+    -- additive signal.
     M.landedCallbacks = {}
     function M:OnLanded(fn) self.landedCallbacks[#self.landedCallbacks + 1] = fn end
-    local function FireLanded()
-        for _, fn in ipairs(M.landedCallbacks) do fn() end
+    local function FireLanded(now)
+        for _, fn in ipairs(M.landedCallbacks) do fn(now) end
     end
 
     local clog = CreateFrame("Frame")
@@ -1391,12 +1398,13 @@ function ExsarUI.CreateMeleeSwingTracker()
         local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId =
             CombatLogGetCurrentEventInfo()
         if casterGUID ~= UnitGUID("player") then return end
+        local now = GetTime()
         if subEvent == "SWING_DAMAGE" then
-            OnSwing(); FireLanded()
+            OnSwing(); FireLanded(now)
         elseif subEvent == "SWING_MISSED" then
             OnSwing()
         elseif subEvent == "SPELL_DAMAGE" then
-            if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing(); FireLanded() end
+            if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing(); FireLanded(now) end
         elseif subEvent == "SPELL_MISSED" then
             if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing() end
         end
@@ -1891,6 +1899,16 @@ function ExsarUI.CreateActionBar(opts)
         btn:SetSize(AB_ICON_SIZE, AB_ICON_SIZE)
         btn:RegisterForClicks("AnyUp", "AnyDown")  -- both required on Anniversary
         s.btn = btn
+
+        -- Per-slot press notification. PostClick (never OnClick — that taints a
+        -- secure button). Slots are registered for both edges, so ignore the
+        -- release and report only the press.
+        if action.postClick then
+            btn:SetScript("PostClick", function(_, _, down)
+                if down == false then return end
+                action.postClick(s)
+            end)
+        end
 
         -- Initial secure attributes (we are out of combat at file load). A
         -- trinketSlot with no explicit macro defaults to "/use <slot>".

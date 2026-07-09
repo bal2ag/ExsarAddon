@@ -965,6 +965,27 @@ function ExsarLogic.HoldCue(rawOn, now, holdUntil, minOnTime)
     return false, holdUntil
 end
 
+--- Classify a landed melee swing as a stale-position retry. Pure.
+--- See CLAUDE.md "The Melee Retry Timer": the server snapshots your position on
+--- a movement key-down / spell cast / +0.5s, and `/startattack` range-checks
+--- against that snapshot. A stale snapshot fails the check and parks the attack
+--- on a 500ms retry timer, so the swing lands ~0.5s after the macro press
+--- instead of ~0.1s. Measured press->swing latency is sharply bimodal
+--- (~0.11s clean vs ~0.61s retried), so a single threshold separates them.
+---
+--- Returns delay, isRetry:
+---   delay   = seconds from the press to the landed swing (nil if unattributable)
+---   isRetry = true when that delay crossed `threshold`
+--- A swing with no preceding press, or one landing outside `maxAttribution` of
+--- the last press, is unattributable (nil, false) — it was an auto-attack
+--- continuation swing, not a response to the macro.
+function ExsarLogic.MeleeRetryDelay(pressTime, landedTime, threshold, maxAttribution)
+    if not pressTime or pressTime <= 0 or not landedTime then return nil, false end
+    local delay = landedTime - pressTime
+    if delay < 0 or delay > (maxAttribution or 3.0) then return nil, false end
+    return delay, delay >= (threshold or 0.35)
+end
+
 --- Whether the "REACTIVATE AUTO!" alarm should show. Pure.
 -- Fires when autos physically COULD fire at the target (Auto Shot reports in
 -- range — 1 means past the 5yd dead zone and within shooting range) but

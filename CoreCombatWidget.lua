@@ -29,12 +29,16 @@ end
 
 local ACTIONS = {
     -- Melee weave: queue Raptor Strike on the next swing and start melee.
+    -- postClick stamps the press on the shared melee tracker so MeleeWeaveHelper
+    -- can measure press -> landed-swing latency and spot a stale-position melee
+    -- retry (see CLAUDE.md "The Melee Retry Timer").
     { key = "raptorstrike", name = "Raptor Strike",
       macro = [[/cast Raptor Strike
 /startattack]],
       iconSpell     = "Raptor Strike",
       cooldownSpell = "Raptor Strike",
-      rangeSpell    = "Raptor Strike" },
+      rangeSpell    = "Raptor Strike",
+      postClick     = function() ExsarUI.GetMeleeSwingTracker():NotePress(GetTime()) end },
 
     -- Start attacking: target the nearest enemy if we have no valid target,
     -- then turn on Auto Shot (! = ensure on, don't toggle off). No cooldown.
