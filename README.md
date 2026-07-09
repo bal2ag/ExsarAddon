@@ -600,6 +600,7 @@ A compact, keybindable bar of your major cooldowns in one place — a mix of tri
 A compact, keybindable bar of your main combat abilities and a couple of handy combat macros, all in one place.
 
 - **What it does:** One button per core ability (Steady Shot, Multi-Shot, Arcane Shot, Kill Command, Aimed Shot, stings, traps-of-the-trade like Concussive/Wing Clip, …) plus two macros — a start-attack button (targets the nearest enemy and turns on Auto Shot) and a Raptor Strike melee-weave button.
+- **Spammable weave button:** The Raptor Strike button does one thing when you press it and another when you release it: the press casts Raptor Strike and starts your melee attack, the release stops it. Releasing un-queues the attack, so a press that landed a hair out of range never latches the hidden 500ms melee retry timer — which means you can mash the button freely as you step in and out instead of timing it perfectly. This is the same technique as the *Grounded* addon, built in, so you don't need it.
 - **Casts the right rank:** Ability buttons always use the highest rank you know, and show that spell's tooltip on hover.
 - **Adapts to your spec:** Abilities you don't know simply don't appear — so Aimed Shot only shows up when you're Marksmanship.
 - **Cooldown feedback:** Abilities with a real cooldown (Multi-Shot, Arcane Shot, Kill Command, …) show a sweep + countdown and dim while down; instant/GCD-only shots stay bright so the bar doesn't flicker as you spam.

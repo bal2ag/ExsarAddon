@@ -1738,6 +1738,17 @@ end
 --                    SecureSetAttribute when the text changes (combat-deferred).
 --   tooltip(s, GameTooltip) -> custom tooltip
 --
+-- Dual-edge macro slots (macroDown / macroUp) -- the Grounded technique:
+--   A slot may run one macro body on key DOWN and a different one on key UP by
+--   declaring `macroDown` + `macroUp` instead of `macro`. The engine stores both
+--   as `macrotextDown` / `macrotextUp` attributes and installs a
+--   SecureHandlerWrapScript on OnClick that copies the right one into
+--   `macrotext` before SecureActionButton_OnClick reads it. The swap MUST happen
+--   inside that restricted-environment snippet: a snippet may SetAttribute in
+--   combat, whereas ordinary Lua (ExsarUI.SecureSetAttribute) cannot and would
+--   have to defer the write to PLAYER_REGEN_ENABLED -- useless for a per-press
+--   swap. See CoreCombatWidget's Raptor Strike weave slot.
+--
 -- opts: name (DB namespace), frameName, buttonPrefix, placeholder, actions,
 --   layout ("horizontal"|"vertical"|"grid"), gridCols, border (gold 1px ring
 --   active indicator) / activeAnts (marching-ants active indicator),
@@ -1807,6 +1818,33 @@ local function AB_ShowSpellTooltip(spell)
     if not link then return false end
     GameTooltip:SetHyperlink(link)
     return true
+end
+
+-- Install the dual-edge (macroDown / macroUp) macrotext swap on a secure slot.
+-- The wrap snippet runs in WoW's restricted environment ahead of
+-- SecureActionButton_OnClick, on both the press and the release, and points
+-- `macrotext` at the body for that edge. Attribute writes are legal there in
+-- combat, which is the whole reason this can't be done from ordinary Lua.
+-- (Same mechanism as the Grounded addon.)
+local AB_DUAL_EDGE_SNIPPET = [[
+    if down then
+        self:SetAttribute("macrotext", self:GetAttribute("macrotextDown"))
+    else
+        self:SetAttribute("macrotext", self:GetAttribute("macrotextUp"))
+    end
+]]
+
+-- Write the two bodies. Safe to re-run (e.g. from ApplyAttributes).
+local function AB_ApplyDualEdge(btn, action)
+    btn:SetAttribute("macrotextDown", action.macroDown)
+    btn:SetAttribute("macrotextUp", action.macroUp or "")
+end
+
+-- Write the bodies and install the snippet. Must run exactly once per slot --
+-- SecureHandlerWrapScript stacks, so a second call would run the swap twice.
+local function AB_SetupDualEdge(btn, action)
+    AB_ApplyDualEdge(btn, action)
+    SecureHandlerWrapScript(btn, "OnClick", btn, AB_DUAL_EDGE_SNIPPET)
 end
 
 -- Build "/cast <name>" macrotext for a spells list. The first known spell
@@ -1882,8 +1920,8 @@ function ExsarUI.CreateActionBar(opts)
     for i, action in ipairs(actions) do
         local kind = action.type
         if not kind then
-            if action.macro or action.trinketSlot or action.spells
-               or action.resolveMacro then kind = "macro"
+            if action.macro or action.macroDown or action.trinketSlot
+               or action.spells or action.resolveMacro then kind = "macro"
             elseif action.spell then kind = "spell"
             else kind = "item" end
         end
@@ -1913,11 +1951,12 @@ function ExsarUI.CreateActionBar(opts)
         -- Initial secure attributes (we are out of combat at file load). A
         -- trinketSlot with no explicit macro defaults to "/use <slot>".
         if kind == "macro" then
-            s.macrotext = action.macro
+            s.macrotext = action.macro or action.macroDown
                 or (action.trinketSlot and ("/use " .. action.trinketSlot))
                 or (action.spells and AB_SpellsMacro(action.spells))
             btn:SetAttribute("type", "macro")
             btn:SetAttribute("macrotext", s.macrotext)
+            if action.macroDown then AB_SetupDualEdge(btn, action) end
         elseif kind == "spell" then
             btn:SetAttribute("type", "spell")
             btn:SetAttribute("spell", action.spell)
@@ -1953,9 +1992,10 @@ function ExsarUI.CreateActionBar(opts)
                 -- macro text instead. tooltipSpell overrides either way: a name
                 -- forces that spell, `false` forces the macro-text tooltip.
                 local spell
+                local macroBody = action.macro or action.macroDown
                 if action.tooltipSpell ~= nil then
                     spell = action.tooltipSpell
-                elseif action.macro and not ExsarLogic.IsSimpleCastMacro(action.macro) then
+                elseif macroBody and not ExsarLogic.IsSimpleCastMacro(macroBody) then
                     spell = nil
                 else
                     spell = s.activeSpell or action.spell or action.iconSpell
@@ -2204,7 +2244,14 @@ function ExsarUI.CreateActionBar(opts)
         if InCombatLockdown() then return end
         for _, s in ipairs(slots) do
             if s.kind == "macro" then
-                s.btn:SetAttribute("macrotext", s.macrotext)
+                -- A dual-edge slot's `macrotext` is owned by the wrap snippet,
+                -- which rewrites it on every click edge; only the two source
+                -- bodies need re-applying.
+                if s.action.macroDown then
+                    AB_ApplyDualEdge(s.btn, s.action)
+                else
+                    s.btn:SetAttribute("macrotext", s.macrotext)
+                end
             elseif s.kind == "spell" then
                 s.btn:SetAttribute("spell", s.action.spell)
             else

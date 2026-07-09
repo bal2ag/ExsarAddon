@@ -28,13 +28,30 @@ local function ability(name)
 end
 
 local ACTIONS = {
-    -- Melee weave: queue Raptor Strike on the next swing and start melee.
+    -- Melee weave: dual-edge macro (engine macroDown/macroUp -- see the dual-edge
+    -- note in ExsarUI.lua's action-bar header). Swing on the press, /stopattack on
+    -- the release. Releasing un-queues the melee attack, so a press that lands out
+    -- of range never latches the 500ms melee retry timer -- which is what lets you
+    -- spam this while stepping in and out (CLAUDE.md "The Melee Retry Timer").
+    -- Keeping /stopattack on its own edge also means it lands after the swing has
+    -- gone out rather than wrapped around it, which is reported to stop it eating
+    -- Windfury procs.
+    --
+    -- The /console lines flip ActionButtonUseKeyDown so both edges dispatch: the
+    -- press sets it to 0 (arming the release), the release sets it back to 1
+    -- (arming the next press). RestoreKeyDownCVar below repairs it if a keypress
+    -- is ever orphaned (reload / alt-tab between the edges) and leaves it at 0.
+    --
     -- postClick stamps the press on the shared melee tracker so MeleeWeaveHelper
     -- can measure press -> landed-swing latency and spot a stale-position melee
-    -- retry (see CLAUDE.md "The Melee Retry Timer").
+    -- retry.
     { key = "raptorstrike", name = "Raptor Strike",
-      macro = [[/cast Raptor Strike
-/startattack]],
+      macroDown = [[/stopcasting
+/cast Raptor Strike
+/startattack
+/console ActionButtonUseKeyDown 0]],
+      macroUp = [[/stopattack
+/console ActionButtonUseKeyDown 1]],
       iconSpell     = "Raptor Strike",
       cooldownSpell = "Raptor Strike",
       rangeSpell    = "Raptor Strike",
@@ -86,3 +103,18 @@ ExsarUI.CreateActionBar({
     bindingHeaderGlobal = "BINDING_HEADER_EXSARADDONCOMBAT",
     bindingHeaderText   = "ExsarAddon Combat",
 })
+
+-- The weave slot's press macro sets ActionButtonUseKeyDown to 0 and its release
+-- macro sets it back to 1. If the release never runs (reload, alt-tab, or a
+-- disconnect between the two edges) the CVar is left at 0 -- a global setting
+-- that would silently turn every action button into cast-on-release. Repair it
+-- whenever we are safely out of combat. SetCVar is unavailable under lockdown,
+-- so PLAYER_REGEN_ENABLED (not _DISABLED) is the right edge.
+local cvarFrame = CreateFrame("Frame")
+cvarFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+cvarFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+cvarFrame:SetScript("OnEvent", function()
+    if GetCVar("ActionButtonUseKeyDown") ~= "1" then
+        SetCVar("ActionButtonUseKeyDown", "1")
+    end
+end)
