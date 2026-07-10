@@ -223,6 +223,36 @@ function ExsarLogic.AutoShotDelay(now, lastShotTime, speed, castEnd, predictGrac
     return nil
 end
 
+--- How late an auto shot that just fired was, against the cycle it ended. Pure.
+-- Companion to AutoShotDelay: that one predicts/tracks a shot still pending,
+-- this one scores a shot after the fact (the retrospective clip amount). The
+-- fired time and the previous shot time are both event-receipt timestamps, so
+-- the shared event latency cancels out and the result needs no grace bias.
+-- @param firedTime     time the auto shot fired
+-- @param prevShotTime  time the previous shot (or cycle reset) landed; 0/nil = no cycle
+-- @param speed         hasted weapon speed in seconds
+-- @return delay in seconds (>= 0), or nil when there was no cycle to measure
+function ExsarLogic.AutoShotFiredDelay(firedTime, prevShotTime, speed)
+    if not firedTime then return nil end
+    if not prevShotTime or prevShotTime <= 0 then return nil end
+    if not speed or speed <= 0 then return nil end
+    local delay = firedTime - (prevShotTime + speed)
+    if delay < 0 then delay = 0 end   -- a mid-cycle haste gain can fire "early"
+    return delay
+end
+
+--- Classify an auto-shot fire delay for the clipping-feedback pop. Pure.
+-- @param delay       seconds late (from AutoShotFiredDelay); nil = nothing to say
+-- @param cleanGrace  delays at or under this count as a clean cycle (default 0.1)
+-- @param severeDelay delays at or over this are a bad clip (default 0.5)
+-- @return "clean" | "clip" | "severe", or nil when delay is nil
+function ExsarLogic.ClipVerdict(delay, cleanGrace, severeDelay)
+    if delay == nil then return nil end
+    if delay <= (cleanGrace or 0.1) then return "clean" end
+    if delay >= (severeDelay or 0.5) then return "severe" end
+    return "clip"
+end
+
 --- Whether the auto-shot "HOLD" warning should currently be shown.
 -- The hold window is the gap between the aim bar reaching its predicted end
 -- (the shot is due) and the shot actually firing — the hidden retry-timer delay.

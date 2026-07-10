@@ -611,6 +611,66 @@ describe("AutoShotDelay", function()
 end)
 
 -- =========================================================
+-- AutoShotFiredDelay / ClipVerdict
+-- =========================================================
+
+describe("AutoShotFiredDelay", function()
+    it("measures lateness against the cycle that just ended", function()
+        -- previous shot at 100, speed 2.8 → due at 102.8, fired at 103.14
+        assert.is_true(approx(0.34, Logic.AutoShotFiredDelay(103.14, 100, 2.8)))
+    end)
+
+    it("reads zero on an on-time shot", function()
+        assert.equals(0, Logic.AutoShotFiredDelay(102.8, 100, 2.8))
+    end)
+
+    it("clamps an early shot to zero", function()
+        -- a mid-cycle haste gain shortens the real cycle below the read speed
+        assert.equals(0, Logic.AutoShotFiredDelay(102.5, 100, 2.8))
+    end)
+
+    it("returns nil with no cycle to measure against", function()
+        assert.is_nil(Logic.AutoShotFiredDelay(103, 0, 2.8))
+        assert.is_nil(Logic.AutoShotFiredDelay(103, nil, 2.8))
+    end)
+
+    it("returns nil for zero or missing speed", function()
+        assert.is_nil(Logic.AutoShotFiredDelay(103, 100, 0))
+        assert.is_nil(Logic.AutoShotFiredDelay(103, 100, nil))
+    end)
+
+    it("returns nil without a fire time", function()
+        assert.is_nil(Logic.AutoShotFiredDelay(nil, 100, 2.8))
+    end)
+end)
+
+describe("ClipVerdict", function()
+    it("calls a clean cycle at or under the grace", function()
+        assert.equals("clean", Logic.ClipVerdict(0, 0.1, 0.5))
+        assert.equals("clean", Logic.ClipVerdict(0.1, 0.1, 0.5))
+    end)
+
+    it("calls a moderate clip", function()
+        assert.equals("clip", Logic.ClipVerdict(0.34, 0.1, 0.5))
+    end)
+
+    it("calls a severe clip at or over the severe threshold", function()
+        assert.equals("severe", Logic.ClipVerdict(0.5, 0.1, 0.5))
+        assert.equals("severe", Logic.ClipVerdict(1.2, 0.1, 0.5))
+    end)
+
+    it("says nothing when there is no delay to score", function()
+        assert.is_nil(Logic.ClipVerdict(nil, 0.1, 0.5))
+    end)
+
+    it("uses defaults when thresholds are omitted", function()
+        assert.equals("clean", Logic.ClipVerdict(0.05))
+        assert.equals("clip", Logic.ClipVerdict(0.3))
+        assert.equals("severe", Logic.ClipVerdict(0.6))
+    end)
+end)
+
+-- =========================================================
 -- ShouldShowHoldWarning
 -- =========================================================
 

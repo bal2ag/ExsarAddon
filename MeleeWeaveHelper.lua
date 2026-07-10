@@ -102,8 +102,6 @@ local S = {
     gcdSettleUntil = 0,    -- suppress the cue until this time after a GCD jump (cast-start race)
     windowOpen      = false,  -- raw weave window open (for hit/miss feedback lifecycle)
     hitDuringWindow = false,  -- a melee landed while the current window was open
-    popActive       = false,  -- comic-pop feedback animation running
-    popStart        = 0,
     missPending     = false,  -- window expired unweaved; waiting on the auto to confirm
     missAnchor      = 0,      -- auto.lastShotTime when the MISS was armed
     missDeadline    = 0,      -- give up on the pending MISS after this time
@@ -148,58 +146,22 @@ numText:SetPoint("CENTER", barBg, "CENTER", 0, 0)
 numText:SetTextColor(1, 1, 1, 1)
 numText:Hide()
 
--- Comic-pop feedback text ("WEAVE HIT!" / "WEAVE MISS!"). On its own UIParent-child frame so
--- it fires even when the widget frame is hidden (e.g. locked with no cue up), and
--- it tracks the widget's position by anchoring to it. Hand-animated (scale pop +
--- float-up + fade) in an OnUpdate.
-local popFrame = CreateFrame("Frame", nil, UIParent)
-popFrame:SetSize(10, 10)
-popFrame:SetFrameStrata("HIGH")
-popFrame:SetPoint("CENTER", frame, "CENTER", 0, 20)
-popFrame:Hide()
-
-local popText = popFrame:CreateFontString(nil, "OVERLAY")
-popText:SetFont("Fonts\\FRIZQT__.TTF", POP_FONT_SIZE, "THICKOUTLINE")
-popText:SetPoint("CENTER", popFrame, "CENTER", 0, 0)
+-- Comic-pop feedback text ("WEAVE HIT!" / "WEAVE MISS!"), on the shared helper's
+-- own UIParent-child frame so it fires even when the widget frame is hidden
+-- (e.g. locked with no cue up), while tracking the widget's position.
+local pop = ExsarUI.CreateComicPop(frame, {
+    duration = POP_DUR,
+    rise     = POP_RISE,
+    fontSize = POP_FONT_SIZE,
+    getScale = function() return mwDB().scale or 1 end,
+})
 
 -- size defaults to POP_FONT_SIZE; the coaching cue is a longer string and needs
 -- a smaller face to stay on screen.
 local function TriggerPop(text, color, size)
     if mwDB().feedback == false then return end
-    popText:SetFont("Fonts\\FRIZQT__.TTF", size or POP_FONT_SIZE, "THICKOUTLINE")
-    popText:SetText(text)
-    popText:SetTextColor(color[1], color[2], color[3], 1)
-    S.popStart  = GetTime()
-    S.popActive = true
-    popFrame:SetAlpha(1)
-    popFrame:SetScale(mwDB().scale or 1)
-    popFrame:Show()
+    pop:Trigger(text, color, size)
 end
-
-popFrame:SetScript("OnUpdate", function()
-    if not S.popActive then return end
-    local t = GetTime() - S.popStart
-    if t >= POP_DUR then
-        S.popActive = false
-        popFrame:Hide()
-        return
-    end
-    -- Snappy overshoot pop: 0.6 → 1.3 (0.10s) → settle to 1.0 (by 0.18s).
-    local s
-    if t < 0.10 then
-        s = 0.6 + 0.7 * (t / 0.10)
-    elseif t < 0.18 then
-        s = 1.3 - 0.3 * ((t - 0.10) / 0.08)
-    else
-        s = 1.0
-    end
-    popFrame:SetScale(s * (mwDB().scale or 1))
-    -- Float up, and fade out over the back half.
-    popFrame:SetPoint("CENTER", frame, "CENTER", 0, 20 + POP_RISE * (t / POP_DUR))
-    local a = 1
-    if t > 0.45 then a = 1 - (t - 0.45) / (POP_DUR - 0.45) end
-    popFrame:SetAlpha(a)
-end)
 
 -- =========================================================
 -- Config accessors (read live so slider edits apply immediately)

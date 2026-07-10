@@ -1067,6 +1067,81 @@ function ExsarUI.CreatePoller(frame, interval, callback)
 end
 
 -- =========================================================
+-- Comic-pop feedback text
+-- =========================================================
+--- Create a "comic pop" feedback text: a short-lived string that pops in with an
+-- overshoot scale, floats up, and fades out. Used for the per-action scorecards
+-- (MeleeWeaveHelper's WEAVE HIT!/MISS!, AutoShotMonitor's NO CLIP! / CLIP +x).
+--
+-- Lives on its own UIParent-child frame (so it still shows when the owning
+-- widget frame is hidden) but anchors to `anchor`, so it tracks the widget's
+-- position. Callers own the enable gate: just don't call Trigger.
+-- @param anchor  frame to anchor above (positionally only; may be hidden)
+-- @param opts    { duration = 0.8, rise = 35, fontSize = 30, yOffset = 20,
+--                  strata = "HIGH", getScale = function() return 1 end }
+-- @return pop object with pop:Trigger(text, color, size) and pop.frame
+function ExsarUI.CreateComicPop(anchor, opts)
+    opts = opts or {}
+    local duration = opts.duration or 0.8
+    local rise     = opts.rise     or 35
+    local fontSize = opts.fontSize or 30
+    local yOffset  = opts.yOffset  or 20
+    local getScale = opts.getScale or function() return 1 end
+
+    local popFrame = CreateFrame("Frame", nil, UIParent)
+    popFrame:SetSize(10, 10)
+    popFrame:SetFrameStrata(opts.strata or "HIGH")
+    popFrame:SetPoint("CENTER", anchor, "CENTER", 0, yOffset)
+    popFrame:Hide()
+
+    local popText = popFrame:CreateFontString(nil, "OVERLAY")
+    popText:SetFont("Fonts\\FRIZQT__.TTF", fontSize, "THICKOUTLINE")
+    popText:SetPoint("CENTER", popFrame, "CENTER", 0, 0)
+
+    local P = { frame = popFrame, active = false, startTime = 0 }
+
+    --- Pop `text` in `color` ({r,g,b}); `size` overrides the default font size
+    -- (a longer string needs a smaller face to stay on screen).
+    function P:Trigger(text, color, size)
+        popText:SetFont("Fonts\\FRIZQT__.TTF", size or fontSize, "THICKOUTLINE")
+        popText:SetText(text)
+        popText:SetTextColor(color[1], color[2], color[3], 1)
+        self.startTime = GetTime()
+        self.active    = true
+        popFrame:SetAlpha(1)
+        popFrame:SetScale(getScale())
+        popFrame:Show()
+    end
+
+    popFrame:SetScript("OnUpdate", function()
+        if not P.active then return end
+        local t = GetTime() - P.startTime
+        if t >= duration then
+            P.active = false
+            popFrame:Hide()
+            return
+        end
+        -- Snappy overshoot pop: 0.6 → 1.3 (0.10s) → settle to 1.0 (by 0.18s).
+        local s
+        if t < 0.10 then
+            s = 0.6 + 0.7 * (t / 0.10)
+        elseif t < 0.18 then
+            s = 1.3 - 0.3 * ((t - 0.10) / 0.08)
+        else
+            s = 1.0
+        end
+        popFrame:SetScale(s * getScale())
+        -- Float up, and fade out over the back half.
+        popFrame:SetPoint("CENTER", anchor, "CENTER", 0, yOffset + rise * (t / duration))
+        local a = 1
+        if t > 0.45 then a = 1 - (t - 0.45) / (duration - 0.45) end
+        popFrame:SetAlpha(a)
+    end)
+
+    return P
+end
+
+-- =========================================================
 -- Ranged weapon helpers
 -- =========================================================
 
@@ -1223,6 +1298,18 @@ function ExsarUI.CreateAutoShotTracker()
             self.castEnd, predictGrace, overdueGrace)
     end
 
+    -- Optional callbacks fired when an auto shot LANDS, with (firedTime, delay):
+    -- delay = how late that shot was against the cycle it belonged to (nil when
+    -- there was no cycle to measure against, e.g. the shot after Feign Death).
+    -- Both timestamps are read at event receipt, so the shared event latency
+    -- cancels out of the difference — this is a cleaner measure of a clip than
+    -- the live :Overdue counter, which reads ~0.1s late on every normal cycle.
+    T.firedCallbacks = {}
+    function T:OnAutoShot(fn) self.firedCallbacks[#self.firedCallbacks + 1] = fn end
+    local function FireAutoShot(now, delay)
+        for _, fn in ipairs(T.firedCallbacks) do fn(now, delay) end
+    end
+
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
     f:RegisterEvent("START_AUTOREPEAT_SPELL")
@@ -1271,9 +1358,14 @@ function ExsarUI.CreateAutoShotTracker()
                 local isAutoShot = (arg2 == T.autoShotName)
                     or (arg3 == AST_AUTO_SHOT_ID) or (arg5 == AST_AUTO_SHOT_ID)
                 if isAutoShot then
-                    T.lastShotTime = GetTime()
+                    local now = GetTime()
+                    -- Measure against the cycle that just ended, before we
+                    -- overwrite it with the new one.
+                    local delay = ExsarLogic.AutoShotFiredDelay(now, T.lastShotTime, T.speed)
+                    T.lastShotTime = now
                     T.autoFired    = true
                     RefreshSpeed()
+                    FireAutoShot(now, delay)
                 end
                 local isAimedShot = (arg2 == T.aimedShotName)
                     or AST_AIMED_SHOT_IDS[arg3] or AST_AIMED_SHOT_IDS[arg5]

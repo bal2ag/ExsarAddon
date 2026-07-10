@@ -42,8 +42,19 @@ local CLIP_OVERDUE_GRACE = 0.2
 local COLOR_CLIP     = { 1.0, 0.30, 0.30 }   -- predicted cast clip (red)
 local COLOR_OVERDUE  = { 1.0, 0.65, 0.10 }   -- live overdue counter (orange)
 local COLOR_REACT    = { 1.0, 0.15, 0.10 }   -- reactivate alarm (red)
+local COLOR_NOCLIP   = { 0.30, 1.00, 0.35 }  -- clean-cycle pop (green)
 
 local PREVIEW_ALPHA  = 0.45   -- dimmed static preview shown while unlocked
+
+-- Per-shot clip feedback (comic pop, mirrors MeleeWeaveHelper's hit/miss text).
+-- Scored AFTER the shot fires from ExsarLogic.AutoShotFiredDelay, whose two
+-- timestamps share the same event latency — so a much tighter clean grace than
+-- the live counter's CLIP_OVERDUE_GRACE is honest here.
+local CLIP_CLEAN_GRACE = 0.1   -- at or under this, the cycle was clean
+local CLIP_SEVERE      = 0.5   -- at or over this, a bad clip (red, not orange)
+local POP_FONT_SIZE    = 24
+local POP_DUR          = 0.8
+local POP_RISE         = 35
 
 -- =========================================================
 -- State
@@ -91,6 +102,16 @@ reactText:SetTextColor(COLOR_REACT[1], COLOR_REACT[2], COLOR_REACT[3], 1)
 reactText:SetText("REACTIVATE\nAUTO!")
 reactText:Hide()
 
+-- Per-shot clip feedback pop, anchored above the readout. Lives on its own
+-- UIParent-child frame, so a shot scored while the widget is hidden still pops.
+local pop = ExsarUI.CreateComicPop(frame, {
+    duration = POP_DUR,
+    rise     = POP_RISE,
+    fontSize = POP_FONT_SIZE,
+    yOffset  = 30,
+    getScale = function() return asDB().scale or 1 end,
+})
+
 -- =========================================================
 -- Group context + target helpers
 -- =========================================================
@@ -115,6 +136,30 @@ local function HasAttackableTarget()
     return UnitExists("target") and not UnitIsDead("target")
         and UnitCanAttack("player", "target")
 end
+
+-- =========================================================
+-- Per-shot clip feedback
+-- =========================================================
+
+-- Fired by the shared auto-shot tracker when an auto shot lands, with how late
+-- that shot was against the cycle it ended. The live overdue readout above
+-- vanishes the instant the shot fires, which is exactly when the player is
+-- looking — so restate the verdict as a pop that hangs around for POP_DUR: a
+-- green "NO CLIP!" on a clean cycle, or the clip amount in orange/red. Seeing
+-- the number pop often is the signal that you are clipping too much.
+local function OnAutoShotFired(_, delay)
+    if asDB().clipFeedback == false then return end
+    if not (ContextEnabled() and UnitAffectingCombat("player")) then return end
+    local verdict = ExsarLogic.ClipVerdict(delay, CLIP_CLEAN_GRACE, CLIP_SEVERE)
+    if not verdict then return end
+    if verdict == "clean" then
+        pop:Trigger("NO CLIP!", COLOR_NOCLIP)
+    else
+        pop:Trigger(string.format("CLIP +%.2f", delay),
+            verdict == "severe" and COLOR_CLIP or COLOR_OVERDUE)
+    end
+end
+tracker:OnAutoShot(OnAutoShotFired)
 
 -- =========================================================
 -- Update
@@ -271,6 +316,12 @@ ExsarAddon.RegisterModule({
         ExsarAddon.CreateCheckbox(parent, "Enable in raid", 16, y,
             function() return asDB().enableRaid ~= false end,
             function(v) asDB().enableRaid = v; UpdateDisplay() end
+        )
+        y = y - 30
+
+        ExsarAddon.CreateCheckbox(parent, "Clip feedback text", 16, y,
+            function() return asDB().clipFeedback ~= false end,
+            function(v) asDB().clipFeedback = v end
         )
         y = y - 30
 
