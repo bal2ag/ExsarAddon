@@ -1,7 +1,7 @@
 -- MeleeRangeIndicator module
 -- Shows two crossed gold swords when the player is in melee range of their target.
 -- Also tracks the melee swing timer cooldown with a sweep effect and alpha reduction.
--- When out of range, shows green up-arrows on a grey background (plus the
+-- When out of range, shows orange up-arrows on a grey background (plus the
 -- cooldown sweep + timer when the swing is on cooldown).
 -- Settings are stored under ExsarAddonDB.meleeRange.
 
@@ -76,12 +76,13 @@ local SWORD_COLOR_EDGE   = { 1.0,  0.65, 0.0,  0.45 }   -- warm glow behind blad
 local SWORD_COLOR_GUARD  = { 0.70, 0.55, 0.25, 1.0 }    -- bronze crossguard
 local SWORD_COLOR_HANDLE = { 0.50, 0.35, 0.15, 1.0 }    -- brown handle
 
--- High-contrast "ready" palette: bright cyan-white pops against warm spell FX
+-- High-contrast "ready" palette: bright green-white pops against warm spell FX
 -- (fire/lava/gold particles) where the normal gold blade would blend in.
-local READY_COLOR_BLADE  = { 0.60, 1.0,  1.0,  1.0 }    -- bright cyan-white blade
-local READY_COLOR_EDGE   = { 0.25, 0.85, 1.0,  0.55 }   -- cyan glow behind blade
-local READY_COLOR_GUARD  = { 0.40, 0.85, 0.95, 1.0 }    -- cyan crossguard
-local READY_COLOR_HANDLE = { 0.30, 0.60, 0.72, 1.0 }    -- muted cyan handle
+-- Green is the addon-wide "melee / weave now" color.
+local READY_COLOR_BLADE  = { 0.65, 1.0,  0.65, 1.0 }    -- bright green-white blade
+local READY_COLOR_EDGE   = { 0.25, 1.0,  0.40, 0.55 }   -- green glow behind blade
+local READY_COLOR_GUARD  = { 0.40, 0.95, 0.50, 1.0 }    -- green crossguard
+local READY_COLOR_HANDLE = { 0.30, 0.68, 0.38, 1.0 }    -- muted green handle
 
 local GREY_COLOR_BLADE   = { 0.45, 0.45, 0.45, 1.0 }
 local GREY_COLOR_EDGE    = { 0.35, 0.35, 0.35, 0.45 }
@@ -193,7 +194,7 @@ local function BuildSword(sign)
     glow:SetStartPoint("CENTER", frame, bx1, by1)
     glow:SetEndPoint("CENTER", frame, bx2, by2)
     glow:SetThickness(24)
-    glow:SetColorTexture(0.35, 0.9, 1.0, 0.30)  -- cyan blade glow (ready state only)
+    glow:SetColorTexture(0.35, 1.0, 0.45, 0.30)  -- green blade glow (ready state only)
     glow:Hide()
     glowLines[#glowLines + 1] = glow
 
@@ -229,7 +230,7 @@ end
 -- =========================================================
 -- Status overlays
 -- =========================================================
--- Green up-arrows: shown in all out-of-range states (swing ready or on
+-- Orange up-arrows: shown in all out-of-range states (swing ready or on
 -- cooldown) as a "step in" cue. When the swing is on cooldown the arrows are
 -- accompanied by the cooldown sweep + timer.
 
@@ -239,7 +240,7 @@ if overlayFrame.SetIgnoreParentAlpha then
     overlayFrame:SetIgnoreParentAlpha(true)
 end
 
-local upArrows = ExsarUI.CreateUpArrows(overlayFrame, { color = { 0.2, 0.9, 0.25, 1.0 } })
+local upArrows = ExsarUI.CreateUpArrows(overlayFrame, { color = { 1.0, 0.55, 0.10, 1.0 } })
 for _, line in ipairs(upArrows) do
     line:Hide()
 end
@@ -407,7 +408,7 @@ local function UpdateState()
 
     frame:Show()
 
-    -- Out-of-range states share the green up-arrows on a grey circular
+    -- Out-of-range states share the orange up-arrows on a grey circular
     -- background. Idle = swing ready (always-on in-combat cue); on-cooldown
     -- adds the cooldown sweep + timer.
     local outOfRangeOnCd = not inRange and onCooldown
@@ -422,13 +423,13 @@ local function UpdateState()
             SetSwordColors("normal")
             frame:SetAlpha(0.5)
         else
-            -- Ready to swing: high-contrast cyan blades so the "hit now" cue
+            -- Ready to swing: high-contrast green blades so the "hit now" cue
             -- pops against warm spell FX instead of blending with gold.
             SetSwordColors("ready")
             frame:SetAlpha(1.0)
         end
     elseif outOfRangeOnCd or outOfRangeIdle then
-        -- Out of range (swing ready or on cooldown): green up-arrows on grey
+        -- Out of range (swing ready or on cooldown): orange up-arrows on grey
         -- background. The cooldown sweep distinguishes the on-cooldown case;
         -- the arrows are dimmed slightly while the sweep is up so they blend.
         SetSwordsVisible(false)
@@ -446,11 +447,11 @@ local function UpdateState()
     SetArrowsVisible(outOfRangeOnCd or outOfRangeIdle)
 
     -- Pulsating border glow ring:
-    -- bright white when ready, muted gold when in range + cooldown (move away!)
+    -- bright green when ready, muted gold when in range + cooldown (move away!)
     if ready then
         glowRingActive = true
         glowRingMuted  = false
-        glowRing:SetVertexColor(0.55, 0.95, 1.0, 0.9)
+        glowRing:SetVertexColor(0.55, 1.0, 0.60, 0.9)
         glowRing:Show()
     elseif inRange and onCooldown then
         glowRingActive = true

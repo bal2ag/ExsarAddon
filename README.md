@@ -338,14 +338,15 @@ Shows which aspect is currently active. Pulses a red warning when Aspect of the 
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
-Crossed-swords icon showing melee range status. Displays a cooldown sweep for your melee swing timer and a pulsating cyan glow when your swing is ready in range. The icon sits on a near-opaque background disc so it stays readable when the screen is full of spell effects.
+Crossed-swords icon showing melee range status. Displays a cooldown sweep for your melee swing timer and a pulsating green glow when your swing is ready in range. The icon sits on a near-opaque background disc so it stays readable when the screen is full of spell effects.
 
 - **Intent:** Designed to support melee weaving — stepping into melee range between auto shots to land a Raptor Strike. Shows at a glance whether you're in melee range and whether your swing is ready.
+- **Color convention:** Green means "you're there, swing"; orange means "get closer". The same convention runs through the Range to Target zone label and the Melee Weave Helper.
 - **Visual states:**
-  - **Ready** (in range, swing available): Full-alpha high-contrast cyan-white swords with cyan blade glow lines, fast-pulsating cyan glow ring (3 Hz) — the cyan pops against warm fire/spell effects where gold would blend in. Swing now!
+  - **Ready** (in range, swing available): Full-alpha high-contrast green-white swords with green blade glow lines, fast-pulsating green glow ring (3 Hz) — the green pops against warm fire/spell effects where gold would blend in. Swing now!
   - **On cooldown** (in range, swing cooling down): Half-alpha gold swords with cooldown sweep and countdown timer, slow-pulsating muted glow ring — move away after swinging
-  - **Out of range, swing on cooldown:** Two green arrows pointing up on a grey circular background (no swords) with the cooldown sweep and countdown timer — step in, swing is resetting, no glow
-  - **Out of range, swing ready:** Two green arrows pointing up on a grey circular background (no swords) — the always-on cue, shown whenever you're in combat but not in melee range. Same look as the on-cooldown state but without the sweep/timer.
+  - **Out of range, swing on cooldown:** Two orange arrows pointing up on a grey circular background (no swords) with the cooldown sweep and countdown timer — step in, swing is resetting, no glow
+  - **Out of range, swing ready:** Two orange arrows pointing up on a grey circular background (no swords) — the always-on cue, shown whenever you're in combat but not in melee range. Same look as the on-cooldown state but without the sweep/timer.
   - **Hidden:** Out of combat with no swing cooldown lingering (and widget is locked)
 - **Swing timer:** Tracked via combat log (SWING_DAMAGE/SWING_MISSED and Raptor Strike hits). Cooldown sweep and countdown show time until next swing.
 - **Swing reset:** Feign Death clears the swing while you're feigned (no stale cooldown sweep), and the timer restarts with a fresh full cycle the moment the feign ends.
@@ -489,7 +490,7 @@ Shows your effective weapon speed and suggests the matching shot rotation based 
 Shows an estimated distance bracket to your current target (e.g. "5-8 yd") with a weaving zone label.
 
 - **Intent:** Generalizes the Melee Range Indicator's binary in/out check into a distance estimate, so you can position precisely for melee weaving — staying close while reading exactly how far out of melee you are.
-- **Display:** Two stacked text lines — the distance bracket on top (e.g. "5-8 yd", "0-5 yd" when in melee, "35+ yd" when far), and a zone label below: **MELEE** (orange, within melee reach), **WEAVE** (green, the sweet spot just outside melee), **IN RANGE** (blue, within shooting range), or **FAR** (red, beyond shooting range).
+- **Display:** Two stacked text lines — the distance bracket on top (e.g. "5-8 yd", "0-5 yd" when in melee, "35+ yd" when far), and a zone label below: **MELEE** (green, within melee reach — swing), **WEAVE** (orange, close enough to weave but still outside melee — step in), **IN RANGE** (blue, within shooting range), or **FAR** (red, beyond shooting range).
 - **Spec-aware shooting range:** Your maximum shooting range is 35 yd by default, but the Survival talent **Hawk Eye** adds 2 yd per rank (up to 41 yd at 3/3). The widget reads your Hawk Eye rank and extends both the IN RANGE→FAR boundary and the top of the distance bracket accordingly, so a Survival hunter isn't told "FAR" while a target is still shootable.
 - **How it works:** WoW doesn't expose an exact distance to a unit, so the widget probes a ladder of range checks with known thresholds — Wing Clip (5 yd), a series of fixed-range items (8, 10, 15, 20, 25, 30, 35 yd), and your actual Auto Shot range at the top — and brackets your distance between the nearest in-range and farthest out-of-range check. The estimate is only as fine as the available checks; bounds widen if a check can't be evaluated. This is the same technique used by RangeDisplay and LibRangeCheck.
 - **Shown when:** You have an attackable target (or the widget is unlocked for positioning); hidden otherwise.

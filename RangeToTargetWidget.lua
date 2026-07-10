@@ -72,8 +72,8 @@ end
 -- =========================================================
 
 local ZONE_COLOR = {
-    melee   = { 1.00, 0.55, 0.10 },   -- orange: too close
-    weave   = { 0.20, 0.90, 0.30 },   -- green: sweet spot
+    melee   = { 0.20, 0.90, 0.30 },   -- green: in melee, swing away
+    weave   = { 1.00, 0.55, 0.10 },   -- orange: close enough to weave, not yet in melee
     inrange = { 0.55, 0.70, 1.00 },   -- blue: within shooting range
     far     = { 0.90, 0.25, 0.25 },   -- red: out of shooting range
     ["?"]   = { 0.70, 0.70, 0.70 },   -- grey: indeterminate
