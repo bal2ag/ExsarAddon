@@ -81,6 +81,12 @@ local POP_FONT_LATE = 18   -- the coaching cue is a long string
 local RETRY_THRESHOLD  = 0.35   -- press->swing latency at or above this = a retry
 local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 
+-- Windfury proc flourish: a quick slash animation + whoosh when a Windfury
+-- extra-attack lands on your melee (Windfury Totem from a group shaman grants a
+-- single extra attack — one SPELL_EXTRA_ATTACKS proc, so no de-dupe needed).
+-- Pure celebration/feedback — gated behind its own config toggle.
+local WINDFURY_SOUND = 567947  -- BullWhipHit1 (FileDataID) — a sharp "whoosh"/crack
+
 -- A MISS is only true once the auto shot has actually FIRED: the weave window
 -- closes ~weaveCost before the auto, and a retried swing can still land in that
 -- gap. So arm the MISS at window close and resolve it when the auto lands (or a
@@ -163,6 +169,12 @@ local function TriggerPop(text, color, size)
     pop:Trigger(text, color, size)
 end
 
+-- Windfury proc flourish: a blade-slash streaking up-and-forward, on the shared
+-- helper's own UIParent-child frame (fires even when the widget frame is hidden).
+local slash = ExsarUI.CreateSlashEffect(frame, {
+    getScale = function() return mwDB().scale or 1 end,
+})
+
 -- =========================================================
 -- Config accessors (read live so slider edits apply immediately)
 -- =========================================================
@@ -221,6 +233,18 @@ local function OnMeleeLanded(landedTime)
     end
 end
 melee:OnLanded(OnMeleeLanded)
+
+-- Fired by the shared melee tracker on a Windfury extra-attack proc. Optional
+-- eye-candy (own config toggle, default ON): a quick up-and-forward slash + a
+-- "whoosh". Windfury Totem grants a single extra attack, so one proc = one
+-- flourish (no de-dupe needed).
+local function OnWindfuryProc()
+    if mwDB().windfuryEffect == false then return end
+    if not (ContextEnabled() and UnitAffectingCombat("player")) then return end
+    slash:Trigger()
+    PlaySoundFile(WINDFURY_SOUND, "Master")
+end
+melee:OnWindfury(OnWindfuryProc)
 
 -- =========================================================
 -- Cue rendering
@@ -433,6 +457,12 @@ ExsarAddon.RegisterModule({
         ExsarAddon.CreateCheckbox(parent, "Hit / miss feedback text", 16, y,
             function() return mwDB().feedback ~= false end,
             function(v) mwDB().feedback = v end
+        )
+        y = y - 30
+
+        ExsarAddon.CreateCheckbox(parent, "Windfury proc flourish (slash + whoosh)", 16, y,
+            function() return mwDB().windfuryEffect ~= false end,
+            function(v) mwDB().windfuryEffect = v end
         )
         y = y - 30
 

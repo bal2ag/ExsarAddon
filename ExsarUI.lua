@@ -1141,6 +1141,87 @@ function ExsarUI.CreateComicPop(anchor, opts)
     return P
 end
 
+--- Slash Flourish — a quick blade-swipe effect that slashes UP and FORWARD.
+-- Two diagonal strokes (a bright core + a thinner trailing stroke) reveal from
+-- their base, then streak up-and-to-the-right and fade, all over `duration`.
+-- Lives on its own UIParent-child frame anchored to `anchor` (like CreateComicPop),
+-- so it fires even when the anchoring widget is hidden. Returns an object with
+-- :Trigger() (re-fires from the start). Animation curve is ExsarLogic.SlashAnim.
+-- @param anchor  frame to anchor to (CENTER)
+-- @param opts    { duration, color={r,g,b,a}, length, thickness, travel,
+--                  angleX, angleY, xOffset, yOffset, strata, getScale }
+function ExsarUI.CreateSlashEffect(anchor, opts)
+    opts = opts or {}
+    local duration  = opts.duration  or 0.35
+    local color     = opts.color     or { 1.0, 0.97, 0.65, 1.0 }
+    local length    = opts.length    or 48
+    local thickness = opts.thickness or 8
+    local travel    = opts.travel    or 30
+    -- Slash direction: up (+y) and forward (+x). Normalized-ish for a ~45° arc.
+    local dx        = opts.angleX    or 0.72
+    local dy        = opts.angleY    or 0.70
+    local getScale  = opts.getScale  or function() return 1 end
+
+    local f = CreateFrame("Frame", nil, UIParent)
+    f:SetSize(length * 2, length * 2)
+    f:SetFrameStrata(opts.strata or "HIGH")
+    f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
+    f:Hide()
+
+    -- Perpendicular to the slash direction, to offset the trailing stroke.
+    local px, py = -dy, dx
+    local strokes = {
+        { off =  0, thick = thickness,       a = color[4] or 1 },  -- bright core
+        { off = -7, thick = thickness * 0.5, a = (color[4] or 1) * 0.6 },  -- trailing wisp
+    }
+    for _, st in ipairs(strokes) do
+        st.line = f:CreateLine(nil, "OVERLAY")
+        st.line:SetColorTexture(color[1], color[2], color[3], st.a)
+        st.line:SetThickness(st.thick)
+    end
+
+    local SL = { frame = f, active = false, startTime = 0 }
+
+    local function render(tip, travelFrac, alpha)
+        local s = getScale()
+        local L = length * s
+        local tv = travel * travelFrac * s
+        for _, st in ipairs(strokes) do
+            local ox = (px * st.off) * s + dx * tv
+            local oy = (py * st.off) * s + dy * tv
+            -- Base start at lower-left of the stroke, end grows toward upper-right.
+            local sx = -dx * L / 2 + ox
+            local sy = -dy * L / 2 + oy
+            local ex = sx + dx * L * tip
+            local ey = sy + dy * L * tip
+            st.line:SetThickness(st.thick * s)
+            st.line:SetStartPoint("CENTER", f, sx, sy)
+            st.line:SetEndPoint("CENTER", f, ex, ey)
+            st.line:SetColorTexture(color[1], color[2], color[3], st.a * alpha)
+        end
+    end
+
+    function SL:Trigger()
+        self.startTime = GetTime()
+        self.active = true
+        render(ExsarLogic.SlashAnim(0, duration))
+        f:Show()
+    end
+
+    f:SetScript("OnUpdate", function()
+        if not SL.active then return end
+        local t = GetTime() - SL.startTime
+        if t >= duration then
+            SL.active = false
+            f:Hide()
+            return
+        end
+        render(ExsarLogic.SlashAnim(t, duration))
+    end)
+
+    return SL
+end
+
 -- =========================================================
 -- Ranged weapon helpers
 -- =========================================================
@@ -1433,6 +1514,9 @@ end
 --   M:Ready(now, lookahead)  → true if a step-in would produce a white swing
 --                              (never swung yet ⇒ ready; else past the cycle,
 --                              lookahead lets it read ready slightly early)
+--   M:OnLanded(fn)           → fn(now) each time a melee attack CONNECTS
+--   M:OnWindfury(fn)         → fn(now) on a Windfury extra-attack proc
+--   M:NotePress(now)         → stamp a weave-macro press (for retry detection)
 
 local MST_RAPTOR_STRIKE_IDS = {
     [2973] = true, [14260] = true, [14261] = true, [14262] = true,
@@ -1484,10 +1568,21 @@ function ExsarUI.CreateMeleeSwingTracker()
         for _, fn in ipairs(M.landedCallbacks) do fn(now) end
     end
 
+    -- Optional callbacks fired when a Windfury proc lands on the player's melee
+    -- (Windfury Totem from a group shaman, or Windfury Weapon), with the proc
+    -- time. Detected off the same single combat-log parse as the swing signals
+    -- (no second COMBAT_LOG_EVENT_UNFILTERED listener — matters in raids), via
+    -- the SPELL_EXTRA_ATTACKS subevent. Consumers register with M:OnWindfury(fn).
+    M.windfuryCallbacks = {}
+    function M:OnWindfury(fn) self.windfuryCallbacks[#self.windfuryCallbacks + 1] = fn end
+    local function FireWindfury(now)
+        for _, fn in ipairs(M.windfuryCallbacks) do fn(now) end
+    end
+
     local clog = CreateFrame("Frame")
     clog:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     clog:SetScript("OnEvent", function()
-        local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId =
+        local _, subEvent, _, casterGUID, _, _, _, _, _, _, _, spellId, spellName =
             CombatLogGetCurrentEventInfo()
         if casterGUID ~= UnitGUID("player") then return end
         local now = GetTime()
@@ -1499,6 +1594,8 @@ function ExsarUI.CreateMeleeSwingTracker()
             if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing(); FireLanded(now) end
         elseif subEvent == "SPELL_MISSED" then
             if MST_RAPTOR_STRIKE_IDS[spellId] then OnSwing() end
+        elseif ExsarLogic.IsWindfuryProc(subEvent, spellName) then
+            FireWindfury(now)
         end
     end)
 

@@ -2354,3 +2354,88 @@ describe("ShouldReactivateAuto", function()
         assert.is_false(Logic.ShouldReactivateAuto(1, false, false))
     end)
 end)
+
+-- =========================================================
+-- IsWindfuryProc
+-- =========================================================
+
+describe("IsWindfuryProc", function()
+    it("matches a Windfury Totem extra-attack proc", function()
+        assert.is_true(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", "Windfury Totem"))
+    end)
+
+    it("matches Windfury Weapon and Windfury Attack (any rank/source)", function()
+        assert.is_true(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", "Windfury Weapon"))
+        assert.is_true(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", "Windfury Attack"))
+    end)
+
+    it("is case-insensitive", function()
+        assert.is_true(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", "windfury totem"))
+    end)
+
+    it("ignores extra attacks from other sources", function()
+        assert.is_false(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", "Sword Specialization"))
+    end)
+
+    it("ignores non-extra-attack subevents even if named Windfury", function()
+        assert.is_false(Logic.IsWindfuryProc("SPELL_DAMAGE", "Windfury Totem"))
+        assert.is_false(Logic.IsWindfuryProc("SWING_DAMAGE", "Windfury Totem"))
+    end)
+
+    it("is safe with a nil/non-string spell name", function()
+        assert.is_false(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", nil))
+        assert.is_false(Logic.IsWindfuryProc("SPELL_EXTRA_ATTACKS", 123))
+    end)
+end)
+
+-- =========================================================
+-- SlashAnim
+-- =========================================================
+
+describe("SlashAnim", function()
+    it("starts un-revealed, at rest, fully opaque", function()
+        local tip, travel, alpha = Logic.SlashAnim(0, 0.35, 0.35)
+        assert.are.equal(0, tip)
+        assert.are.equal(0, travel)
+        assert.are.equal(1, alpha)
+    end)
+
+    it("fully reveals by the end of the reveal phase before travelling", function()
+        local tip, travel = Logic.SlashAnim(0.35 * 0.35, 0.35, 0.35)
+        assert.is_true(tip >= 0.999)
+        assert.are.equal(0, travel)
+    end)
+
+    it("travels and fades to nothing at the end of life", function()
+        local tip, travel, alpha = Logic.SlashAnim(0.35, 0.35, 0.35)
+        assert.are.equal(1, tip)
+        assert.are.equal(1, travel)
+        assert.are.equal(0, alpha)
+    end)
+
+    it("clamps all outputs to 0..1 past the duration", function()
+        local tip, travel, alpha = Logic.SlashAnim(10, 0.35, 0.35)
+        assert.are.equal(1, tip)
+        assert.are.equal(1, travel)
+        assert.are.equal(0, alpha)
+    end)
+
+    it("holds full alpha until the fade start (45% of life)", function()
+        local _, _, alpha = Logic.SlashAnim(0.35 * 0.4, 0.35, 0.35)
+        assert.are.equal(1, alpha)
+    end)
+
+    it("treats negative time as t=0", function()
+        local tip, travel, alpha = Logic.SlashAnim(-1, 0.35, 0.35)
+        assert.are.equal(0, tip)
+        assert.are.equal(0, travel)
+        assert.are.equal(1, alpha)
+    end)
+
+    it("degrades gracefully with a zero duration", function()
+        local tip, travel, alpha = Logic.SlashAnim(0, 0, 0.35)
+        assert.are.equal(1, tip)
+        assert.are.equal(1, travel)
+        assert.are.equal(0, alpha)
+    end)
+end)

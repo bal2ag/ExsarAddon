@@ -1032,6 +1032,54 @@ function ExsarLogic.ShouldReactivateAuto(autoShotInRange, autoRepeatOn, hasTarge
     return autoShotInRange == 1
 end
 
+--- Whether a combat-log event is a Windfury extra-attack proc. Pure.
+-- A Windfury proc (Windfury Totem for a hunter, or Windfury Weapon on a shaman)
+-- fires the SPELL_EXTRA_ATTACKS subevent named "Windfury ..." (Totem / Attack /
+-- Weapon across ranks and sources). Match by name so every rank/source counts.
+-- @param subEvent   combat-log subevent (e.g. "SPELL_EXTRA_ATTACKS")
+-- @param spellName  the event's spell name (13th return of CombatLogGetCurrentEventInfo)
+-- @return bool
+function ExsarLogic.IsWindfuryProc(subEvent, spellName)
+    if subEvent ~= "SPELL_EXTRA_ATTACKS" then return false end
+    if type(spellName) ~= "string" then return false end
+    return spellName:lower():find("windfury", 1, true) ~= nil
+end
+
+--- Parametrize the slash-flourish animation. Pure.
+-- A slash stroke first REVEALS (extends from its start to full length over the
+-- first `revealFrac` of its life), then TRAVELS up-and-forward while FADING out.
+-- Returns three normalized 0..1 values the renderer maps to geometry/alpha, so
+-- the animation curve is testable without any frame.
+-- @param t           seconds elapsed since the slash triggered
+-- @param duration    total slash lifetime (s)
+-- @param revealFrac  fraction of the lifetime spent extending the stroke (default 0.35)
+-- @return tip        0..1 how far along its length the stroke is currently drawn
+-- @return travel     0..1 how far it has swept along the up-forward direction
+-- @return alpha      0..1 opacity (full until 45% of life, then fades to 0)
+function ExsarLogic.SlashAnim(t, duration, revealFrac)
+    duration = duration or 0.35
+    revealFrac = revealFrac or 0.35
+    if not t or t < 0 then t = 0 end
+    if duration <= 0 then return 1, 1, 0 end
+
+    local revealDur = duration * revealFrac
+    local tip = revealDur > 0 and (t / revealDur) or 1
+    if tip > 1 then tip = 1 end
+
+    local travelDur = duration - revealDur
+    local travel = travelDur > 0 and ((t - revealDur) / travelDur) or 1
+    if travel < 0 then travel = 0 elseif travel > 1 then travel = 1 end
+
+    local fadeStart = duration * 0.45
+    local alpha = 1
+    if t >= fadeStart and duration > fadeStart then
+        alpha = 1 - (t - fadeStart) / (duration - fadeStart)
+        if alpha < 0 then alpha = 0 end
+    end
+
+    return tip, travel, alpha
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic
