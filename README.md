@@ -45,6 +45,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Cooldowns](#cooldowns)
   - [Core Combat](#core-combat)
   - [Utilities](#utilities)
+  - [Engineering](#engineering)
 
 ## Installation
 
@@ -631,3 +632,19 @@ A compact, keybindable bar for your situational utility — abilities you reach 
 - **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Utility* section). The bound key is shown in the top-right corner of the icon.
 
 <!-- ![Utilities](screenshots/utilities.png) -->
+
+### Engineering
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A clickable mini action bar for your engineering gadgets — the same bag-driven behavior as the Usable Items bar, dedicated to your engineering consumables.
+
+- **Items tracked:** Goblin Sapper Charge, Super Sapper Charge, Advanced Target Dummy, Field Repair Bot 110G.
+- **Charge count:** Each icon shows the net number of charges you're carrying (summed across stacks), and greys out when you're out.
+- **Cooldowns:** Each gadget shows its own item cooldown with a sweep and countdown.
+- **Both-sappers combo button:** A dedicated "Sappers" slot throws both sapper charges from one button — Super Sapper Charge first (1-minute cooldown), then the Goblin Sapper Charge (5-minute cooldown) once the Super is spent, so you can fit both into a fight with the short-cooldown one leading. It shows the Super Sapper icon and no count.
+- **Rocket Boots equip-and-swap:** A dedicated "Rocket Boots" slot lets you get the Goblin Rocket Boots speed boost without wearing them into a fight. First press equips the boots (remembering where your real boots go); second press fires the boost and swaps your original boots back on. While the rocket boots are on your feet the slot shows an amber "swap back" warning. (Because you can't change gear in combat, boosting mid-fight leaves the rockets on until you're out of combat — the amber warning reminds you to swap.)
+- **Keybindings:** Each slot can be bound to a key in the standard **Key Bindings** menu (Esc → Key Bindings → *ExsarAddon Engineering* section). The bound key is shown in the top-right corner of the icon, and works in combat.
+- **Room to grow:** More engineering gadgets — including multi-step macro devices — are planned for this bar.
+
+<!-- ![Engineering](screenshots/engineering.png) -->

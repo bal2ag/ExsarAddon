@@ -133,6 +133,7 @@ local MODULE_ICONS = {
     ["Cooldown Tracker"]         = "INV_Misc_PocketWatch_02",
     ["Cooldowns"]                = "Ability_Hunter_Readiness",
     ["Core Combat"]              = "Ability_Marksmanship",
+    ["Engineering"]              = "Trade_Engineering",
     ["Food & Drink"]             = "INV_Misc_Food_15",
     ["Global Cooldown Tracker"]  = "INV_Misc_PocketWatch_01",
     ["Kill Command Alert"]       = "Ability_Hunter_KillCommand",

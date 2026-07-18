@@ -134,4 +134,21 @@
     <Binding name="EXSAR_UTILITY7" category="ExsarAddon Utility"/>
     <Binding name="EXSAR_UTILITY8" category="ExsarAddon Utility"/>
     <Binding name="EXSAR_UTILITY9" category="ExsarAddon Utility"/>
+
+    <!--
+        Engineering widget slots. Grouped under their own "ExsarAddon Engineering"
+        category (literal label). The first carries header="EXSARADDONENGINEERING"
+        (resolves via BINDING_HEADER_EXSARADDONENGINEERING set by the action-bar
+        engine); the rest only need the category. Bindings are positional: the key
+        uses whatever gadget occupies ExsarAddonEngineeringBtnN. Labels resolve via
+        BINDING_NAME_EXSAR_ENGINEERINGN globals set by ExsarUI.CreateActionBar.
+        Keep this list one-per-slot with EngineeringWidget's TRACKED_ITEMS -- grow
+        both together when adding gadgets.
+    -->
+    <Binding name="EXSAR_ENGINEERING1" header="EXSARADDONENGINEERING" category="ExsarAddon Engineering"/>
+    <Binding name="EXSAR_ENGINEERING2" category="ExsarAddon Engineering"/>
+    <Binding name="EXSAR_ENGINEERING3" category="ExsarAddon Engineering"/>
+    <Binding name="EXSAR_ENGINEERING4" category="ExsarAddon Engineering"/>
+    <Binding name="EXSAR_ENGINEERING5" category="ExsarAddon Engineering"/>
+    <Binding name="EXSAR_ENGINEERING6" category="ExsarAddon Engineering"/>
 </Bindings>
