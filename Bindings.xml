@@ -142,8 +142,8 @@
         engine); the rest only need the category. Bindings are positional: the key
         uses whatever gadget occupies ExsarAddonEngineeringBtnN. Labels resolve via
         BINDING_NAME_EXSAR_ENGINEERINGN globals set by ExsarUI.CreateActionBar.
-        Keep this list one-per-slot with EngineeringWidget's TRACKED_ITEMS -- grow
-        both together when adding gadgets.
+        Keep this list one-per-slot with EngineeringWidget's TRACKED_ITEMS (grow
+        both together when adding gadgets).
     -->
     <Binding name="EXSAR_ENGINEERING1" header="EXSARADDONENGINEERING" category="ExsarAddon Engineering"/>
     <Binding name="EXSAR_ENGINEERING2" category="ExsarAddon Engineering"/>
