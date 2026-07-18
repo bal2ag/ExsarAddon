@@ -21,15 +21,25 @@
 --   click 1  (boots in bags)   : /equipslot the boots into the feet slot. The
 --                                previously-worn boots bounce into the Rocket
 --                                Boots' old bag slot, whose coords we capture.
---   click 2  (boots equipped)  : /use the feet slot (fire the boost) AND
---                                /equipslot the previous boots back to those coords.
--- While the Rocket Boots are equipped the slot shows an amber "SWAP BACK!"
--- border (you want your real boots back on once you've boosted). The swap-back
--- target is identified by BAG SLOT, not item, so it works regardless of which
--- boots were displaced; the coords persist in ExsarAddonDB.engineering.rocketBootsSwap
--- so the workflow survives /reload. Note /equipslot is blocked in combat, so a
--- click-2 fired mid-combat still boosts but leaves the boots on until you can
--- swap out of combat -- the amber border stays up as the reminder.
+--   click 2  (boots equipped,   : /use the feet slot -- fire the speed boost
+--             boots READY)         ALONE. The swap-back is deliberately withheld
+--                                  here: unequipping the boots while the boost is
+--                                  live cancels it early, so we must NOT /equipslot
+--                                  in the same press that fires it.
+--   click 3  (boots equipped,   : /use (a no-op while the on-use CD runs) AND
+--             boots ON COOLDOWN)   /equipslot the previous boots back. Once a
+--                                  cooldown is active the boots are either waiting
+--                                  out the 30s just-equipped delay or spent (the
+--                                  5min on-use CD, boost over), so swapping back is
+--                                  safe and completes the workflow.
+-- So the /equipslot swap-back rides along ONLY when GetInventoryItemCooldown
+-- reports an active cooldown (BootsOnCooldown); a fresh /use fires the boost by
+-- itself. While the Rocket Boots are equipped the slot shows an amber "SWAP
+-- BACK!" border. The swap-back target is identified by BAG SLOT, not item, so it
+-- works regardless of which boots were displaced; the coords persist in
+-- ExsarAddonDB.engineering.rocketBootsSwap so the workflow survives /reload. Note
+-- /equipslot is blocked in combat, so a boost fired mid-combat leaves the boots
+-- on until you can swap out of combat -- the amber border stays up as the reminder.
 local ROCKET_BOOTS_ID   = 7189
 local ROCKET_BOOTS_SLOT = 8   -- INVSLOT_FEET
 local ROCKET_AMBER      = { 1.0, 0.85, 0.15, 0.85 }  -- "swap back!"
@@ -47,6 +57,14 @@ end
 
 local function BootsEquipped()
     return GetInventoryItemID("player", ROCKET_BOOTS_SLOT) == ROCKET_BOOTS_ID
+end
+
+-- True while the equipped boots have a cooldown running -- either the 30s
+-- just-equipped delay or the 5min on-use CD. Used to gate the swap-back so we
+-- never unequip while the boots are ready/boosting (which cancels the boost).
+local function BootsOnCooldown()
+    local st, dur = GetInventoryItemCooldown("player", ROCKET_BOOTS_SLOT)
+    return st and st > 0 and dur and dur > 0
 end
 
 local function EngStore() return ExsarAddonDB and ExsarAddonDB.engineering end
@@ -110,14 +128,16 @@ local TRACKED_ITEMS = {
           if BootsEquipped() then return ROCKET_AMBER end
           return nil
       end,
-      -- Stage 1 (boots in bags): capture their (bag,slot) and equip them -- the
-      -- displaced boots land at those same coords, so click 2 swaps back using
-      -- the same numbers. Stage 2 (boots equipped): /use to fire the boost, then
-      -- /equipslot the previous boots back.
+      -- Boots in bags: capture their (bag,slot) and equip them -- the displaced
+      -- boots land at those same coords, so the swap-back uses the same numbers.
+      -- Boots equipped: /use to fire the boost, and ONLY append the /equipslot
+      -- swap-back when a cooldown is running (BootsOnCooldown) -- unequipping
+      -- while the boots are ready/boosting cancels the boost, so a fresh /use
+      -- must fire alone and the swap-back rides a later press.
       resolveMacro = function()
           if BootsEquipped() then
               local bag, slot = StoredBootsBagSlot()
-              if bag then
+              if bag and BootsOnCooldown() then
                   return string.format("/use %d\n/equipslot %d %d %d",
                       ROCKET_BOOTS_SLOT, ROCKET_BOOTS_SLOT, bag, slot)
               end
