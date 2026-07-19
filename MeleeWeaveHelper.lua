@@ -86,7 +86,7 @@ local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 -- single extra attack — one SPELL_EXTRA_ATTACKS proc, so no de-dupe needed).
 -- Pure celebration/feedback — gated behind its own config toggle.
 local WINDFURY_SOUND = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
-local SLASH_DURATION = 1.2     -- slash flourish lifetime (s) — a slow, dramatic sweep
+local SLASH_DURATION = 0.8     -- slash flourish lifetime (s) — a quick, punchy sweep
 
 -- A MISS is only true once the auto shot has actually FIRED: the weave window
 -- closes ~weaveCost before the auto, and a retried swing can still land in that

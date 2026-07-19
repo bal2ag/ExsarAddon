@@ -1166,7 +1166,7 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     local color     = opts.color     or { 1.0, 0.95, 0.55, 1.0 }
     local length    = opts.length    or 30    -- arc reaches ~±length px (normalized coords)
     local thickness = opts.thickness or 14    -- belly width of the core stroke (px)
-    local segments  = opts.segments  or 34    -- polyline pieces approximating the curve (denser = smoother)
+    local segments  = opts.segments  or 60    -- polyline pieces approximating the curve (denser = smoother, no visible facets)
     local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
     local depth     = opts.depth     or 1     -- pseudo-3D strength multiplier (0 = flat)
     local baseA     = color[4] or 1
