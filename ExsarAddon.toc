@@ -8,6 +8,7 @@
 ExsarLogic.lua
 ExsarUI.lua
 Core.lua
+ErrorCapture.lua
 CooldownTracker.lua
 RangedSwingTimer.lua
 CastBar.lua

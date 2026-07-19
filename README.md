@@ -46,6 +46,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Core Combat](#core-combat)
   - [Utilities](#utilities)
   - [Engineering](#engineering)
+  - [Error Log](#error-log)
 
 ## Installation
 
@@ -648,3 +649,14 @@ A clickable mini action bar for your engineering gadgets — the same bag-driven
 - **Room to grow:** More engineering gadgets — including multi-step macro devices — are planned for this bar.
 
 <!-- ![Engineering](screenshots/engineering.png) -->
+
+### Error Log
+
+![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)
+
+A behind-the-scenes safety net that records Lua errors so you never lose one to a popup you dismissed mid-fight. WoW's default error window is wiped when you close it or reload, and some errors (like "script exceeded execution time limit") show no stack at all — this captures the message, stack trace, and locals to your SavedVariables the moment the error happens.
+
+- **Persistent:** The last 50 errors are saved and survive `/reload` and logout, so you can read them after the fact — no need to screenshot the popup while a boss is on you.
+- **Non-intrusive:** The normal error popup still appears exactly as before (this logs in addition, it doesn't replace anything). When an error looks like it came from ExsarAddon, a brief chat note reminds you it was saved.
+- **Reading the log:** Type `/exsar errdump` to open the captured errors (newest first) in a copy-paste window (Ctrl+A, Ctrl+C, Esc to close).
+- **Commands:** `/exsar errclear` wipes the log; `/exsar errcapture` toggles capture on/off. Capture can also be toggled from the config panel's **Error Log** section.
