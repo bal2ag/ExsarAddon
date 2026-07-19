@@ -85,7 +85,8 @@ local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 -- extra-attack lands on your melee (Windfury Totem from a group shaman grants a
 -- single extra attack — one SPELL_EXTRA_ATTACKS proc, so no de-dupe needed).
 -- Pure celebration/feedback — gated behind its own config toggle.
-local WINDFURY_SOUND = 567947  -- BullWhipHit1 (FileDataID) — a sharp "whoosh"/crack
+local WINDFURY_SOUND = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
+local SLASH_DURATION = 1.2     -- slash flourish lifetime (s) — a slow, dramatic sweep
 
 -- A MISS is only true once the auto shot has actually FIRED: the weave window
 -- closes ~weaveCost before the auto, and a retried swing can still land in that
@@ -115,8 +116,8 @@ local S = {
 }
 
 -- How often the Windfury slash re-fires in the unlocked preview loop. Leaves a
--- clear gap after the ~0.35s animation so each swipe reads as a distinct pulse.
-local WF_PREVIEW_INTERVAL = 1.5
+-- clear gap after the animation so each swipe reads as a distinct pulse.
+local WF_PREVIEW_INTERVAL = SLASH_DURATION + 0.6
 
 local results = {}   -- reused range-probe results
 local auto  = ExsarUI.GetAutoShotTracker()
@@ -177,6 +178,7 @@ end
 -- Windfury proc flourish: a blade-slash streaking up-and-forward, on the shared
 -- helper's own UIParent-child frame (fires even when the widget frame is hidden).
 local slash = ExsarUI.CreateSlashEffect(frame, {
+    duration = SLASH_DURATION,
     getScale = function() return mwDB().scale or 1 end,
 })
 
