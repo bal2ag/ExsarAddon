@@ -1079,11 +1079,13 @@ end
 -- @return 0..1 thickness multiplier
 function ExsarLogic.SlashArcThickness(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
-    local PEAK = 0.32
+    local PEAK = 0.34
+    -- Higher exponents pinch the ends to sharper points, for a sleek crescent
+    -- (thin, pointed tail + leading tip) rather than a rounded blob.
     if u <= PEAK then
-        return (u / PEAK) ^ 0.7
+        return (u / PEAK) ^ 1.1
     end
-    return ((1 - u) / (1 - PEAK)) ^ 0.9
+    return ((1 - u) / (1 - PEAK)) ^ 1.5
 end
 
 --- Depth profile along the arcing-slash crescent (pseudo-3D). Pure.

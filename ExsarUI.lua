@@ -1166,8 +1166,8 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     local duration  = opts.duration  or 0.40
     local color     = opts.color     or { 1.0, 0.95, 0.55, 1.0 }
     local length    = opts.length    or 30    -- arc reaches ~±length px (normalized coords)
-    local thickness = opts.thickness or 15    -- belly width of the core stroke (px)
-    local stamps    = opts.stamps    or 64    -- soft dots along the curve (dense overlap = smooth)
+    local thickness = opts.thickness or 7     -- belly width of the core stroke (px) — thin, sleek blade
+    local stamps    = opts.stamps    or 72    -- soft dots along the curve (dense overlap = smooth)
     local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
     local depth     = opts.depth     or 1     -- pseudo-3D strength multiplier (0 = flat)
     local getScale  = opts.getScale  or function() return 1 end
@@ -1189,8 +1189,8 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- Per-stamp alpha is low because many soft dots overlap and sum (additive),
     -- so the belly saturates while the ribbon edges fall off softly.
     local layers = {
-        { sizeMul = 2.6, alphaMul = 0.13, sub = "ARTWORK" },  -- glow halo
-        { sizeMul = 1.0, alphaMul = 0.18, sub = "OVERLAY" },  -- bright core
+        { sizeMul = 2.0, alphaMul = 0.10, sub = "ARTWORK" },  -- glow halo
+        { sizeMul = 1.0, alphaMul = 0.24, sub = "OVERLAY" },  -- bright core
     }
     for _, layer in ipairs(layers) do
         layer.dot = {}
