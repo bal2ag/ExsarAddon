@@ -1047,19 +1047,20 @@ end
 
 --- Point along the arcing-slash crescent path. Pure.
 -- A cubic Bézier traced by parameter `u` in [0,1]: u=0 is the base (bottom of
--- the swipe), u=1 is the leading tip (upper right). The path sweeps from the
--- bottom, veers LEFT through the lower-middle, then curves back and finishes
--- UP-AND-RIGHT — an anime/"Avatar"-style blade arc. Coordinates are normalized
--- to roughly [-1,1]; the renderer scales them.
+-- the swipe), u=1 is the leading tip (top, near center). The path sweeps up from
+-- the bottom, veers LEFT through the lower-middle, then curves back and finishes
+-- UP THE CENTER — a blade arc thrusting toward the target (the forward/toward-you
+-- motion is added by SlashArcDepth, not a sideways finish). Coordinates are
+-- normalized to roughly [-1,1]; the renderer scales them.
 -- @param u  0..1 position along the arc (0 = base, 1 = tip)
 -- @return x, y  normalized local coordinates
 function ExsarLogic.SlashArcPoint(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
-    -- Control points: bottom(right of center) -> pull left low -> left rising -> upper right.
-    local p0x, p0y =  0.15, -1.00
-    local p1x, p1y = -0.85, -0.35
-    local p2x, p2y = -0.30,  0.55
-    local p3x, p3y =  0.80,  1.05
+    -- Control points: bottom(near center) -> pull left low -> left rising -> up the center.
+    local p0x, p0y =  0.10, -1.00
+    local p1x, p1y = -0.70, -0.30
+    local p2x, p2y = -0.45,  0.55
+    local p3x, p3y =  0.08,  1.10
     local mu = 1 - u
     local a = mu * mu * mu
     local b = 3 * mu * mu * u

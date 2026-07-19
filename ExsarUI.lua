@@ -1175,7 +1175,7 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- Pseudo-3D perspective constants (scaled by `depth`).
     local DEPTH_THICK  = 0.85 * depth  -- forward points up to +85% thickness (closer = bigger)
     local DEPTH_LIFT_Y = 12   * depth  -- forward points lifted up (out of the flat plane), px
-    local DEPTH_LIFT_X = 6    * depth  -- and pushed slightly right, px
+    local DEPTH_LIFT_X = 0             -- no sideways push: the arc thrusts up the center at the target
     local ZOOM_MIN     = 0.78          -- scale at the start of the draw (far)
     local ZOOM_GROW    = 0.34 * depth  -- extra scale as it reveals (thrusts toward you)
     local ZOOM_TAIL    = 0.10 * depth  -- keeps growing a touch through the fade

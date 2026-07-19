@@ -2445,16 +2445,16 @@ end)
 -- =========================================================
 
 describe("SlashArcPoint", function()
-    it("starts at the base (bottom, slightly right of center)", function()
+    it("starts at the base (bottom, near center)", function()
         local x, y = Logic.SlashArcPoint(0)
-        assert.are.equal(0.15, x)
+        assert.are.equal(0.10, x)
         assert.are.equal(-1.00, y)
     end)
 
-    it("ends at the leading tip (upper right)", function()
+    it("ends at the leading tip (top, near center)", function()
         local x, y = Logic.SlashArcPoint(1)
-        assert.are.equal(0.80, x)
-        assert.are.equal(1.05, y)
+        assert.is_true(math.abs(x) < 0.2)  -- near center, not off to the right
+        assert.is_true(y > 1)
     end)
 
     it("veers LEFT of center through the lower-middle of the arc", function()
@@ -2473,8 +2473,8 @@ describe("SlashArcPoint", function()
     it("clamps u outside 0..1 to the endpoints", function()
         local x0, y0 = Logic.SlashArcPoint(-5)
         local x1, y1 = Logic.SlashArcPoint(5)
-        assert.are.equal(0.15, x0); assert.are.equal(-1.00, y0)
-        assert.are.equal(0.80, x1); assert.are.equal(1.05, y1)
+        assert.are.equal(0.10, x0); assert.are.equal(-1.00, y0)
+        assert.are.equal(0.08, x1); assert.are.equal(1.10, y1)
     end)
 end)
 
