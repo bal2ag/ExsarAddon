@@ -1057,10 +1057,10 @@ end
 function ExsarLogic.SlashArcPoint(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
     -- Control points: bottom(near center) -> pull left low -> left rising -> up the center.
-    local p0x, p0y =  0.10, -1.00
-    local p1x, p1y = -0.70, -0.30
-    local p2x, p2y = -0.35,  0.60
-    local p3x, p3y =  0.10,  1.15
+    local p0x, p0y =  0.13, -0.88
+    local p1x, p1y =  0.05, -0.30
+    local p2x, p2y = -0.61,  0.60
+    local p3x, p3y =  0.07,  1.23
     local mu = 1 - u
     local a = mu * mu * mu
     local b = 3 * mu * mu * u
@@ -1079,13 +1079,15 @@ end
 -- @return 0..1 thickness multiplier
 function ExsarLogic.SlashArcThickness(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
-    local PEAK = 0.34
+    local PEAK = 0.66
     -- Higher exponents pinch the ends to sharper points, for a sleek crescent
-    -- (thin, pointed tail + leading tip) rather than a rounded blob.
+    -- (thin, pointed tail + leading tip) rather than a rounded blob. A late PEAK
+    -- with a soft (< 1) tip exponent carries the belly forward and lets the
+    -- leading half stay full before tapering to the tip.
     if u <= PEAK then
-        return (u / PEAK) ^ 1.1
+        return (u / PEAK) ^ 1.10
     end
-    return ((1 - u) / (1 - PEAK)) ^ 1.5
+    return ((1 - u) / (1 - PEAK)) ^ 0.40
 end
 
 --- Depth profile along the arcing-slash crescent (pseudo-3D). Pure.
@@ -1098,11 +1100,11 @@ end
 -- @return 0..1 forwardness multiplier
 function ExsarLogic.SlashArcDepth(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
-    local PEAK = 0.62
+    local PEAK = 0.45
     if u <= PEAK then
-        return (u / PEAK) ^ 0.8
+        return (u / PEAK) ^ 2.15
     end
-    return ((1 - u) / (1 - PEAK)) ^ 0.8
+    return ((1 - u) / (1 - PEAK)) ^ 0.85
 end
 
 --- Parametrize the slash-flourish animation. Pure.
@@ -1112,13 +1114,13 @@ end
 -- the animation curve is testable without any frame.
 -- @param t           seconds elapsed since the slash triggered
 -- @param duration    total slash lifetime (s)
--- @param revealFrac  fraction of the lifetime spent extending the stroke (default 0.35)
+-- @param revealFrac  fraction of the lifetime spent extending the stroke (default 0.20)
 -- @return tip        0..1 how far along its length the stroke is currently drawn
 -- @return travel     0..1 how far it has swept along the up-forward direction
--- @return alpha      0..1 opacity (full until 45% of life, then fades to 0)
+-- @return alpha      0..1 opacity (full until 65% of life, then fades to 0)
 function ExsarLogic.SlashAnim(t, duration, revealFrac)
     duration = duration or 0.35
-    revealFrac = revealFrac or 0.35
+    revealFrac = revealFrac or 0.20
     if not t or t < 0 then t = 0 end
     if duration <= 0 then return 1, 1, 0 end
 
@@ -1130,7 +1132,7 @@ function ExsarLogic.SlashAnim(t, duration, revealFrac)
     local travel = travelDur > 0 and ((t - revealDur) / travelDur) or 1
     if travel < 0 then travel = 0 elseif travel > 1 then travel = 1 end
 
-    local fadeStart = duration * 0.45
+    local fadeStart = duration * 0.65
     local alpha = 1
     if t >= fadeStart and duration > fadeStart then
         alpha = 1 - (t - fadeStart) / (duration - fadeStart)

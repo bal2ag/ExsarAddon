@@ -1164,20 +1164,20 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     opts = opts or {}
     local SOFT_DOT  = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"  -- soft round alpha
     local duration  = opts.duration  or 0.40
-    local color     = opts.color     or { 1.0, 0.95, 0.55, 1.0 }
-    local length    = opts.length    or 30    -- arc reaches ~±length px (normalized coords)
-    local thickness = opts.thickness or 7     -- belly width of the core stroke (px) — thin, sleek blade
-    local stamps    = opts.stamps    or 72    -- soft dots along the curve (dense overlap = smooth)
-    local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
-    local depth     = opts.depth     or 1     -- pseudo-3D strength multiplier (0 = flat)
+    local color     = opts.color     or { 1.0, 1.0, 0.80, 1.0 }
+    local length    = opts.length    or 43    -- arc reaches ~±length px (normalized coords)
+    local thickness = opts.thickness or 6.5   -- belly width of the core stroke (px) — thin, sleek blade
+    local stamps    = opts.stamps    or 89    -- soft dots along the curve (dense overlap = smooth)
+    local travel    = opts.travel    or 8     -- how far the ribbon drifts up as it fades (px)
+    local depth     = opts.depth     or 1.25  -- pseudo-3D strength multiplier (0 = flat)
     local getScale  = opts.getScale  or function() return 1 end
 
     -- Pseudo-3D perspective constants (scaled by `depth`).
-    local DEPTH_SIZE   = 0.85 * depth  -- forward stamps up to +85% bigger (closer = bigger)
-    local DEPTH_LIFT_Y = 12   * depth  -- forward stamps lifted up (out of the flat plane), px
-    local ZOOM_MIN     = 0.78          -- scale at the start of the draw (far)
-    local ZOOM_GROW    = 0.34 * depth  -- extra scale as it reveals (thrusts toward you)
-    local ZOOM_TAIL    = 0.10 * depth  -- keeps growing a touch through the fade
+    local DEPTH_SIZE   = 1.05 * depth  -- forward stamps bigger (closer = bigger)
+    local DEPTH_LIFT_Y = 9    * depth  -- forward stamps lifted up (out of the flat plane), px
+    local ZOOM_MIN     = 0.98          -- scale at the start of the draw (far)
+    local ZOOM_GROW    = 0.56 * depth  -- extra scale as it reveals (thrusts toward you)
+    local ZOOM_TAIL    = 0.14 * depth  -- keeps growing a touch through the fade
 
     local f = CreateFrame("Frame", nil, UIParent)
     f:SetSize(length * 4, length * 4)
@@ -1189,8 +1189,8 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- Per-stamp alpha is low because many soft dots overlap and sum (additive),
     -- so the belly saturates while the ribbon edges fall off softly.
     local layers = {
-        { sizeMul = 2.0, alphaMul = 0.10, sub = "ARTWORK" },  -- glow halo
-        { sizeMul = 1.0, alphaMul = 0.24, sub = "OVERLAY" },  -- bright core
+        { sizeMul = 2.35, alphaMul = 0.27, sub = "ARTWORK" },  -- glow halo
+        { sizeMul = 1.0,  alphaMul = 0.24, sub = "OVERLAY" },  -- bright core
     }
     for _, layer in ipairs(layers) do
         layer.dot = {}

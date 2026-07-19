@@ -2420,9 +2420,23 @@ describe("SlashAnim", function()
         assert.are.equal(0, alpha)
     end)
 
-    it("holds full alpha until the fade start (45% of life)", function()
-        local _, _, alpha = Logic.SlashAnim(0.35 * 0.4, 0.35, 0.35)
+    it("holds full alpha until the fade start (65% of life)", function()
+        -- 55% of life is past the old 45% fade start but before the new 65% one.
+        local _, _, alpha = Logic.SlashAnim(0.35 * 0.55, 0.35, 0.35)
         assert.are.equal(1, alpha)
+    end)
+
+    it("defaults to a fast reveal (20%) and a late fade (65%)", function()
+        -- No revealFrac given → default 0.20. At 20% of life the stroke is fully
+        -- drawn and still fully opaque (fade starts at 65%).
+        local tip, _, alpha = Logic.SlashAnim(0.8 * 0.20, 0.8)
+        assert.is_true(tip >= 0.999)
+        assert.are.equal(1, alpha)
+        -- Still opaque at 60% of life, fading by 80%.
+        local _, _, aMid = Logic.SlashAnim(0.8 * 0.60, 0.8)
+        assert.are.equal(1, aMid)
+        local _, _, aLate = Logic.SlashAnim(0.8 * 0.80, 0.8)
+        assert.is_true(aLate < 1 and aLate > 0)
     end)
 
     it("treats negative time as t=0", function()
@@ -2447,8 +2461,8 @@ end)
 describe("SlashArcPoint", function()
     it("starts at the base (bottom, near center)", function()
         local x, y = Logic.SlashArcPoint(0)
-        assert.are.equal(0.10, x)
-        assert.are.equal(-1.00, y)
+        assert.are.equal(0.13, x)
+        assert.are.equal(-0.88, y)
     end)
 
     it("ends at the leading tip (top, near center)", function()
@@ -2473,8 +2487,8 @@ describe("SlashArcPoint", function()
     it("clamps u outside 0..1 to the endpoints", function()
         local x0, y0 = Logic.SlashArcPoint(-5)
         local x1, y1 = Logic.SlashArcPoint(5)
-        assert.are.equal(0.10, x0); assert.are.equal(-1.00, y0)
-        assert.are.equal(0.10, x1); assert.are.equal(1.15, y1)
+        assert.are.equal(0.13, x0); assert.are.equal(-0.88, y0)
+        assert.are.equal(0.07, x1); assert.are.equal(1.23, y1)
     end)
 end)
 
@@ -2488,12 +2502,12 @@ describe("SlashArcThickness", function()
         assert.are.equal(0, Logic.SlashArcThickness(1))
     end)
 
-    it("bellies out to full width near the peak (u=0.34)", function()
-        assert.are.equal(1, Logic.SlashArcThickness(0.34))
+    it("bellies out to full width near the peak (u=0.66)", function()
+        assert.are.equal(1, Logic.SlashArcThickness(0.66))
     end)
 
     it("is thicker at the belly than near either end", function()
-        local belly = Logic.SlashArcThickness(0.34)
+        local belly = Logic.SlashArcThickness(0.66)
         assert.is_true(belly > Logic.SlashArcThickness(0.05))
         assert.is_true(belly > Logic.SlashArcThickness(0.95))
     end)
@@ -2521,14 +2535,17 @@ describe("SlashArcDepth", function()
         assert.are.equal(0, Logic.SlashArcDepth(1))
     end)
 
-    it("bows fully forward at the peak (u=0.62)", function()
-        assert.are.equal(1, Logic.SlashArcDepth(0.62))
+    it("bows fully forward at the peak (u=0.45)", function()
+        assert.are.equal(1, Logic.SlashArcDepth(0.45))
     end)
 
-    it("bulges toward the tip side (peak past the middle)", function()
-        -- The forwardness peak is past u=0.5, so the leading half thrusts out.
-        assert.is_true(Logic.SlashArcDepth(0.62) >= Logic.SlashArcDepth(0.5))
-        assert.is_true(Logic.SlashArcDepth(0.7) > Logic.SlashArcDepth(0.3))
+    it("peaks near mid-arc with a steep, front-loaded rise", function()
+        -- Peak forwardness at u=0.45 dominates both ends.
+        assert.is_true(Logic.SlashArcDepth(0.45) >= Logic.SlashArcDepth(0.2))
+        assert.is_true(Logic.SlashArcDepth(0.45) >= Logic.SlashArcDepth(0.8))
+        -- Steep (exponent > 1) rise: halfway to the peak it is still well under
+        -- half forwardness, so the bow concentrates near the peak, not the base.
+        assert.is_true(Logic.SlashArcDepth(0.225) < 0.5)
     end)
 
     it("stays within 0..1 across the whole arc", function()
