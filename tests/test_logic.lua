@@ -2510,3 +2510,36 @@ describe("SlashArcThickness", function()
         assert.are.equal(0, Logic.SlashArcThickness(2))
     end)
 end)
+
+-- =========================================================
+-- SlashArcDepth
+-- =========================================================
+
+describe("SlashArcDepth", function()
+    it("is flat (no forwardness) at both endpoints", function()
+        assert.are.equal(0, Logic.SlashArcDepth(0))
+        assert.are.equal(0, Logic.SlashArcDepth(1))
+    end)
+
+    it("bows fully forward at the peak (u=0.62)", function()
+        assert.are.equal(1, Logic.SlashArcDepth(0.62))
+    end)
+
+    it("bulges toward the tip side (peak past the middle)", function()
+        -- The forwardness peak is past u=0.5, so the leading half thrusts out.
+        assert.is_true(Logic.SlashArcDepth(0.62) >= Logic.SlashArcDepth(0.5))
+        assert.is_true(Logic.SlashArcDepth(0.7) > Logic.SlashArcDepth(0.3))
+    end)
+
+    it("stays within 0..1 across the whole arc", function()
+        for i = 0, 20 do
+            local d = Logic.SlashArcDepth(i / 20)
+            assert.is_true(d >= 0 and d <= 1)
+        end
+    end)
+
+    it("clamps u outside 0..1", function()
+        assert.are.equal(0, Logic.SlashArcDepth(-1))
+        assert.are.equal(0, Logic.SlashArcDepth(2))
+    end)
+end)

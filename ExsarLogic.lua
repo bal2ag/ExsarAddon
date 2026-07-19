@@ -1085,6 +1085,23 @@ function ExsarLogic.SlashArcThickness(u)
     return ((1 - u) / (1 - PEAK)) ^ 0.9
 end
 
+--- Depth profile along the arcing-slash crescent (pseudo-3D). Pure.
+-- Returns a 0..1 "forwardness" — how far toward the viewer/enemy each point of
+-- the arc bows out of the flat plane. Bulges toward the tip side (peak at
+-- u=`PEAK`), so the leading half of the swipe reads as thrusting forward. The
+-- renderer maps this to perspective: forward points are drawn thicker, lifted,
+-- and (optionally) brighter, so the flat ribbon looks like it arcs out of screen.
+-- @param u  0..1 position along the arc
+-- @return 0..1 forwardness multiplier
+function ExsarLogic.SlashArcDepth(u)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    local PEAK = 0.62
+    if u <= PEAK then
+        return (u / PEAK) ^ 0.8
+    end
+    return ((1 - u) / (1 - PEAK)) ^ 0.8
+end
+
 --- Parametrize the slash-flourish animation. Pure.
 -- A slash stroke first REVEALS (extends from its start to full length over the
 -- first `revealFrac` of its life), then TRAVELS up-and-forward while FADING out.
