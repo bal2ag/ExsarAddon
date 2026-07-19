@@ -2455,6 +2455,115 @@ describe("SlashAnim", function()
 end)
 
 -- =========================================================
+-- SlashBurstThickness
+-- =========================================================
+
+describe("SlashBurstThickness", function()
+    it("is fattest at the midpoint", function()
+        assert.are.equal(1, Logic.SlashBurstThickness(0.5))
+    end)
+
+    it("tapers to nothing at both ends", function()
+        assert.are.equal(0, Logic.SlashBurstThickness(0))
+        assert.are.equal(0, Logic.SlashBurstThickness(1))
+    end)
+
+    it("is symmetric about the midpoint", function()
+        for _, d in ipairs({ 0.1, 0.25, 0.4, 0.49 }) do
+            local lo = Logic.SlashBurstThickness(0.5 - d)
+            local hi = Logic.SlashBurstThickness(0.5 + d)
+            assert.is_true(math.abs(lo - hi) < 1e-9)
+        end
+    end)
+
+    it("decreases monotonically away from the midpoint", function()
+        local prev = Logic.SlashBurstThickness(0.5)
+        for i = 1, 20 do
+            local v = Logic.SlashBurstThickness(0.5 + i * 0.025)
+            assert.is_true(v <= prev)
+            prev = v
+        end
+    end)
+
+    it("clamps out-of-range input", function()
+        assert.are.equal(0, Logic.SlashBurstThickness(-5))
+        assert.are.equal(0, Logic.SlashBurstThickness(5))
+        assert.are.equal(0, Logic.SlashBurstThickness(nil))
+    end)
+end)
+
+-- =========================================================
+-- SlashBurstAnim
+-- =========================================================
+
+describe("SlashBurstAnim", function()
+    it("starts with no gap and no opacity, then snaps in", function()
+        local gap, alpha = Logic.SlashBurstAnim(0, 0.30)
+        assert.are.equal(0, gap)
+        assert.are.equal(0, alpha)
+        -- Fully opaque by the end of the 10% snap phase, still un-erased.
+        local g2, a2 = Logic.SlashBurstAnim(0.30 * 0.10, 0.30)
+        assert.are.equal(0, g2)
+        assert.are.equal(1, a2)
+    end)
+
+    it("erases from the middle outward while staying fully opaque", function()
+        local gEarly, aEarly = Logic.SlashBurstAnim(0.30 * 0.25, 0.30)
+        local gLate,  aLate  = Logic.SlashBurstAnim(0.30 * 0.50, 0.30)
+        assert.is_true(gEarly > 0)
+        assert.is_true(gLate > gEarly)   -- the gap opens outward over time
+        assert.are.equal(1, aEarly)
+        assert.are.equal(1, aLate)
+    end)
+
+    it("leaves remnants at both ends rather than erasing everything", function()
+        -- Through the remnant hold and into the fade the gap must stay < 0.5, or
+        -- there would be nothing left on screen to fade out.
+        for _, p in ipairs({ 0.60, 0.75, 0.90, 1.00 }) do
+            local gap = Logic.SlashBurstAnim(0.30 * p, 0.30)
+            assert.is_true(gap < 0.5)
+        end
+    end)
+
+    it("fades the remnants to nothing by the end of life", function()
+        local _, alpha = Logic.SlashBurstAnim(0.30, 0.30)
+        assert.are.equal(0, alpha)
+    end)
+
+    it("never increases in opacity after the snap phase", function()
+        local prev = 1
+        for i = 10, 100 do
+            local _, alpha = Logic.SlashBurstAnim(0.30 * i / 100, 0.30)
+            assert.is_true(alpha <= prev + 1e-9)
+            prev = alpha
+        end
+    end)
+
+    it("clamps past the duration and treats negative time as t=0", function()
+        local gapPast, alphaPast = Logic.SlashBurstAnim(10, 0.30)
+        assert.is_true(gapPast < 0.5)
+        assert.are.equal(0, alphaPast)
+        local gapNeg, alphaNeg = Logic.SlashBurstAnim(-1, 0.30)
+        assert.are.equal(0, gapNeg)
+        assert.are.equal(0, alphaNeg)
+    end)
+
+    it("degrades gracefully with a zero duration", function()
+        local gap, alpha = Logic.SlashBurstAnim(0, 0)
+        assert.are.equal(0.5, gap)
+        assert.are.equal(0, alpha)
+    end)
+
+    it("scales its phases to any duration", function()
+        -- The same normalized point in the lifetime yields the same frame.
+        local gShort, aShort = Logic.SlashBurstAnim(0.15 * 0.40, 0.15)
+        local gLong,  aLong  = Logic.SlashBurstAnim(0.60 * 0.40, 0.60)
+        assert.is_true(math.abs(gShort - gLong) < 1e-9)
+        assert.is_true(math.abs(aShort - aLong) < 1e-9)
+    end)
+end)
+
+-- =========================================================
 -- SlashArcPoint
 -- =========================================================
 

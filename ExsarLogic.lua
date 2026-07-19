@@ -1144,6 +1144,88 @@ function ExsarLogic.SlashAnim(t, duration, revealFrac)
     return tip, travel, alpha
 end
 
+--- Symmetric thickness profile for the melee-hit burst slash. Pure.
+--- Unlike SlashArcThickness (a teardrop: fat base, fine tip — it reads as a blade
+--- sweeping away from you), this is a classic double-tapered blade: fattest at the
+--- midpoint, tapering evenly to fine points at BOTH ends. The burst animation eats
+--- the stroke outward from that midpoint, so a symmetric profile makes the two
+--- retreating halves read as mirror images and leaves balanced tip remnants.
+--- @param u  0..1 position along the arc
+--- @return 0..1 thickness multiplier
+function ExsarLogic.SlashBurstThickness(u)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    -- Distance from the midpoint, normalized to 0 (centre) .. 1 (either end).
+    local d = math.abs(u - 0.5) * 2
+    -- Exponent > 1 holds the belly wide through the middle then falls away near
+    -- the ends, giving crisp points rather than blunt stubs. Kept fairly high so
+    -- the burst's remnant fragments still have width when the gap stops opening.
+    return 1 - d ^ 1.90
+end
+
+--- Parametrize the melee-hit BURST slash animation. Pure.
+--- A different animation model from SlashAnim: instead of a stroke that reveals
+--- head-to-tip then drifts away (a flourish), this one SNAPS to full length, then
+--- erases itself from the MIDDLE OUTWARD — the two halves retract toward their
+--- respective ends, briefly leaving only the tip remnants, which then fade.
+--- Reads as a fast, decisive strike rather than a sweep, which is what a
+--- gameplay cue needs (MeleeHitFlash) versus a reward flourish (Windfury).
+---
+--- Four phases, as fractions of the lifetime:
+---   snap    (0 .. SNAP_END)      full stroke, alpha ramps in fast
+---   erase   (.. ERASE_END)       middle gap opens quickly to GAP_ERASE
+---   remnant (.. REMNANT_END)     gap creeps on; only the ends remain, alpha eases
+---   fade    (.. 1)               remnants fade to nothing
+---
+--- The renderer hides any stamp whose position u falls within `gap` of the
+--- curve's midpoint (0.5), so gap is a HALF-width: gap >= 0.5 erases everything.
+--- @param t         seconds elapsed since the burst triggered
+--- @param duration  total burst lifetime (s)
+--- @return gap      0..0.5 half-width of the erased middle band (in u space)
+--- @return alpha    0..1 opacity
+function ExsarLogic.SlashBurstAnim(t, duration)
+    duration = duration or 0.30
+    if not t or t < 0 then t = 0 end
+    if duration <= 0 then return 0.5, 0 end
+
+    -- Phase boundaries (fractions of lifetime) and the gap each phase reaches.
+    local SNAP_END, ERASE_END, REMNANT_END = 0.10, 0.55, 0.75
+    -- The gap is capped well short of 0.5 on purpose. Erasing nearly the whole
+    -- stroke leaves only the extreme tips, where the taper has already pinched the
+    -- width to a couple of pixels — the "remnants" then read as invisible specks
+    -- rather than as the ends of a blade. Stopping at ~0.34 keeps a real, visible
+    -- fragment at each end to carry the fade.
+    local GAP_ERASE, GAP_REMNANT, GAP_END  = 0.34, 0.38, 0.42
+    local REMNANT_ALPHA = 0.75
+
+    local p = t / duration
+    if p > 1 then p = 1 end
+
+    local gap, alpha
+    if p <= SNAP_END then
+        -- Snap in at full length: no gap yet, opacity ramps in over a few frames.
+        gap   = 0
+        alpha = SNAP_END > 0 and (p / SNAP_END) or 1
+    elseif p <= ERASE_END then
+        -- The strike "opens": the middle erases outward toward both ends. Eased
+        -- so it leaves the centre fast and decelerates into the remnant hold.
+        local k = (p - SNAP_END) / (ERASE_END - SNAP_END)
+        gap   = GAP_ERASE * (1 - (1 - k) * (1 - k))
+        alpha = 1
+    elseif p <= REMNANT_END then
+        -- Only the tip remnants are left; hold them briefly, easing the opacity.
+        local k = (p - ERASE_END) / (REMNANT_END - ERASE_END)
+        gap   = GAP_REMNANT * k + GAP_ERASE * (1 - k)
+        alpha = 1 - (1 - REMNANT_ALPHA) * k
+    else
+        local k = (p - REMNANT_END) / (1 - REMNANT_END)
+        gap   = GAP_END * k + GAP_REMNANT * (1 - k)
+        alpha = REMNANT_ALPHA * (1 - k)
+    end
+
+    if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    return gap, alpha
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

@@ -39,6 +39,7 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
   - [Range to Target](#range-to-target)
   - [Auto Shot Monitor](#auto-shot-monitor)
   - [Melee Weave Helper](#melee-weave-helper)
+  - [Melee Hit Flash](#melee-hit-flash)
   - [Pet Management](#pet-management)
   - [Aspects](#aspects)
   - [Traps](#traps)
@@ -533,6 +534,22 @@ A single **WEAVE NOW!** cue that lights up when it's a good moment to step in fo
 - **Context toggles + tuning:** Enable/disable per solo/party/raid, and tune the timing knobs (weave cost, shot-fit buffer, melee-ready lookahead, anti-flicker hold) with config sliders — defaulted to realistic values grounded in the actual timings, so you can nudge them to taste at a target dummy.
 
 <!-- ![Melee Weave Helper](screenshots/melee-weave-helper.png) -->
+
+### Melee Hit Flash
+
+![Experimental](https://img.shields.io/badge/Experimental-orange)
+
+A fast slash that flashes the instant your melee actually **connects**. Weaving happens too quickly to confirm off the swing timer mid-fight, so this turns "did that land?" into something you can catch out of the corner of your eye.
+
+- **When it fires:** The moment a melee attack lands — a white swing or a Raptor Strike. Misses, dodges and parries do **not** flash, so the cue only ever means "that hit."
+- **The animation:** A diagonal slash snaps on at full length, then erases itself from the middle outward — the two halves retreating toward their ends — leaving brief remnants at the top and bottom that fade away. It's deliberately quick (0.30s by default) and crisper than the Windfury flourish, because it's a gameplay cue rather than a reward: it resolves before your next decision.
+- **Move and size it anywhere:** Unlock the widget and the slash loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be hitting something to see it.
+- **Optional sound:** A hit sound can be enabled ("Play a sound on each melee hit"), off by default since it fires on every landed melee. You can drop your own `Sounds/meleehit.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
+- **Duration slider:** Tune how long the flash lasts (0.15–0.60s) to taste.
+- **Context toggles:** Enable or disable independently for solo, party, and raid.
+- **Commands:** `/exsar hitflashtest` fires the flash on demand; `/exsar hitflashreset` resets its position.
+
+<!-- ![Melee Hit Flash](screenshots/melee-hit-flash.png) -->
 
 ### Pet Management
 

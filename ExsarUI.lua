@@ -1168,7 +1168,11 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- construction — unlike a hard alpha-mask disc (TempPortraitAlphaMask), which
     -- just stacks into a fatter hard blob. Swap live with /exsar slashtex to A/B.
     local SOFT_DOT  = opts.dotTexture or "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle"
-    local duration  = opts.duration  or 0.40
+    -- Lifetime. May be a function so a config slider can retune it live; it is
+    -- resolved once per Trigger (never mid-animation, which would jump the curve).
+    local durationOpt = opts.duration or 0.40
+    local getDuration = type(durationOpt) == "function"
+        and durationOpt or function() return durationOpt end
     local color     = opts.color     or { 1.0, 1.0, 0.80, 1.0 }
     local length    = opts.length    or 54    -- arc reaches ~±length px (normalized coords)
     local thickness = opts.thickness or 8.1   -- belly width of the core stroke (px) — thin, sleek blade
@@ -1176,6 +1180,24 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
     local depth     = opts.depth     or 1.25  -- pseudo-3D strength multiplier (0 = flat)
     local getScale  = opts.getScale  or function() return 1 end
+
+    -- Reveal model. "sweep" (default) = the Windfury flourish: the stroke draws
+    -- itself base->tip, drifts up and fades (ExsarLogic.SlashAnim). "burst" = the
+    -- melee-hit cue: it snaps to full length, then erases from the MIDDLE OUTWARD
+    -- leaving briefly-held tip remnants (ExsarLogic.SlashBurstAnim). Burst is the
+    -- faster, more legible read wanted for a gameplay cue rather than a reward.
+    local burst = (opts.reveal == "burst")
+
+    -- Diffuseness lever for the glow halo layer. The soft-dot texture governs the
+    -- falloff SHAPE; this scales how big and bright the halo around the core is.
+    -- < 1 gives a tighter, harder-edged stroke (the melee cue wants to read as a
+    -- crisp blade, not a glow), > 1 a mistier one.
+    local softness  = opts.softness  or 1
+
+    -- Width profile along the stroke. Defaults to the teardrop crescent; the burst
+    -- model passes ExsarLogic.SlashBurstThickness for a symmetric double-tapered
+    -- blade, so its middle-out erase leaves balanced remnants at both ends.
+    local thicknessFn = opts.thicknessFn or ExsarLogic.SlashArcThickness
 
     -- Clockwise rotation (degrees) applied to the whole arc shape. y-up space, so
     -- CW θ is: x' = x·cosθ + y·sinθ ; y' = −x·sinθ + y·cosθ.
@@ -1201,7 +1223,8 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- stamp alpha is low because many soft dots overlap and sum (additive), so the
     -- belly saturates to a bright core while the glow falls off softly around it.
     local layers = {
-        { sizeMul = 2.35, alphaMul = 0.27, sub = "ARTWORK" },  -- soft glow halo
+        -- soft glow halo — `softness` tightens/loosens it without touching the core
+        { sizeMul = 1 + 1.35 * softness, alphaMul = 0.27 * softness, sub = "ARTWORK" },
         { sizeMul = 1.0,  alphaMul = 0.24, sub = "OVERLAY" },  -- bright core
     }
     for _, layer in ipairs(layers) do
@@ -1231,7 +1254,10 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- `travelFrac`, at overall opacity `alpha`. Applies the pseudo-3D perspective:
     -- forward (high-depth) stamps are bigger + lifted, and the whole swipe scales
     -- up as it draws so it reads as arcing toward the viewer.
-    local function render(headU, travelFrac, alpha)
+    -- `gap` is the burst model's erased middle band (half-width in u space, 0 for
+    -- the sweep model): any stamp within `gap` of the curve's midpoint is hidden,
+    -- so the stroke eats itself outward from the centre toward both ends.
+    local function render(headU, gap, travelFrac, alpha)
         local s = getScale()
         local L = length * s
         local driftY = travelFrac * travel * s
@@ -1241,13 +1267,14 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
             for i = 1, stamps do
                 local dot = layer.dot[i]
                 local u = (i - 1) / (stamps - 1)
-                if u > headU then
+                local erased = gap > 0 and math.abs(u - 0.5) < gap
+                if u > headU or erased then
                     dot:Hide()
                 else
                     local ax, ay = ExsarLogic.SlashArcPoint(u)
                     local x, y = ax * cosR + ay * sinR, -ax * sinR + ay * cosR
                     local d = ExsarLogic.SlashArcDepth(u)
-                    local dia = ExsarLogic.SlashArcThickness(u)
+                    local dia = thicknessFn(u)
                         * thickness * layer.sizeMul * s * zoom * (1 + d * DEPTH_SIZE)
                     if dia < 2 then dia = 2 end
                     local px = (x * L) * zoom
@@ -1261,22 +1288,35 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
         end
     end
 
+    -- Map elapsed time to the renderer's four inputs under the active model. The
+    -- burst model is always drawn at full length (headU = 1) and does not drift —
+    -- its motion is the middle-out erase, not a sweep.
+    local function frameAt(t, duration)
+        if burst then
+            local gap, alpha = ExsarLogic.SlashBurstAnim(t, duration)
+            return 1, gap, 0, alpha
+        end
+        local tip, travelFrac, alpha = ExsarLogic.SlashAnim(t, duration)
+        return tip, 0, travelFrac, alpha
+    end
+
     function SL:Trigger()
         self.startTime = GetTime()
+        self.duration  = getDuration() or 0.40
         self.active = true
-        render(ExsarLogic.SlashAnim(0, duration))
+        render(frameAt(0, self.duration))
         f:Show()
     end
 
     f:SetScript("OnUpdate", function()
         if not SL.active then return end
         local t = GetTime() - SL.startTime
-        if t >= duration then
+        if t >= SL.duration then
             SL.active = false
             f:Hide()
             return
         end
-        render(ExsarLogic.SlashAnim(t, duration))
+        render(frameAt(t, SL.duration))
     end)
 
     return SL

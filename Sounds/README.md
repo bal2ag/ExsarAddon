@@ -18,6 +18,18 @@ To use your own sound:
    files at launch, so a newly added file is invisible until relaunch.
 3. Test in-game with `/exsar wftest`.
 
+## Melee hit sound
+
+`MeleeHitFlash.lua` can play `Sounds/meleehit.ogg` each time a melee attack
+connects (see `HIT_SOUND`), with the same Whirlwind-whoosh fallback (FileDataID
+568519) when the file is absent. This sound is **off by default** — it fires on
+every landed melee, which is frequent enough to grate — so enable it with the
+"Play a sound on each melee hit" checkbox first.
+
+Same rules as above: `.ogg`, and a **full client restart** after adding the file.
+Test in-game with `/exsar hitflashtest`. Prefer something short and dry (a
+sub-150ms impact tick); a long whoosh will overlap itself during fast weaving.
+
 ## Regenerating windfury.ogg
 
 `windfury.ogg` is procedurally synthesized (a filtered-noise blade-whoosh — no
