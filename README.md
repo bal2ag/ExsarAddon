@@ -551,6 +551,23 @@ A fast slash that flashes the instant your melee actually **connects**. Weaving 
 
 <!-- ![Melee Hit Flash](screenshots/melee-hit-flash.png) -->
 
+### Auto Shot Flash
+
+![Experimental](https://img.shields.io/badge/Experimental-orange)
+
+A radial burst marking the exact instant an auto shot **leaves the bow**. Every timing decision in the rotation hangs off knowing when the last shot fired, and the swing timer only tells you when one is *due* — the shot itself can land up to half a second later. This is the confirmation, in your peripheral vision, with nothing to read.
+
+- **When it fires:** The moment the auto shot actually goes off, not when it was predicted. There's no combat gate, so the pull shot flashes too.
+- **The animation:** Energy compresses to a bright point at the centre, then radiates outward in all directions as a ring of streaks that stretch away from the flare and close up again as they reach the rim. It's the sibling of the Melee Hit Flash but deliberately **louder** — symmetric rather than directional, and in a cool white-blue against the melee cue's warm gold, so the two are never confused at a glance.
+- **Move and size it anywhere:** Unlock the widget and the burst loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be shooting anything to see it.
+- **Optional sound:** A fire sound can be enabled ("Play a sound on each auto shot"), off by default since an auto shot fires every few seconds all fight. You can drop your own `Sounds/autoshot.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
+- **Duration slider:** Tune how long the burst lasts (0.15–0.70s) to taste.
+- **Context toggles:** Enable or disable independently for solo, party, and raid.
+- **Commands:** `/exsar shotflashtest` fires the burst on demand; `/exsar shotflashreset` resets its position.
+- **Not a scorecard:** It only says *when* the shot fired, never whether it was clipped — that verdict is the Auto Shot Monitor's NO CLIP! / CLIP +x pop, which is meant to be read rather than glanced at.
+
+<!-- ![Auto Shot Flash](screenshots/auto-shot-flash.png) -->
+
 ### Pet Management
 
 ![Work in Progress](https://img.shields.io/badge/Work%20in%20Progress-yellow)

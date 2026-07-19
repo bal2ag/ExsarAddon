@@ -2675,3 +2675,166 @@ describe("SlashArcDepth", function()
         assert.are.equal(0, Logic.SlashArcDepth(2))
     end)
 end)
+
+-- =========================================================
+-- RadialRayLength
+-- =========================================================
+
+describe("RadialRayLength", function()
+    it("returns a 0..1 multiplier for every ray index", function()
+        for i = 1, 24 do
+            local v = Logic.RadialRayLength(i, 24)
+            assert.is_true(v > 0 and v <= 1)
+        end
+    end)
+
+    it("is deterministic across calls (the shape never jitters)", function()
+        for i = 1, 12 do
+            assert.are.equal(Logic.RadialRayLength(i, 18), Logic.RadialRayLength(i, 18))
+        end
+    end)
+
+    it("never gives two adjacent rays the same reach", function()
+        for i = 1, 24 do
+            assert.are_not.equal(
+                Logic.RadialRayLength(i, 24),
+                Logic.RadialRayLength(i + 1, 24)
+            )
+        end
+    end)
+
+    it("includes at least one full-reach ray in each cycle", function()
+        local sawFull = false
+        for i = 1, 4 do
+            if Logic.RadialRayLength(i, 18) == 1 then sawFull = true end
+        end
+        assert.is_true(sawFull)
+    end)
+
+    it("falls back to 1 for a non-numeric index", function()
+        assert.are.equal(1, Logic.RadialRayLength(nil, 18))
+    end)
+end)
+
+-- =========================================================
+-- RadialRayThickness
+-- =========================================================
+
+describe("RadialRayThickness", function()
+    it("tapers to nothing at both ends", function()
+        assert.are.equal(0, Logic.RadialRayThickness(0))
+        assert.are.equal(0, Logic.RadialRayThickness(1))
+    end)
+
+    it("peaks ahead of the midpoint (head-weighted streak)", function()
+        local peakU, peakV = 0, -1
+        for i = 0, 100 do
+            local u = i / 100
+            local v = Logic.RadialRayThickness(u)
+            if v > peakV then peakV, peakU = v, u end
+        end
+        assert.is_true(peakU > 0.5)
+        assert.are.equal(1, peakV)
+    end)
+
+    it("is fatter near the head than the mirrored point in the wake", function()
+        assert.is_true(Logic.RadialRayThickness(0.72) > Logic.RadialRayThickness(0.28))
+    end)
+
+    it("rises monotonically through the wake", function()
+        local prev = -1
+        for i = 0, 72 do
+            local v = Logic.RadialRayThickness(i / 100)
+            assert.is_true(v >= prev)
+            prev = v
+        end
+    end)
+
+    it("clamps u outside 0..1", function()
+        assert.are.equal(0, Logic.RadialRayThickness(-1))
+        assert.are.equal(0, Logic.RadialRayThickness(3))
+    end)
+end)
+
+-- =========================================================
+-- RadialBurstAnim
+-- =========================================================
+
+describe("RadialBurstAnim", function()
+    it("starts compressed at the centre with no ray extent", function()
+        local inner, outer, _, core = Logic.RadialBurstAnim(0, 0.35)
+        assert.are.equal(0, inner)
+        assert.are.equal(0, outer)
+        assert.are.equal(0, core)
+    end)
+
+    it("flares the core during the charge phase before the rays leave", function()
+        -- Charge ends at 12% of the lifetime.
+        local _, outer, _, core = Logic.RadialBurstAnim(0.35 * 0.06, 0.35)
+        assert.is_true(core > 0)
+        assert.is_true(outer <= 0.10)
+    end)
+
+    it("collapses the core as the rays expand", function()
+        local _, _, _, early = Logic.RadialBurstAnim(0.35 * 0.20, 0.35)
+        local _, _, _, late  = Logic.RadialBurstAnim(0.35 * 0.50, 0.35)
+        assert.is_true(early > late)
+    end)
+
+    it("keeps the leading edge at or ahead of the trailing edge", function()
+        for i = 0, 100 do
+            local inner, outer = Logic.RadialBurstAnim(0.35 * i / 100, 0.35)
+            assert.is_true(outer >= inner - 1e-9)
+        end
+    end)
+
+    it("expands the leading edge monotonically outward", function()
+        local prev = -1
+        for i = 0, 100 do
+            local _, outer = Logic.RadialBurstAnim(0.35 * i / 100, 0.35)
+            assert.is_true(outer >= prev - 1e-9)
+            prev = outer
+        end
+    end)
+
+    it("stretches each ray then closes it up again at the rim", function()
+        local function len(frac)
+            local inner, outer = Logic.RadialBurstAnim(0.35 * frac, 0.35)
+            return outer - inner
+        end
+        local mid = len(0.30)
+        assert.is_true(mid > len(0.12))   -- stretched out of the centre
+        assert.is_true(mid > len(0.62))   -- closed up into the rim
+    end)
+
+    it("reaches full radius by the end of the expand phase", function()
+        local _, outer = Logic.RadialBurstAnim(0.35 * 0.62, 0.35)
+        assert.is_true(outer > 0.99)
+    end)
+
+    it("holds full alpha until the fade, then reaches zero at the end", function()
+        local _, _, a1 = Logic.RadialBurstAnim(0.35 * 0.30, 0.35)
+        local _, _, a2 = Logic.RadialBurstAnim(0.35 * 0.80, 0.35)
+        local _, _, a3 = Logic.RadialBurstAnim(0.35, 0.35)
+        assert.are.equal(1, a1)
+        assert.is_true(a2 > 0 and a2 < 1)
+        assert.are.equal(0, a3)
+    end)
+
+    it("clamps past the end instead of running negative", function()
+        local inner, outer, alpha, core = Logic.RadialBurstAnim(99, 0.35)
+        assert.is_true(inner >= 0 and outer <= 1)
+        assert.are.equal(0, alpha)
+        assert.is_true(core >= 0)
+    end)
+
+    it("treats negative elapsed time as the start", function()
+        local _, outer = Logic.RadialBurstAnim(-1, 0.35)
+        assert.are.equal(0, outer)
+    end)
+
+    it("degrades safely on a zero duration", function()
+        local _, _, alpha = Logic.RadialBurstAnim(0.1, 0)
+        assert.are.equal(0, alpha)
+    end)
+end)

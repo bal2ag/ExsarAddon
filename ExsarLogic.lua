@@ -1226,6 +1226,104 @@ function ExsarLogic.SlashBurstAnim(t, duration)
     return gap, alpha
 end
 
+--- Per-ray radius multiplier for the radial burst. Pure.
+--- Rays of identical reach read as a mechanical wheel; varying the reach on a
+--- short repeating cycle gives the uneven, organic starburst silhouette wanted
+--- for "something just fired". Deterministic (no randomness) so the shape is
+--- identical every trigger and is unit-testable.
+--- @param i  1-based ray index
+--- @param n  total ray count (unused today; kept so the profile can depend on it)
+--- @return 0..1 multiplier on that ray's radius
+function ExsarLogic.RadialRayLength(i, n)  -- luacheck: no unused args
+    if type(i) ~= "number" then return 1 end
+    -- A 4-cycle rather than a 2-cycle: alternating long/short lands neighbouring
+    -- rays in visible pairs, while four values spread the variation around the
+    -- circle without any pair of adjacent rays matching.
+    local CYCLE = { 1.00, 0.72, 0.90, 0.62 }
+    local idx = (math.floor(i) - 1) % #CYCLE + 1
+    return CYCLE[idx]
+end
+
+--- Thickness profile along a single radial-burst ray. Pure.
+--- u = 0 is the trailing (inner) end, u = 1 the leading (outer) head. Unlike the
+--- slash profiles this is deliberately ASYMMETRIC and head-weighted: the streak
+--- is fattest just behind its leading edge and tapers to a fine trailing point,
+--- so each ray reads as a projectile with a wake rather than a symmetric dash.
+--- @param u  0..1 position along the ray (0 = inner/trailing, 1 = outer/head)
+--- @return 0..1 thickness multiplier
+function ExsarLogic.RadialRayThickness(u)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    local PEAK = 0.72
+    if u <= PEAK then
+        -- Exponent just under 1: the wake fattens steadily out of the tail point.
+        return (u / PEAK) ^ 0.90
+    end
+    -- Short, slightly rounded fall-off in front of the peak — a blunt head.
+    return ((1 - u) / (1 - PEAK)) ^ 0.80
+end
+
+--- Parametrize the radial-burst animation. Pure.
+--- The auto-shot cue's model, and a third animation shape alongside SlashAnim
+--- (sweep) and SlashBurstAnim (middle-out erase): energy COMPRESSES to a bright
+--- point and then RADIATES outward in all directions.
+---
+--- Three phases, as fractions of the lifetime:
+---   charge (0 .. CHARGE_END)   rays held compressed at the centre, core flares
+---   expand (.. EXPAND_END)     rays race outward, decelerating into the rim
+---   fade   (.. 1)              what is left fades out
+---
+--- Both radii are returned so the renderer can draw each ray as a streak between
+--- them. The trailing radius uses a higher easing exponent than the leading one,
+--- so a ray STRETCHES as it leaves the centre and then closes up again as it
+--- reaches the rim — the dissipating-shockwave read, rather than a ring of
+--- fixed-length dashes sliding outward.
+--- @param t         seconds elapsed since the burst triggered
+--- @param duration  total burst lifetime (s)
+--- @return inner    0..1 trailing radius of each ray (fraction of full radius)
+--- @return outer    0..1 leading radius of each ray (fraction of full radius)
+--- @return alpha    0..1 opacity of the rays
+--- @return core     0..1 intensity/scale of the central compression flash
+function ExsarLogic.RadialBurstAnim(t, duration)
+    duration = duration or 0.35
+    if not t or t < 0 then t = 0 end
+    if duration <= 0 then return 1, 1, 0, 0 end
+
+    local CHARGE_END, EXPAND_END = 0.12, 0.62
+    local START_R = 0.10   -- radius the rays sit at while compressed
+    local FADE_START = 0.60
+
+    local p = t / duration
+    if p > 1 then p = 1 end
+
+    local inner, outer, core
+    if p <= CHARGE_END then
+        local k = CHARGE_END > 0 and (p / CHARGE_END) or 1
+        -- Compressed: essentially a point. The core grows into its flare here,
+        -- which is what makes the following expansion read as a release.
+        inner = 0
+        outer = START_R * k
+        core  = k
+    else
+        local k = (p - CHARGE_END) / (EXPAND_END - CHARGE_END)
+        if k > 1 then k = 1 end
+        -- Decelerating outward travel: fast off the mark, easing into the rim.
+        local e = 1 - (1 - k) * (1 - k)
+        outer = START_R + (1 - START_R) * e
+        inner = START_R + (1 - START_R) * e ^ 2.40
+        -- The core collapses quickly once the rays are away.
+        core = (1 - k) * (1 - k)
+    end
+
+    local alpha = 1
+    if p >= FADE_START then
+        alpha = 1 - (p - FADE_START) / (1 - FADE_START)
+        if alpha < 0 then alpha = 0 end
+    end
+    if core < 0 then core = 0 elseif core > 1 then core = 1 end
+
+    return inner, outer, alpha, core
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

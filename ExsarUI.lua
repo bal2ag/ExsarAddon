@@ -1322,6 +1322,145 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     return SL
 end
 
+--- Create a radial BURST effect — energy compressing to a point and radiating
+--- outward in all directions — on its own UIParent-child frame anchored to
+--- `anchor`. The omnidirectional counterpart to CreateSlashEffect: same soft
+--- additive dot-brush rendering (so there are no hard facets), but the geometry
+--- is a ring of streaks flying out of a central flare rather than a traced arc.
+---
+--- Used by AutoShotFlash as a high-salience "the shot just left" cue. It is
+--- deliberately louder than the melee slash: an auto shot firing is the single
+--- most timing-critical event in the rotation, so the effect covers the widget
+--- symmetrically instead of reading as a directional stroke off to one side.
+---
+--- Animation comes from the pure ExsarLogic.RadialBurstAnim (radii/alpha/core),
+--- ExsarLogic.RadialRayLength (per-ray reach) and ExsarLogic.RadialRayThickness
+--- (streak profile), so the whole curve is testable without a frame.
+--- @param anchor  frame to centre the effect on
+--- @param opts    { duration (number|function), color, radius, rays, stamps,
+---                  thickness, softness, coreSize, rotation, dotTexture,
+---                  getScale, strata, xOffset, yOffset }
+--- @return burst  object with :Trigger() and :SetTexture(path)
+function ExsarUI.CreateRadialBurstEffect(anchor, opts)
+    opts = opts or {}
+    local SOFT_DOT = opts.dotTexture or "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle"
+    -- Lifetime may be a function so a config slider retunes it live; resolved
+    -- once per Trigger, never mid-animation (which would jump the curve).
+    local durationOpt = opts.duration or 0.35
+    local getDuration = type(durationOpt) == "function"
+        and durationOpt or function() return durationOpt end
+    local color     = opts.color     or { 1.0, 1.0, 0.85, 1.0 }
+    local radius    = opts.radius    or 62    -- px the leading edge reaches
+    local rays      = opts.rays      or 18    -- spokes around the circle
+    local stamps    = opts.stamps    or 7     -- soft dots per ray (overlapping)
+    local thickness = opts.thickness or 7     -- widest point of a ray (px)
+    local softness  = opts.softness  or 1     -- glow-halo size/brightness lever
+    local coreSize  = opts.coreSize  or 26    -- diameter of the central flare (px)
+    local rotation  = opts.rotation  or 0     -- degrees; offsets the spoke angles
+    local getScale  = opts.getScale  or function() return 1 end
+
+    local f = CreateFrame("Frame", nil, UIParent)
+    f:SetSize(radius * 3, radius * 3)
+    f:SetFrameStrata(opts.strata or "HIGH")
+    f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
+    f:Hide()
+
+    -- Same two-layer additive brush as the slash: a soft halo behind a bright
+    -- core, so overlapping stamps sum into a glowing streak with soft edges.
+    local layers = {
+        { sizeMul = 1 + 1.35 * softness, alphaMul = 0.27 * softness, sub = "ARTWORK" },
+        { sizeMul = 1.0, alphaMul = 0.26, sub = "OVERLAY" },
+    }
+    -- Pre-compute each ray's direction once — the spokes never move, only the
+    -- radii along them do.
+    local dirs = {}
+    for i = 1, rays do
+        local ang = math.rad(rotation) + (i - 1) * 2 * math.pi / rays
+        dirs[i] = { math.cos(ang), math.sin(ang), ExsarLogic.RadialRayLength(i, rays) }
+    end
+    for _, layer in ipairs(layers) do
+        layer.dot = {}
+        for i = 1, rays * stamps do
+            local t = f:CreateTexture(nil, layer.sub)
+            t:SetTexture(SOFT_DOT)
+            t:SetBlendMode("ADD")
+            t:SetVertexColor(color[1], color[2], color[3], layer.alphaMul)
+            layer.dot[i] = t
+        end
+    end
+
+    -- The central compression flare, drawn from the same brush so it blends into
+    -- the rays instead of reading as a separate sprite.
+    local coreDot = f:CreateTexture(nil, "OVERLAY")
+    coreDot:SetTexture(SOFT_DOT)
+    coreDot:SetBlendMode("ADD")
+    coreDot:SetPoint("CENTER", f, "CENTER", 0, 0)
+
+    local RB = { frame = f, active = false, startTime = 0, dotTexture = SOFT_DOT }
+
+    function RB:SetTexture(path)
+        self.dotTexture = path
+        for _, layer in ipairs(layers) do
+            for i = 1, rays * stamps do layer.dot[i]:SetTexture(path) end
+        end
+        coreDot:SetTexture(path)
+        return path
+    end
+
+    -- Draw every ray as a streak spanning inner..outer along its spoke, plus the
+    -- central flare at `core` intensity, all at overall opacity `alpha`.
+    local function render(inner, outer, alpha, core)
+        local s = getScale()
+        local R = radius * s
+        for _, layer in ipairs(layers) do
+            local a = layer.alphaMul * alpha
+            for i = 1, rays do
+                local dir = dirs[i]
+                local dx, dy, reach = dir[1], dir[2], dir[3]
+                for j = 1, stamps do
+                    local dot = layer.dot[(i - 1) * stamps + j]
+                    local u = stamps > 1 and (j - 1) / (stamps - 1) or 1
+                    local r = (inner + (outer - inner) * u) * reach * R
+                    local dia = ExsarLogic.RadialRayThickness(u)
+                        * thickness * layer.sizeMul * s
+                    if dia < 2 then dia = 2 end
+                    dot:SetSize(dia, dia)
+                    dot:SetPoint("CENTER", f, "CENTER", dx * r, dy * r)
+                    dot:SetVertexColor(color[1], color[2], color[3], a)
+                    dot:Show()
+                end
+            end
+        end
+        -- The flare shrinks as it discharges into the rays; alpha carries the
+        -- overall fade so it can never outlive them.
+        local dia = coreSize * s * (0.45 + 0.55 * core)
+        coreDot:SetSize(dia, dia)
+        coreDot:SetVertexColor(color[1], color[2], color[3], 0.85 * core * alpha)
+        coreDot:SetShown(core > 0 and alpha > 0)
+    end
+
+    function RB:Trigger()
+        self.startTime = GetTime()
+        self.duration  = getDuration() or 0.35
+        self.active = true
+        render(ExsarLogic.RadialBurstAnim(0, self.duration))
+        f:Show()
+    end
+
+    f:SetScript("OnUpdate", function()
+        if not RB.active then return end
+        local t = GetTime() - RB.startTime
+        if t >= RB.duration then
+            RB.active = false
+            f:Hide()
+            return
+        end
+        render(ExsarLogic.RadialBurstAnim(t, RB.duration))
+    end)
+
+    return RB
+end
+
 -- =========================================================
 -- Ranged weapon helpers
 -- =========================================================

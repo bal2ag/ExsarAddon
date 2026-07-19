@@ -44,3 +44,4 @@ EngineeringWidget.lua
 AutoShotMonitor.lua
 MeleeWeaveHelper.lua
 MeleeHitFlash.lua
+AutoShotFlash.lua
