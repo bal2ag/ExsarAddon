@@ -1142,65 +1142,64 @@ function ExsarUI.CreateComicPop(anchor, opts)
 end
 
 --- Slash Flourish — an arcing crescent blade-swipe that sweeps UP and FORWARD.
--- A tapered ribbon (a dark shadow underside + a wide glow + a bright core)
--- traced along the ExsarLogic.SlashArcPoint Bézier: the blade DRAWS ITSELF from
--- the bottom, veering left through the lower-middle then curving up and
--- finishing to the upper right — an anime/"Avatar"-style whipping-tail slash.
--- It swells from a fine point at the base to a full belly and tapers to a sharp
--- point at the leading tip (ExsarLogic.SlashArcThickness).
+-- A smooth tapered ribbon rendered as a BRUSH STROKE: a dense line of overlapping
+-- soft round dots (a soft-circle texture, additive-blended) stamped along the
+-- ExsarLogic.SlashArcPoint Bézier — so the stroke has no straight facets or hard
+-- corners, just soft glowing edges and a naturally rounded tip. The blade DRAWS
+-- ITSELF from the bottom, veering left through the lower-middle then curving back
+-- up the center to a leading tip — an anime/"Avatar"-style whipping-tail slash.
+-- It swells from a fine point at the base to a full belly and tapers to a soft
+-- point at the tip (ExsarLogic.SlashArcThickness).
 -- **Pseudo-3D:** ExsarLogic.SlashArcDepth bows the leading half toward the
--- viewer — forward points are drawn thicker + lifted, the whole swipe grows
--- (a "toward-you" zoom) as it draws, and a dark offset shadow layer gives the
--- ribbon volume, so it reads as arcing forward at the enemy rather than lying flat.
--- Reveals bottom→tip, drifts up, then fades, all over `duration`. Built from
--- `segments` short CreateLines per layer (WoW lines are straight, so the curve
--- is a polyline). Lives on its own UIParent-child frame anchored to `anchor`
--- (like CreateComicPop), so it fires even when the anchoring widget is hidden.
+-- viewer — forward stamps are drawn bigger + lifted, and the whole swipe grows
+-- (a "toward-you" zoom) as it draws, so it reads as arcing forward at the enemy
+-- rather than lying flat. Reveals bottom→tip, drifts up, then fades, all over
+-- `duration`. Lives on its own UIParent-child frame anchored to `anchor` (like
+-- CreateComicPop), so it fires even when the anchoring widget is hidden.
 -- Returns an object with :Trigger() (re-fires). Reveal/fade curve is SlashAnim.
 -- @param anchor  frame to anchor to (CENTER)
--- @param opts    { duration, color={r,g,b,a}, length, thickness, segments,
+-- @param opts    { duration, color={r,g,b,a}, length, thickness, stamps,
 --                  travel, depth, xOffset, yOffset, strata, getScale }
 function ExsarUI.CreateSlashEffect(anchor, opts)
     opts = opts or {}
+    local SOFT_DOT  = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"  -- soft round alpha
     local duration  = opts.duration  or 0.40
     local color     = opts.color     or { 1.0, 0.95, 0.55, 1.0 }
     local length    = opts.length    or 30    -- arc reaches ~±length px (normalized coords)
-    local thickness = opts.thickness or 14    -- belly width of the core stroke (px)
-    local segments  = opts.segments  or 60    -- polyline pieces approximating the curve (denser = smoother, no visible facets)
+    local thickness = opts.thickness or 15    -- belly width of the core stroke (px)
+    local stamps    = opts.stamps    or 64    -- soft dots along the curve (dense overlap = smooth)
     local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
     local depth     = opts.depth     or 1     -- pseudo-3D strength multiplier (0 = flat)
-    local baseA     = color[4] or 1
     local getScale  = opts.getScale  or function() return 1 end
 
     -- Pseudo-3D perspective constants (scaled by `depth`).
-    local DEPTH_THICK  = 0.85 * depth  -- forward points up to +85% thickness (closer = bigger)
-    local DEPTH_LIFT_Y = 12   * depth  -- forward points lifted up (out of the flat plane), px
-    local DEPTH_LIFT_X = 0             -- no sideways push: the arc thrusts up the center at the target
+    local DEPTH_SIZE   = 0.85 * depth  -- forward stamps up to +85% bigger (closer = bigger)
+    local DEPTH_LIFT_Y = 12   * depth  -- forward stamps lifted up (out of the flat plane), px
     local ZOOM_MIN     = 0.78          -- scale at the start of the draw (far)
     local ZOOM_GROW    = 0.34 * depth  -- extra scale as it reveals (thrusts toward you)
     local ZOOM_TAIL    = 0.10 * depth  -- keeps growing a touch through the fade
 
     local f = CreateFrame("Frame", nil, UIParent)
-    f:SetSize(length * 3, length * 3)
+    f:SetSize(length * 4, length * 4)
     f:SetFrameStrata(opts.strata or "HIGH")
     f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
     f:Hide()
 
-    -- Stacked layers, back to front: a soft dark halo hugging the body for
-    -- volume/underside (only slightly offset, wide + faint so it reads as shading,
-    -- not a blocky duplicate), a soft wide glow, then the crisp bright core.
-    local dark = { color[1] * 0.16, color[2] * 0.13, color[3] * 0.10 }
+    -- Two brush layers, additive: a wide soft glow behind a tighter bright core.
+    -- Per-stamp alpha is low because many soft dots overlap and sum (additive),
+    -- so the belly saturates while the ribbon edges fall off softly.
     local layers = {
-        { thickMul = 3.0, alphaMul = 0.22, sub = "BACKGROUND", col = dark,  ox = -1.5, oy = -3 },
-        { thickMul = 2.4, alphaMul = 0.32, sub = "ARTWORK",    col = color },
-        { thickMul = 1.0, alphaMul = baseA, sub = "OVERLAY",   col = color },
+        { sizeMul = 2.6, alphaMul = 0.13, sub = "ARTWORK" },  -- glow halo
+        { sizeMul = 1.0, alphaMul = 0.18, sub = "OVERLAY" },  -- bright core
     }
     for _, layer in ipairs(layers) do
-        layer.seg = {}
-        for i = 1, segments do
-            local line = f:CreateLine(nil, layer.sub)
-            line:SetColorTexture(layer.col[1], layer.col[2], layer.col[3], layer.alphaMul)
-            layer.seg[i] = line
+        layer.dot = {}
+        for i = 1, stamps do
+            local t = f:CreateTexture(nil, layer.sub)
+            t:SetTexture(SOFT_DOT)
+            t:SetBlendMode("ADD")
+            t:SetVertexColor(color[1], color[2], color[3], layer.alphaMul)
+            layer.dot[i] = t
         end
     end
 
@@ -1208,45 +1207,32 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
 
     -- Draw the arc revealed up to `headU` (0..1 along the curve), lifted by
     -- `travelFrac`, at overall opacity `alpha`. Applies the pseudo-3D perspective:
-    -- forward (high-depth) points are thicker + lifted, and the whole swipe
-    -- scales up as it draws so it reads as arcing toward the viewer.
+    -- forward (high-depth) stamps are bigger + lifted, and the whole swipe scales
+    -- up as it draws so it reads as arcing toward the viewer.
     local function render(headU, travelFrac, alpha)
         local s = getScale()
         local L = length * s
         local driftY = travelFrac * travel * s
         local zoom = ZOOM_MIN + ZOOM_GROW * headU + ZOOM_TAIL * travelFrac
-
-        -- Local: place a curve point with depth-lift + zoom, plus a px offset.
-        local function place(u, ox, oy)
-            local x, y = ExsarLogic.SlashArcPoint(u)
-            local d = ExsarLogic.SlashArcDepth(u)
-            local pxp = (x * L + d * DEPTH_LIFT_X * s) * zoom + ox * s
-            local pyp = (y * L + d * DEPTH_LIFT_Y * s) * zoom + oy * s + driftY
-            return pxp, pyp
-        end
-
         for _, layer in ipairs(layers) do
             local a = layer.alphaMul * alpha
-            local ox, oy = layer.ox or 0, layer.oy or 0
-            for i = 1, segments do
-                local line = layer.seg[i]
-                local u0 = (i - 1) / segments
-                if u0 >= headU then
-                    line:Hide()
+            for i = 1, stamps do
+                local dot = layer.dot[i]
+                local u = (i - 1) / (stamps - 1)
+                if u > headU then
+                    dot:Hide()
                 else
-                    local u1 = math.min(i / segments, headU)
-                    local umid = (u0 + u1) * 0.5
-                    local th = ExsarLogic.SlashArcThickness(umid)
-                        * thickness * layer.thickMul * s * zoom
-                        * (1 + ExsarLogic.SlashArcDepth(umid) * DEPTH_THICK)
-                    if th < 1 then th = 1 end
-                    local sx, sy = place(u0, ox, oy)
-                    local ex, ey = place(u1, ox, oy)
-                    line:SetThickness(th)
-                    line:SetStartPoint("CENTER", f, sx, sy)
-                    line:SetEndPoint("CENTER", f, ex, ey)
-                    line:SetColorTexture(layer.col[1], layer.col[2], layer.col[3], a)
-                    line:Show()
+                    local x, y = ExsarLogic.SlashArcPoint(u)
+                    local d = ExsarLogic.SlashArcDepth(u)
+                    local dia = ExsarLogic.SlashArcThickness(u)
+                        * thickness * layer.sizeMul * s * zoom * (1 + d * DEPTH_SIZE)
+                    if dia < 2 then dia = 2 end
+                    local px = (x * L) * zoom
+                    local py = (y * L + d * DEPTH_LIFT_Y * s) * zoom + driftY
+                    dot:SetSize(dia, dia)
+                    dot:SetPoint("CENTER", f, "CENTER", px, py)
+                    dot:SetVertexColor(color[1], color[2], color[3], a)
+                    dot:Show()
                 end
             end
         end

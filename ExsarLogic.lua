@@ -1059,8 +1059,8 @@ function ExsarLogic.SlashArcPoint(u)
     -- Control points: bottom(near center) -> pull left low -> left rising -> up the center.
     local p0x, p0y =  0.10, -1.00
     local p1x, p1y = -0.70, -0.30
-    local p2x, p2y = -0.45,  0.55
-    local p3x, p3y =  0.08,  1.10
+    local p2x, p2y = -0.35,  0.60
+    local p3x, p3y =  0.10,  1.15
     local mu = 1 - u
     local a = mu * mu * mu
     local b = 3 * mu * mu * u

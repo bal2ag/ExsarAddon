@@ -2474,7 +2474,7 @@ describe("SlashArcPoint", function()
         local x0, y0 = Logic.SlashArcPoint(-5)
         local x1, y1 = Logic.SlashArcPoint(5)
         assert.are.equal(0.10, x0); assert.are.equal(-1.00, y0)
-        assert.are.equal(0.08, x1); assert.are.equal(1.10, y1)
+        assert.are.equal(0.10, x1); assert.are.equal(1.15, y1)
     end)
 end)
 
