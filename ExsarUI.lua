@@ -1166,7 +1166,7 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     local color     = opts.color     or { 1.0, 0.95, 0.55, 1.0 }
     local length    = opts.length    or 30    -- arc reaches ~±length px (normalized coords)
     local thickness = opts.thickness or 14    -- belly width of the core stroke (px)
-    local segments  = opts.segments  or 20    -- polyline pieces approximating the curve
+    local segments  = opts.segments  or 34    -- polyline pieces approximating the curve (denser = smoother)
     local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
     local depth     = opts.depth     or 1     -- pseudo-3D strength multiplier (0 = flat)
     local baseA     = color[4] or 1
@@ -1186,11 +1186,12 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
     f:Hide()
 
-    -- Stacked layers, back to front: a dark offset shadow (volume/underside),
-    -- a soft wide glow, then the crisp bright core.
-    local dark = { color[1] * 0.14, color[2] * 0.12, color[3] * 0.10 }
+    -- Stacked layers, back to front: a soft dark halo hugging the body for
+    -- volume/underside (only slightly offset, wide + faint so it reads as shading,
+    -- not a blocky duplicate), a soft wide glow, then the crisp bright core.
+    local dark = { color[1] * 0.16, color[2] * 0.13, color[3] * 0.10 }
     local layers = {
-        { thickMul = 2.6, alphaMul = 0.30, sub = "BACKGROUND", col = dark,  ox = -4, oy = -6 },
+        { thickMul = 3.0, alphaMul = 0.22, sub = "BACKGROUND", col = dark,  ox = -1.5, oy = -3 },
         { thickMul = 2.4, alphaMul = 0.32, sub = "ARTWORK",    col = color },
         { thickMul = 1.0, alphaMul = baseA, sub = "OVERLAY",   col = color },
     }
