@@ -111,7 +111,12 @@ local S = {
     missPending     = false,  -- window expired unweaved; waiting on the auto to confirm
     missAnchor      = 0,      -- auto.lastShotTime when the MISS was armed
     missDeadline    = 0,      -- give up on the pending MISS after this time
+    wfPreviewNext   = 0,      -- next time to re-fire the unlocked Windfury preview slash
 }
+
+-- How often the Windfury slash re-fires in the unlocked preview loop. Leaves a
+-- clear gap after the ~0.35s animation so each swipe reads as a distinct pulse.
+local WF_PREVIEW_INTERVAL = 1.5
 
 local results = {}   -- reused range-probe results
 local auto  = ExsarUI.GetAutoShotTracker()
@@ -385,6 +390,14 @@ local function UpdateDisplay()
         frame:SetAlpha(PREVIEW_ALPHA)
         ShowPreviewContent()
         frame:Show()
+        -- Loop the Windfury slash (silently) so its placement can be previewed
+        -- while positioning the widget. Only when the effect is enabled.
+        if mwDB().windfuryEffect ~= false then
+            if now >= S.wfPreviewNext then
+                slash:Trigger()
+                S.wfPreviewNext = now + WF_PREVIEW_INTERVAL
+            end
+        end
     else
         HideCue()
         frame:Hide()
