@@ -49,7 +49,7 @@ local MIN_DURATION, MAX_DURATION = 0.15, 0.70
 -- this is the cue the user asked to be the least subtle in the addon.
 local BURST_COLOR     = { 0.62, 0.88, 1.00, 1.00 }
 local BURST_RADIUS    = 64
-local BURST_RAYS      = 18
+local BURST_RAYS      = 26
 local BURST_THICKNESS = 7.5
 local BURST_SOFTNESS  = 0.75   -- < 1 = tighter, crisper streaks
 local BURST_CORE      = 30     -- central compression flare diameter (px)
