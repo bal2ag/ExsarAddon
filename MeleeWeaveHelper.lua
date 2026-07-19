@@ -88,6 +88,12 @@ local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 local WINDFURY_SOUND = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
 local SLASH_DURATION = 0.8     -- slash flourish lifetime (s) — a quick, punchy sweep
 
+-- TEMP DIAGNOSTIC: persistent ring buffer for the Windfury-proc flourish, so a
+-- rare shaman-grouped repro can be captured and inspected later via /exsar wfdump
+-- (chat is useless mid-raid — see the diagnostic-persistence principle). Remove
+-- once the proc flourish is confirmed working.
+local WF_DEBUG_CAP = 80
+
 -- A MISS is only true once the auto shot has actually FIRED: the weave window
 -- closes ~weaveCost before the auto, and a retried swing can still land in that
 -- gap. So arm the MISS at window close and resolve it when the auto lands (or a
@@ -245,13 +251,97 @@ melee:OnLanded(OnMeleeLanded)
 -- eye-candy (own config toggle, default ON): a quick up-and-forward slash + a
 -- "whoosh". Windfury Totem grants a single extra attack, so one proc = one
 -- flourish (no de-dupe needed).
+-- ==========================================================================
+-- TEMP DIAGNOSTIC: Windfury-proc capture (remove once confirmed working)
+-- ==========================================================================
+-- Persists to ExsarAddonDB.meleeWeave.wfDebugLog so a rare shaman repro can be
+-- reviewed after the fact with /exsar wfdump. Captures the whole chain:
+--   raw     — every player SPELL_EXTRA_ATTACKS seen by an INDEPENDENT combat-log
+--             frame (does the event even arrive live? does the name match?)
+--   proc    — the shared melee tracker's OnWindfury callback actually fired
+--   gate    — gating result inside OnWindfuryProc (effect/context/combat)
+--   fire    — slash+sound dispatched
+--   test    — /exsar wftest force-fire
+local function wfLog(msg)
+    local db = mwDB()
+    local log = db.wfDebugLog or {}
+    log[#log + 1] = date("%H:%M:%S") .. "  " .. msg
+    while #log > WF_DEBUG_CAP do table.remove(log, 1) end
+    db.wfDebugLog = log
+    if db.wfDebugEcho then print("|cffffcc00[WeaveWF]|r " .. msg) end
+end
+
+-- Independent listener: proves whether the SPELL_EXTRA_ATTACKS event is delivered
+-- live and whether ExsarLogic.IsWindfuryProc matches its name — separate from the
+-- shared tracker, so we can tell "event never arrived" from "arrived, name didn't
+-- match" from "matched, but tracker/gating dropped it".
+local wfDiag = CreateFrame("Frame")
+wfDiag:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+wfDiag:SetScript("OnEvent", function()
+    local _, subEvent, _, srcGUID, _, _, _, _, _, _, _, spellId, spellName =
+        CombatLogGetCurrentEventInfo()
+    if subEvent ~= "SPELL_EXTRA_ATTACKS" then return end
+    if srcGUID ~= UnitGUID("player") then return end
+    wfLog(string.format("raw SPELL_EXTRA_ATTACKS id=%s name=%q matched=%s",
+        tostring(spellId), tostring(spellName),
+        tostring(ExsarLogic.IsWindfuryProc(subEvent, spellName))))
+end)
+
 local function OnWindfuryProc()
-    if mwDB().windfuryEffect == false then return end
-    if not (ContextEnabled() and UnitAffectingCombat("player")) then return end
+    local effect = mwDB().windfuryEffect
+    local ctx    = ContextEnabled()
+    local combat = UnitAffectingCombat("player")
+    wfLog(string.format("proc callback fired: effect=%s ctx=%s combat=%s",
+        tostring(effect), tostring(ctx), tostring(combat)))
+    if effect == false then wfLog("gate: DROPPED (effect off)"); return end
+    if not (ctx and combat) then wfLog("gate: DROPPED (context/combat)"); return end
+    wfLog("fire: slash + whoosh dispatched")
     slash:Trigger()
     PlaySoundFile(WINDFURY_SOUND, "Master")
 end
 melee:OnWindfury(OnWindfuryProc)
+
+-- /exsar wftest — force-fire the flourish (bypasses detection + gating) to bisect
+-- "effect broken" vs "detection broken". Named local so the config button reuses it.
+local function WFTest()
+    wfLog(string.format("test: force-fire (effect=%s ctx=%s combat=%s scale=%s)",
+        tostring(mwDB().windfuryEffect), tostring(ContextEnabled()),
+        tostring(UnitAffectingCombat("player")), tostring(mwDB().scale)))
+    slash:Trigger()
+    PlaySoundFile(WINDFURY_SOUND, "Master")
+    print("|cffffcc00[WeaveWF]|r wftest fired — did you see a slash + hear a whoosh?")
+end
+ExsarAddon.AddSlashCommand("wftest", WFTest)
+
+-- /exsar wfdump — open the captured log in a copy-paste window.
+local function WFDump()
+    local log = mwDB().wfDebugLog
+    if not log or #log == 0 then
+        print(ADDON_NAME .. ": no Windfury events captured yet.")
+        return
+    end
+    local lines = { ADDON_NAME .. " — " .. #log .. " Windfury diagnostic event(s)",
+        string.rep("-", 72) }
+    for _, line in ipairs(log) do lines[#lines + 1] = line end
+    ExsarUI.ShowCopyableText(table.concat(lines, "\n"),
+        { title = "ExsarAddon — Windfury Diagnostics" })
+end
+ExsarAddon.AddSlashCommand("wfdump", WFDump)
+
+-- /exsar wfclear — wipe the capture; /exsar wfecho — toggle live chat echo.
+ExsarAddon.AddSlashCommand("wfclear", function()
+    mwDB().wfDebugLog = nil
+    print(ADDON_NAME .. ": Windfury diagnostic log cleared.")
+end)
+ExsarAddon.AddSlashCommand("wfecho", function()
+    local db = mwDB()
+    db.wfDebugEcho = not db.wfDebugEcho
+    print(ADDON_NAME .. ": Windfury live chat echo " ..
+        (db.wfDebugEcho and "ON" or "OFF") .. " (capture always persists).")
+end)
+-- ==========================================================================
+-- END TEMP DIAGNOSTIC
+-- ==========================================================================
 
 -- =========================================================
 -- Cue rendering
@@ -479,7 +569,27 @@ ExsarAddon.RegisterModule({
             function() return mwDB().windfuryEffect ~= false end,
             function(v) mwDB().windfuryEffect = v end
         )
-        y = y - 30
+        y = y - 34
+
+        -- TEMP DIAGNOSTIC: Windfury-proc capture help + dump. Remove with the
+        -- rest of the WF diagnostic block once the flourish is confirmed working.
+        local wfNote = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        wfNote:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
+        wfNote:SetWidth(360)
+        wfNote:SetJustifyH("LEFT")
+        wfNote:SetText("|cffffcc00Windfury diagnostics (temporary):|r the flourish only "
+            .. "fires on a real Windfury Totem proc (needs a grouped shaman). Each proc "
+            .. "is captured to SavedVariables so it survives the fight and /reload.\n"
+            .. "  /exsar wftest  — force-fire the slash+whoosh now (no shaman needed)\n"
+            .. "  /exsar wfdump  — show the captured proc log (copy-paste window)\n"
+            .. "  /exsar wfclear — wipe the log   /exsar wfecho — live chat echo on/off\n"
+            .. "When you group with a shaman: /exsar wfclear, weave the fight, then "
+            .. "/exsar wfdump and send it over.")
+        y = y - 108
+
+        ExsarAddon.CreateButton(parent, "Test flourish now", 16, y, WFTest)
+        ExsarAddon.CreateButton(parent, "Show Windfury log", 190, y, WFDump)
+        y = y - 34
 
         y = AddKnobSlider(parent, y, "Weave cost (window/clip buffer, s)", "weaveCost", 0.2, 0.8, DEF_WEAVE_COST)
         y = AddKnobSlider(parent, y, "Shot-fit buffer (s)", "shotFitBuffer", 0.0, 0.5, DEF_SHOT_FIT_BUF)
