@@ -85,8 +85,23 @@ local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 -- extra-attack lands on your melee (Windfury Totem from a group shaman grants a
 -- single extra attack — one SPELL_EXTRA_ATTACKS proc, so no de-dupe needed).
 -- Pure celebration/feedback — gated behind its own config toggle.
-local WINDFURY_SOUND = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
+-- Custom bundled sound (drop your own .ogg at Sounds/windfury.ogg). PlaySoundFile
+-- takes a path OR a FileDataID; if the custom file is missing/unreadable it returns
+-- willPlay=false, so PlayWindfurySound falls back to the built-in Whirlwind whoosh.
+-- NOTE: a NEWLY added sound file needs a full client RESTART (not just /reload) —
+-- WoW indexes sound files at launch. Use .ogg (not .wav) on the Anniversary client.
+local WINDFURY_SOUND          = "Interface\\AddOns\\ExsarAddon\\Sounds\\windfury.ogg"
+local WINDFURY_SOUND_FALLBACK = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
 local SLASH_DURATION = 0.8     -- slash flourish lifetime (s) — a quick, punchy sweep
+
+-- Play the Windfury whoosh: the custom bundled file, or the built-in Whirlwind if
+-- that file isn't present (so it still whooshes before you've added your own).
+local function PlayWindfurySound()
+    local willPlay = PlaySoundFile(WINDFURY_SOUND, "Master")
+    if not willPlay and WINDFURY_SOUND_FALLBACK then
+        PlaySoundFile(WINDFURY_SOUND_FALLBACK, "Master")
+    end
+end
 
 -- TEMP DIAGNOSTIC: persistent ring buffer for the Windfury-proc flourish, so a
 -- rare shaman-grouped repro can be captured and inspected later via /exsar wfdump
@@ -184,8 +199,9 @@ end
 -- Windfury proc flourish: a blade-slash streaking up-and-forward, on the shared
 -- helper's own UIParent-child frame (fires even when the widget frame is hidden).
 local slash = ExsarUI.CreateSlashEffect(frame, {
-    duration = SLASH_DURATION,
-    getScale = function() return mwDB().scale or 1 end,
+    duration   = SLASH_DURATION,
+    dotTexture = "Interface\\Cooldown\\star4",  -- chosen in-game via /exsar slashtex
+    getScale   = function() return mwDB().scale or 1 end,
 })
 
 -- =========================================================
@@ -297,7 +313,7 @@ local function OnWindfuryProc()
     if not (ctx and combat) then wfLog("gate: DROPPED (context/combat)"); return end
     wfLog("fire: slash + whoosh dispatched")
     slash:Trigger()
-    PlaySoundFile(WINDFURY_SOUND, "Master")
+    PlayWindfurySound()
 end
 melee:OnWindfury(OnWindfuryProc)
 
@@ -308,10 +324,38 @@ local function WFTest()
         tostring(mwDB().windfuryEffect), tostring(ContextEnabled()),
         tostring(UnitAffectingCombat("player")), tostring(mwDB().scale)))
     slash:Trigger()
-    PlaySoundFile(WINDFURY_SOUND, "Master")
+    PlayWindfurySound()
     print("|cffffcc00[WeaveWF]|r wftest fired — did you see a slash + hear a whoosh?")
 end
 ExsarAddon.AddSlashCommand("wftest", WFTest)
+
+-- /exsar slashtex [path] — swap the slash brush texture live (no /reload) and
+-- re-fire, so we can A/B soft-glow textures while blind to the in-game render.
+-- With an explicit path it applies that; with no arg it cycles a candidate list.
+-- A wrong/missing path renders as a green square or nothing — that's the tell.
+local SLASH_TEX_CANDIDATES = {
+    "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle",   -- soft white radial (default)
+    "Interface\\Cooldown\\star4",                            -- softer star
+    "Interface\\Masks\\CircleMaskScalable",                  -- smooth circle mask
+    "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask",      -- the old hard disc (baseline)
+    "Interface\\GLUES\\MODELS\\UI_MainMenu_Legion\\GLOW",    -- big soft glow
+}
+local slashTexIdx = 0
+ExsarAddon.AddSlashCommand("slashtex", function(arg)
+    local path
+    if type(arg) == "string" then arg = arg:gsub("^%s*(.-)%s*$", "%1") end
+    if arg and arg ~= "" then
+        path = arg
+    else
+        slashTexIdx = (slashTexIdx % #SLASH_TEX_CANDIDATES) + 1
+        path = SLASH_TEX_CANDIDATES[slashTexIdx]
+    end
+    slash:SetTexture(path)
+    slash:Trigger()
+    PlayWindfurySound()
+    print("|cffffcc00[WeaveWF]|r slash texture -> |cff88ccff" .. path
+        .. "|r  (re-run /exsar slashtex to cycle; soft/diffuse = keeper)")
+end)
 
 -- /exsar wfdump — open the captured log in a copy-paste window.
 local function WFDump()

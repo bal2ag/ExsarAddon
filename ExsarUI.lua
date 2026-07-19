@@ -1156,25 +1156,35 @@ end
 -- rather than lying flat. Reveals bottom→tip, drifts up, then fades, all over
 -- `duration`. Lives on its own UIParent-child frame anchored to `anchor` (like
 -- CreateComicPop), so it fires even when the anchoring widget is hidden.
--- Returns an object with :Trigger() (re-fires). Reveal/fade curve is SlashAnim.
+-- Returns an object with :Trigger() (re-fires) and :SetTexture(path) (swap the
+-- stamp texture live). Reveal/fade curve is SlashAnim.
 -- @param anchor  frame to anchor to (CENTER)
 -- @param opts    { duration, color={r,g,b,a}, length, thickness, stamps,
---                  travel, depth, xOffset, yOffset, strata, getScale }
+--                  travel, depth, rotation, xOffset, yOffset, strata, getScale, dotTexture }
 function ExsarUI.CreateSlashEffect(anchor, opts)
     opts = opts or {}
-    local SOFT_DOT  = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"  -- soft round alpha
+    -- A genuinely SOFT round glow: a white→transparent radial. With ADD blend the
+    -- transparent edges contribute nothing, so the stamp falls off smoothly by
+    -- construction — unlike a hard alpha-mask disc (TempPortraitAlphaMask), which
+    -- just stacks into a fatter hard blob. Swap live with /exsar slashtex to A/B.
+    local SOFT_DOT  = opts.dotTexture or "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle"
     local duration  = opts.duration  or 0.40
     local color     = opts.color     or { 1.0, 1.0, 0.80, 1.0 }
-    local length    = opts.length    or 43    -- arc reaches ~±length px (normalized coords)
-    local thickness = opts.thickness or 6.5   -- belly width of the core stroke (px) — thin, sleek blade
+    local length    = opts.length    or 54    -- arc reaches ~±length px (normalized coords)
+    local thickness = opts.thickness or 8.1   -- belly width of the core stroke (px) — thin, sleek blade
     local stamps    = opts.stamps    or 89    -- soft dots along the curve (dense overlap = smooth)
-    local travel    = opts.travel    or 8     -- how far the ribbon drifts up as it fades (px)
+    local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
     local depth     = opts.depth     or 1.25  -- pseudo-3D strength multiplier (0 = flat)
     local getScale  = opts.getScale  or function() return 1 end
 
+    -- Clockwise rotation (degrees) applied to the whole arc shape. y-up space, so
+    -- CW θ is: x' = x·cosθ + y·sinθ ; y' = −x·sinθ + y·cosθ.
+    local rotation  = opts.rotation  or 45
+    local cosR, sinR = math.cos(math.rad(rotation)), math.sin(math.rad(rotation))
+
     -- Pseudo-3D perspective constants (scaled by `depth`).
     local DEPTH_SIZE   = 1.05 * depth  -- forward stamps bigger (closer = bigger)
-    local DEPTH_LIFT_Y = 9    * depth  -- forward stamps lifted up (out of the flat plane), px
+    local DEPTH_LIFT_Y = 11.25 * depth  -- forward stamps lifted up (out of the flat plane), px
     local ZOOM_MIN     = 0.98          -- scale at the start of the draw (far)
     local ZOOM_GROW    = 0.56 * depth  -- extra scale as it reveals (thrusts toward you)
     local ZOOM_TAIL    = 0.14 * depth  -- keeps growing a touch through the fade
@@ -1185,11 +1195,13 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
     f:Hide()
 
-    -- Two brush layers, additive: a wide soft glow behind a tighter bright core.
-    -- Per-stamp alpha is low because many soft dots overlap and sum (additive),
-    -- so the belly saturates while the ribbon edges fall off softly.
+    -- Two brush layers, additive: a soft glow halo behind a tighter bright core.
+    -- The diffuse look comes from the SOFT_DOT falloff (see above), not from piling
+    -- on extra width — a wide hard disc just reads as a fatter solid swoosh. Per-
+    -- stamp alpha is low because many soft dots overlap and sum (additive), so the
+    -- belly saturates to a bright core while the glow falls off softly around it.
     local layers = {
-        { sizeMul = 2.35, alphaMul = 0.27, sub = "ARTWORK" },  -- glow halo
+        { sizeMul = 2.35, alphaMul = 0.27, sub = "ARTWORK" },  -- soft glow halo
         { sizeMul = 1.0,  alphaMul = 0.24, sub = "OVERLAY" },  -- bright core
     }
     for _, layer in ipairs(layers) do
@@ -1203,7 +1215,17 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
         end
     end
 
-    local SL = { frame = f, active = false, startTime = 0 }
+    local SL = { frame = f, active = false, startTime = 0, dotTexture = SOFT_DOT }
+
+    -- Re-point every stamp at a new texture (live A/B of soft-glow textures via
+    -- /exsar slashtex, without a /reload). Returns the applied path.
+    function SL:SetTexture(path)
+        self.dotTexture = path
+        for _, layer in ipairs(layers) do
+            for i = 1, stamps do layer.dot[i]:SetTexture(path) end
+        end
+        return path
+    end
 
     -- Draw the arc revealed up to `headU` (0..1 along the curve), lifted by
     -- `travelFrac`, at overall opacity `alpha`. Applies the pseudo-3D perspective:
@@ -1222,7 +1244,8 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
                 if u > headU then
                     dot:Hide()
                 else
-                    local x, y = ExsarLogic.SlashArcPoint(u)
+                    local ax, ay = ExsarLogic.SlashArcPoint(u)
+                    local x, y = ax * cosR + ay * sinR, -ax * sinR + ay * cosR
                     local d = ExsarLogic.SlashArcDepth(u)
                     local dia = ExsarLogic.SlashArcThickness(u)
                         * thickness * layer.sizeMul * s * zoom * (1 + d * DEPTH_SIZE)

@@ -444,7 +444,7 @@ SlashCmdList["EXSAR"] = function(msg)
     elseif cmd == "debugframe" then
         DebugTargetFrameRegions()
     elseif slashHandlers[cmd] then
-        slashHandlers[cmd]()
+        slashHandlers[cmd](msg:match("^%S+%s+(.*)$"))
     else
         print(ADDON_NAME .. ": /exsar config - Open configuration")
         for c in pairs(slashHandlers) do

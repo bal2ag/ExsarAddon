@@ -1046,21 +1046,21 @@ function ExsarLogic.IsWindfuryProc(subEvent, spellName)
 end
 
 --- Point along the arcing-slash crescent path. Pure.
--- A cubic Bézier traced by parameter `u` in [0,1]: u=0 is the base (bottom of
--- the swipe), u=1 is the leading tip (top, near center). The path sweeps up from
--- the bottom, veers LEFT through the lower-middle, then curves back and finishes
--- UP THE CENTER — a blade arc thrusting toward the target (the forward/toward-you
--- motion is added by SlashArcDepth, not a sideways finish). Coordinates are
--- normalized to roughly [-1,1]; the renderer scales them.
+-- A cubic Bézier traced by parameter `u` in [0,1]: u=0 is the base (lower-RIGHT),
+-- u=1 is the leading tip (upper-LEFT). The path bows RIGHT through the lower-middle
+-- then swings back across — the forward/toward-you motion is added by SlashArcDepth.
+-- Coordinates are normalized to roughly [-1,1]. This is the UN-rotated base shape;
+-- CreateSlashEffect applies a clockwise `rotation` on top, so on screen the base
+-- ends up lower-left and the tip upper-right with the belly bulging right.
 -- @param u  0..1 position along the arc (0 = base, 1 = tip)
 -- @return x, y  normalized local coordinates
 function ExsarLogic.SlashArcPoint(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
-    -- Control points: bottom(near center) -> pull left low -> left rising -> up the center.
-    local p0x, p0y =  0.13, -0.88
-    local p1x, p1y =  0.05, -0.30
-    local p2x, p2y = -0.61,  0.60
-    local p3x, p3y =  0.07,  1.23
+    -- Control points: lower-right -> bow right low -> swing back -> tip up-left.
+    local p0x, p0y =  0.20, -0.90
+    local p1x, p1y =  0.55, -0.25
+    local p2x, p2y =  0.05,  0.65
+    local p3x, p3y = -0.28,  1.20
     local mu = 1 - u
     local a = mu * mu * mu
     local b = 3 * mu * mu * u
@@ -1072,22 +1072,24 @@ function ExsarLogic.SlashArcPoint(u)
 end
 
 --- Thickness profile along the arcing-slash crescent. Pure.
--- Returns a 0..1 width multiplier: the stroke swells from a fine point at the
--- base (u=0), bellies out to full width around u=`PEAK`, then tapers to a sharp
--- point at the leading tip (u=1) — a comma/whipping-tail silhouette.
+-- Returns a 0..1 width multiplier in a TEARDROP/comet silhouette: the stroke
+-- swells to a fat, rounded belly low near the base (around u=`PEAK`), then tapers
+-- over the long remaining stretch to a fine point at the leading tip (u=1).
+-- Fat-bottom → thin-top reads as a blade sweeping away-and-toward the enemy
+-- (depth), not a symmetric crescent.
 -- @param u  0..1 position along the arc
 -- @return 0..1 thickness multiplier
 function ExsarLogic.SlashArcThickness(u)
     if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
-    local PEAK = 0.66
-    -- Higher exponents pinch the ends to sharper points, for a sleek crescent
-    -- (thin, pointed tail + leading tip) rather than a rounded blob. A late PEAK
-    -- with a soft (< 1) tip exponent carries the belly forward and lets the
-    -- leading half stay full before tapering to the tip.
+    local PEAK = 0.12
+    -- An EARLY PEAK puts the full belly low near the base; the soft rise exponent
+    -- (< 1) fattens the very bottom quickly (a rounded head), and the tip exponent
+    -- (> 1) gives a long graceful taper to a fine point. The soft rounded ends
+    -- come from the round-dot brush.
     if u <= PEAK then
-        return (u / PEAK) ^ 1.10
+        return (u / PEAK) ^ 0.50
     end
-    return ((1 - u) / (1 - PEAK)) ^ 0.40
+    return ((1 - u) / (1 - PEAK)) ^ 1.30
 end
 
 --- Depth profile along the arcing-slash crescent (pseudo-3D). Pure.
