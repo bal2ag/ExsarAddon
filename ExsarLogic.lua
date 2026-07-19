@@ -1045,6 +1045,46 @@ function ExsarLogic.IsWindfuryProc(subEvent, spellName)
     return spellName:lower():find("windfury", 1, true) ~= nil
 end
 
+--- Point along the arcing-slash crescent path. Pure.
+-- A cubic Bézier traced by parameter `u` in [0,1]: u=0 is the base (bottom of
+-- the swipe), u=1 is the leading tip (upper right). The path sweeps from the
+-- bottom, veers LEFT through the lower-middle, then curves back and finishes
+-- UP-AND-RIGHT — an anime/"Avatar"-style blade arc. Coordinates are normalized
+-- to roughly [-1,1]; the renderer scales them.
+-- @param u  0..1 position along the arc (0 = base, 1 = tip)
+-- @return x, y  normalized local coordinates
+function ExsarLogic.SlashArcPoint(u)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    -- Control points: bottom(right of center) -> pull left low -> left rising -> upper right.
+    local p0x, p0y =  0.15, -1.00
+    local p1x, p1y = -0.85, -0.35
+    local p2x, p2y = -0.30,  0.55
+    local p3x, p3y =  0.80,  1.05
+    local mu = 1 - u
+    local a = mu * mu * mu
+    local b = 3 * mu * mu * u
+    local c = 3 * mu * u * u
+    local d = u * u * u
+    local x = a * p0x + b * p1x + c * p2x + d * p3x
+    local y = a * p0y + b * p1y + c * p2y + d * p3y
+    return x, y
+end
+
+--- Thickness profile along the arcing-slash crescent. Pure.
+-- Returns a 0..1 width multiplier: the stroke swells from a fine point at the
+-- base (u=0), bellies out to full width around u=`PEAK`, then tapers to a sharp
+-- point at the leading tip (u=1) — a comma/whipping-tail silhouette.
+-- @param u  0..1 position along the arc
+-- @return 0..1 thickness multiplier
+function ExsarLogic.SlashArcThickness(u)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    local PEAK = 0.32
+    if u <= PEAK then
+        return (u / PEAK) ^ 0.7
+    end
+    return ((1 - u) / (1 - PEAK)) ^ 0.9
+end
+
 --- Parametrize the slash-flourish animation. Pure.
 -- A slash stroke first REVEALS (extends from its start to full length over the
 -- first `revealFrac` of its life), then TRAVELS up-and-forward while FADING out.

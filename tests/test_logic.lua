@@ -2439,3 +2439,74 @@ describe("SlashAnim", function()
         assert.are.equal(0, alpha)
     end)
 end)
+
+-- =========================================================
+-- SlashArcPoint
+-- =========================================================
+
+describe("SlashArcPoint", function()
+    it("starts at the base (bottom, slightly right of center)", function()
+        local x, y = Logic.SlashArcPoint(0)
+        assert.are.equal(0.15, x)
+        assert.are.equal(-1.00, y)
+    end)
+
+    it("ends at the leading tip (upper right)", function()
+        local x, y = Logic.SlashArcPoint(1)
+        assert.are.equal(0.80, x)
+        assert.are.equal(1.05, y)
+    end)
+
+    it("veers LEFT of center through the lower-middle of the arc", function()
+        local x = Logic.SlashArcPoint(0.35)
+        assert.is_true(x < 0)
+    end)
+
+    it("rises monotonically from base to tip", function()
+        local _, yLow = Logic.SlashArcPoint(0.25)
+        local _, yMid = Logic.SlashArcPoint(0.5)
+        local _, yHigh = Logic.SlashArcPoint(0.75)
+        assert.is_true(yLow < yMid)
+        assert.is_true(yMid < yHigh)
+    end)
+
+    it("clamps u outside 0..1 to the endpoints", function()
+        local x0, y0 = Logic.SlashArcPoint(-5)
+        local x1, y1 = Logic.SlashArcPoint(5)
+        assert.are.equal(0.15, x0); assert.are.equal(-1.00, y0)
+        assert.are.equal(0.80, x1); assert.are.equal(1.05, y1)
+    end)
+end)
+
+-- =========================================================
+-- SlashArcThickness
+-- =========================================================
+
+describe("SlashArcThickness", function()
+    it("tapers to a point at both the base and the tip", function()
+        assert.are.equal(0, Logic.SlashArcThickness(0))
+        assert.are.equal(0, Logic.SlashArcThickness(1))
+    end)
+
+    it("bellies out to full width near the peak (u=0.32)", function()
+        assert.are.equal(1, Logic.SlashArcThickness(0.32))
+    end)
+
+    it("is thicker at the belly than near either end", function()
+        local belly = Logic.SlashArcThickness(0.32)
+        assert.is_true(belly > Logic.SlashArcThickness(0.05))
+        assert.is_true(belly > Logic.SlashArcThickness(0.95))
+    end)
+
+    it("stays within 0..1 across the whole arc", function()
+        for i = 0, 20 do
+            local t = Logic.SlashArcThickness(i / 20)
+            assert.is_true(t >= 0 and t <= 1)
+        end
+    end)
+
+    it("clamps u outside 0..1", function()
+        assert.are.equal(0, Logic.SlashArcThickness(-1))
+        assert.are.equal(0, Logic.SlashArcThickness(2))
+    end)
+end)

@@ -1141,63 +1141,81 @@ function ExsarUI.CreateComicPop(anchor, opts)
     return P
 end
 
---- Slash Flourish — a quick blade-swipe effect that slashes UP and FORWARD.
--- Two diagonal strokes (a bright core + a thinner trailing stroke) reveal from
--- their base, then streak up-and-to-the-right and fade, all over `duration`.
+--- Slash Flourish — an arcing crescent blade-swipe that sweeps UP and curves.
+-- A tapered ribbon (a wide translucent glow underlay + a bright core) traced
+-- along the ExsarLogic.SlashArcPoint Bézier: the blade DRAWS ITSELF from the
+-- bottom, veering left through the lower-middle then curving up and finishing
+-- to the upper right — an anime/"Avatar"-style whipping-tail slash. It swells
+-- from a fine point at the base to a full belly and tapers to a sharp point at
+-- the leading tip (ExsarLogic.SlashArcThickness). Reveals bottom→tip, drifts up
+-- slightly, then fades, all over `duration`. Built from `segments` short
+-- CreateLines per layer (WoW lines are straight, so the curve is a polyline).
 -- Lives on its own UIParent-child frame anchored to `anchor` (like CreateComicPop),
 -- so it fires even when the anchoring widget is hidden. Returns an object with
--- :Trigger() (re-fires from the start). Animation curve is ExsarLogic.SlashAnim.
+-- :Trigger() (re-fires from the start). Reveal/fade curve is ExsarLogic.SlashAnim.
 -- @param anchor  frame to anchor to (CENTER)
--- @param opts    { duration, color={r,g,b,a}, length, thickness, travel,
---                  angleX, angleY, xOffset, yOffset, strata, getScale }
+-- @param opts    { duration, color={r,g,b,a}, length, thickness, segments,
+--                  travel, xOffset, yOffset, strata, getScale }
 function ExsarUI.CreateSlashEffect(anchor, opts)
     opts = opts or {}
-    local duration  = opts.duration  or 0.35
-    local color     = opts.color     or { 1.0, 0.97, 0.65, 1.0 }
-    local length    = opts.length    or 48
-    local thickness = opts.thickness or 8
-    local travel    = opts.travel    or 30
-    -- Slash direction: up (+y) and forward (+x). Normalized-ish for a ~45° arc.
-    local dx        = opts.angleX    or 0.72
-    local dy        = opts.angleY    or 0.70
+    local duration  = opts.duration  or 0.40
+    local color     = opts.color     or { 1.0, 0.95, 0.55, 1.0 }
+    local length    = opts.length    or 30    -- arc reaches ~±length px (normalized coords)
+    local thickness = opts.thickness or 14    -- belly width of the core stroke (px)
+    local segments  = opts.segments  or 20    -- polyline pieces approximating the curve
+    local travel    = opts.travel    or 10    -- how far the ribbon drifts up as it fades (px)
+    local baseA     = color[4] or 1
     local getScale  = opts.getScale  or function() return 1 end
 
     local f = CreateFrame("Frame", nil, UIParent)
-    f:SetSize(length * 2, length * 2)
+    f:SetSize(length * 2.4, length * 2.4)
     f:SetFrameStrata(opts.strata or "HIGH")
     f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
     f:Hide()
 
-    -- Perpendicular to the slash direction, to offset the trailing stroke.
-    local px, py = -dy, dx
-    local strokes = {
-        { off =  0, thick = thickness,       a = color[4] or 1 },  -- bright core
-        { off = -7, thick = thickness * 0.5, a = (color[4] or 1) * 0.6 },  -- trailing wisp
+    -- Two stacked layers: a soft wide glow behind a crisp bright core.
+    local layers = {
+        { thickMul = 2.4, alphaMul = 0.32, sub = "ARTWORK" },  -- glow body
+        { thickMul = 1.0, alphaMul = baseA, sub = "OVERLAY" },  -- bright core
     }
-    for _, st in ipairs(strokes) do
-        st.line = f:CreateLine(nil, "OVERLAY")
-        st.line:SetColorTexture(color[1], color[2], color[3], st.a)
-        st.line:SetThickness(st.thick)
+    for _, layer in ipairs(layers) do
+        layer.seg = {}
+        for i = 1, segments do
+            local line = f:CreateLine(nil, layer.sub)
+            line:SetColorTexture(color[1], color[2], color[3], layer.alphaMul)
+            layer.seg[i] = line
+        end
     end
 
     local SL = { frame = f, active = false, startTime = 0 }
 
-    local function render(tip, travelFrac, alpha)
+    -- Draw the arc revealed up to `headU` (0..1 along the curve), lifted by
+    -- `travelFrac`, at overall opacity `alpha`.
+    local function render(headU, travelFrac, alpha)
         local s = getScale()
         local L = length * s
-        local tv = travel * travelFrac * s
-        for _, st in ipairs(strokes) do
-            local ox = (px * st.off) * s + dx * tv
-            local oy = (py * st.off) * s + dy * tv
-            -- Base start at lower-left of the stroke, end grows toward upper-right.
-            local sx = -dx * L / 2 + ox
-            local sy = -dy * L / 2 + oy
-            local ex = sx + dx * L * tip
-            local ey = sy + dy * L * tip
-            st.line:SetThickness(st.thick * s)
-            st.line:SetStartPoint("CENTER", f, sx, sy)
-            st.line:SetEndPoint("CENTER", f, ex, ey)
-            st.line:SetColorTexture(color[1], color[2], color[3], st.a * alpha)
+        local driftY = travelFrac * travel * s
+        for _, layer in ipairs(layers) do
+            local a = layer.alphaMul * alpha
+            for i = 1, segments do
+                local line = layer.seg[i]
+                local u0 = (i - 1) / segments
+                if u0 >= headU then
+                    line:Hide()
+                else
+                    local u1 = math.min(i / segments, headU)
+                    local x0, y0 = ExsarLogic.SlashArcPoint(u0)
+                    local x1, y1 = ExsarLogic.SlashArcPoint(u1)
+                    local th = ExsarLogic.SlashArcThickness((u0 + u1) * 0.5)
+                        * thickness * layer.thickMul * s
+                    if th < 1 then th = 1 end
+                    line:SetThickness(th)
+                    line:SetStartPoint("CENTER", f, x0 * L, y0 * L + driftY)
+                    line:SetEndPoint("CENTER", f, x1 * L, y1 * L + driftY)
+                    line:SetColorTexture(color[1], color[2], color[3], a)
+                    line:Show()
+                end
+            end
         end
     end
 
