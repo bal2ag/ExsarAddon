@@ -54,7 +54,12 @@ local SLASH_TEXTURE   = "Interface\\Cooldown\\star4"  -- matches the Windfury br
 -- spell FX there is no headroom, so the effect washes out exactly when it matters.
 -- A normal-blended near-black underlay supplies the one contrast the game world
 -- never draws, so the shape stays readable over anything. Live-tunable slider.
-local DEF_RIM = 0.65
+--
+-- Deliberately a LIGHT default: enough to define the stroke's edge against a
+-- bright backdrop, not enough to read as a drawn outline (a heavy rim makes the
+-- effect look cartoonish rather than energetic). Raise it via the slider if it
+-- still washes out in a raid.
+local DEF_RIM = 0.22
 local MIN_RIM, MAX_RIM = 0.0, 1.0
 
 -- Optional hit sound. Default OFF: this fires on every landed melee, which is
