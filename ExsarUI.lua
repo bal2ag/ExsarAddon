@@ -1227,46 +1227,13 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
         { sizeMul = 1 + 1.35 * softness, alphaMul = 0.27 * softness, sub = "ARTWORK" },
         { sizeMul = 1.0,  alphaMul = 0.24, sub = "OVERLAY" },  -- bright core
     }
-
-    -- Optional DARK RIM (`opts.rim`, 0..1 strength; 0/absent = off).
-    --
-    -- Why this exists: the two layers above are ADD-blended, and ADD can only add
-    -- light. Against a busy combat backdrop — itself a saturated field of bright
-    -- additive spell FX — there is no headroom left, so the stroke sums into the
-    -- glare and reads as subtle exactly when it matters most. Brightness, alpha and
-    -- thickness all push the direction the environment is already saturating, so
-    -- none of them can fix it.
-    --
-    -- Dark is the one thing the game world essentially never draws. A normal-blended
-    -- near-black underlay slightly wider than the glow gives the stroke a contour
-    -- that survives any backdrop — the same reason Blizzard renders UI text with
-    -- OUTLINE rather than just brightening the font. It stays a soft brush (same
-    -- SOFT_DOT falloff), so this darkens the stroke's surroundings without
-    -- introducing the hard facets the additive layers were tuned to avoid.
-    --
-    -- Opt-in, NOT default: it trades some of the pure-glow identity for legibility.
-    -- The gameplay cues (MeleeHitFlash / AutoShotFlash) take it because being read
-    -- mid-fight is their whole job; the Windfury flourish deliberately does not.
-    local rimLayer
-    if (opts.rim or 0) > 0 then
-        rimLayer = {
-            sizeMul  = 1 + 2.20 * softness,
-            alphaMul = 0.55 * opts.rim,
-            sub      = "BACKGROUND",
-            blend    = "BLEND",
-            color    = opts.rimColor or { 0, 0, 0 },
-        }
-        table.insert(layers, 1, rimLayer)
-    end
-
     for _, layer in ipairs(layers) do
-        layer.color = layer.color or color
         layer.dot = {}
         for i = 1, stamps do
             local t = f:CreateTexture(nil, layer.sub)
             t:SetTexture(SOFT_DOT)
-            t:SetBlendMode(layer.blend or "ADD")
-            t:SetVertexColor(layer.color[1], layer.color[2], layer.color[3], layer.alphaMul)
+            t:SetBlendMode("ADD")
+            t:SetVertexColor(color[1], color[2], color[3], layer.alphaMul)
             layer.dot[i] = t
         end
     end
@@ -1281,12 +1248,6 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
             for i = 1, stamps do layer.dot[i]:SetTexture(path) end
         end
         return path
-    end
-
-    -- Live rim-strength tuning (config slider, no /reload). No-op when the effect
-    -- was built without a rim — the layer only exists if `opts.rim` was set.
-    function SL:SetRim(strength)
-        if rimLayer then rimLayer.alphaMul = 0.55 * (strength or 0) end
     end
 
     -- Draw the arc revealed up to `headU` (0..1 along the curve), lifted by
@@ -1320,7 +1281,7 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
                     local py = (y * L + d * DEPTH_LIFT_Y * s) * zoom + driftY
                     dot:SetSize(dia, dia)
                     dot:SetPoint("CENTER", f, "CENTER", px, py)
-                    dot:SetVertexColor(layer.color[1], layer.color[2], layer.color[3], a)
+                    dot:SetVertexColor(color[1], color[2], color[3], a)
                     dot:Show()
                 end
             end
@@ -1410,21 +1371,6 @@ function ExsarUI.CreateRadialBurstEffect(anchor, opts)
         { sizeMul = 1 + 1.35 * softness, alphaMul = 0.27 * softness, sub = "ARTWORK" },
         { sizeMul = 1.0, alphaMul = 0.26, sub = "OVERLAY" },
     }
-    -- Optional dark rim under the additive layers — see the long rationale on
-    -- CreateSlashEffect's `opts.rim`. Short version: ADD blending has no headroom
-    -- against a bright combat backdrop, and dark is the one contrast the world
-    -- never supplies.
-    local rimLayer
-    if (opts.rim or 0) > 0 then
-        rimLayer = {
-            sizeMul  = 1 + 2.20 * softness,
-            alphaMul = 0.55 * opts.rim,
-            sub      = "BACKGROUND",
-            blend    = "BLEND",
-            color    = opts.rimColor or { 0, 0, 0 },
-        }
-        table.insert(layers, 1, rimLayer)
-    end
     -- Pre-compute each ray's direction once — the spokes never move, only the
     -- radii along them do.
     local dirs = {}
@@ -1433,13 +1379,12 @@ function ExsarUI.CreateRadialBurstEffect(anchor, opts)
         dirs[i] = { math.cos(ang), math.sin(ang), ExsarLogic.RadialRayLength(i, rays) }
     end
     for _, layer in ipairs(layers) do
-        layer.color = layer.color or color
         layer.dot = {}
         for i = 1, rays * stamps do
             local t = f:CreateTexture(nil, layer.sub)
             t:SetTexture(SOFT_DOT)
-            t:SetBlendMode(layer.blend or "ADD")
-            t:SetVertexColor(layer.color[1], layer.color[2], layer.color[3], layer.alphaMul)
+            t:SetBlendMode("ADD")
+            t:SetVertexColor(color[1], color[2], color[3], layer.alphaMul)
             layer.dot[i] = t
         end
     end
@@ -1462,11 +1407,6 @@ function ExsarUI.CreateRadialBurstEffect(anchor, opts)
         return path
     end
 
-    -- Live rim-strength tuning (config slider, no /reload); no-op without a rim.
-    function RB:SetRim(strength)
-        if rimLayer then rimLayer.alphaMul = 0.55 * (strength or 0) end
-    end
-
     -- Draw every ray as a streak spanning inner..outer along its spoke, plus the
     -- central flare at `core` intensity, all at overall opacity `alpha`.
     local function render(inner, outer, alpha, core)
@@ -1486,7 +1426,7 @@ function ExsarUI.CreateRadialBurstEffect(anchor, opts)
                     if dia < 2 then dia = 2 end
                     dot:SetSize(dia, dia)
                     dot:SetPoint("CENTER", f, "CENTER", dx * r, dy * r)
-                    dot:SetVertexColor(layer.color[1], layer.color[2], layer.color[3], a)
+                    dot:SetVertexColor(color[1], color[2], color[3], a)
                     dot:Show()
                 end
             end
