@@ -49,6 +49,14 @@ local SLASH_SOFTNESS  = 0.55   -- < 1 = tighter, harder-edged stroke
 local SLASH_DEPTH     = 0.35   -- much flatter than the flourish's 1.25
 local SLASH_TEXTURE   = "Interface\\Cooldown\\star4"  -- matches the Windfury brush
 
+-- Dark rim strength (0 = off, 1 = full). The bright brush layers are ADD-blended,
+-- which can only add light — against a busy combat backdrop of bright additive
+-- spell FX there is no headroom, so the effect washes out exactly when it matters.
+-- A normal-blended near-black underlay supplies the one contrast the game world
+-- never draws, so the shape stays readable over anything. Live-tunable slider.
+local DEF_RIM = 0.65
+local MIN_RIM, MAX_RIM = 0.0, 1.0
+
 -- Optional hit sound. Default OFF: this fires on every landed melee, which is
 -- frequent enough to grate. Same custom-file-with-fallback pattern as the
 -- Windfury whoosh — drop your own Sounds/meleehit.ogg (a NEWLY added sound file
@@ -73,6 +81,11 @@ local S = {
 local function Duration()
     local v = mhDB().duration
     return type(v) == "number" and v or DEF_DURATION
+end
+
+local function Rim()
+    local v = mhDB().rim
+    return type(v) == "number" and v or DEF_RIM
 end
 
 local function PlayHitSound()
@@ -112,6 +125,7 @@ local slash = ExsarUI.CreateSlashEffect(frame, {
     softness    = SLASH_SOFTNESS,
     depth       = SLASH_DEPTH,
     dotTexture  = SLASH_TEXTURE,
+    rim         = DEF_RIM,   -- live via slash:SetRim below
     getScale    = function() return mhDB().scale or 1 end,
 })
 
@@ -140,6 +154,7 @@ end
 -- =========================================================
 
 local function FireFlash(withSound)
+    slash:SetRim(Rim())   -- resolved per fire, so the slider applies without a reload
     slash:Trigger()
     if withSound and mhDB().hitSound == true then PlayHitSound() end
 end
@@ -250,6 +265,13 @@ ExsarAddon.RegisterModule({
             MIN_DURATION, MAX_DURATION, 0.05,
             function() return Duration() end,
             function(v) mhDB().duration = math.floor(v * 20 + 0.5) / 20 end
+        )
+        y = y - 55
+
+        ExsarAddon.CreateSlider(parent, "Dark rim (contrast)", 16, y,
+            MIN_RIM, MAX_RIM, 0.05,
+            function() return Rim() end,
+            function(v) mhDB().rim = math.floor(v * 20 + 0.5) / 20 end
         )
         y = y - 55
 

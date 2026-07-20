@@ -52,8 +52,17 @@ local BURST_RADIUS    = 64
 local BURST_RAYS      = 26
 local BURST_THICKNESS = 7.5
 local BURST_SOFTNESS  = 0.75   -- < 1 = tighter, crisper streaks
+
 local BURST_CORE      = 30     -- central compression flare diameter (px)
 local BURST_TEXTURE   = "Interface\\Cooldown\\star4"  -- same brush as the slash cues
+
+-- Dark rim strength (0 = off, 1 = full). The bright brush layers are ADD-blended,
+-- which can only add light — against a busy combat backdrop of bright additive
+-- spell FX there is no headroom, so the effect washes out exactly when it matters.
+-- A normal-blended near-black underlay supplies the one contrast the game world
+-- never draws, so the shape stays readable over anything. Live-tunable slider.
+local DEF_RIM = 0.65
+local MIN_RIM, MAX_RIM = 0.0, 1.0
 
 -- Optional fire sound. Default OFF, same reasoning as the melee hit sound: an
 -- auto shot fires every few seconds all fight long. Same custom-file-with-
@@ -79,6 +88,11 @@ local S = {
 local function Duration()
     local v = asDB().duration
     return type(v) == "number" and v or DEF_DURATION
+end
+
+local function Rim()
+    local v = asDB().rim
+    return type(v) == "number" and v or DEF_RIM
 end
 
 local function PlayFireSound()
@@ -117,6 +131,7 @@ local burst = ExsarUI.CreateRadialBurstEffect(frame, {
     softness   = BURST_SOFTNESS,
     coreSize   = BURST_CORE,
     dotTexture = BURST_TEXTURE,
+    rim        = DEF_RIM,   -- live via burst:SetRim below
     getScale   = function() return asDB().scale or 1 end,
 })
 
@@ -145,6 +160,7 @@ end
 -- =========================================================
 
 local function FireFlash(withSound)
+    burst:SetRim(Rim())   -- resolved per fire, so the slider applies without a reload
     burst:Trigger()
     if withSound and asDB().fireSound == true then PlayFireSound() end
 end
@@ -259,6 +275,13 @@ ExsarAddon.RegisterModule({
             MIN_DURATION, MAX_DURATION, 0.05,
             function() return Duration() end,
             function(v) asDB().duration = math.floor(v * 20 + 0.5) / 20 end
+        )
+        y = y - 55
+
+        ExsarAddon.CreateSlider(parent, "Dark rim (contrast)", 16, y,
+            MIN_RIM, MAX_RIM, 0.05,
+            function() return Rim() end,
+            function(v) asDB().rim = math.floor(v * 20 + 0.5) / 20 end
         )
         y = y - 55
 
