@@ -546,6 +546,7 @@ A fast slash that flashes the instant your melee actually **connects**. Weaving 
 - **Move and size it anywhere:** Unlock the widget and the slash loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be hitting something to see it.
 - **Optional sound:** A hit sound can be enabled ("Play a sound on each melee hit"), off by default since it fires on every landed melee. You can drop your own `Sounds/meleehit.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
 - **Duration slider:** Tune how long the flash lasts (0.15–1.50s) to taste.
+- **Dark rim slider:** Adds a dark contour under the bright stroke so it stays readable against busy combat backdrops. The bright layers are additive and can only add light, which washes out against spell FX; the rim supplies contrast the game world never draws. Set to 0 for the original pure-glow look.
 - **Context toggles:** Enable or disable independently for solo, party, and raid.
 - **Commands:** `/exsar hitflashtest` fires the flash on demand; `/exsar hitflashreset` resets its position.
 
@@ -562,6 +563,7 @@ A radial burst marking the exact instant an auto shot **leaves the bow**. Every 
 - **Move and size it anywhere:** Unlock the widget and the burst loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be shooting anything to see it.
 - **Optional sound:** A fire sound can be enabled ("Play a sound on each auto shot"), off by default since an auto shot fires every few seconds all fight. You can drop your own `Sounds/autoshot.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
 - **Duration slider:** Tune how long the burst lasts (0.15–1.50s) to taste.
+- **Dark rim slider:** Adds a dark contour under the bright stroke so it stays readable against busy combat backdrops. The bright layers are additive and can only add light, which washes out against spell FX; the rim supplies contrast the game world never draws. Set to 0 for the original pure-glow look.
 - **Context toggles:** Enable or disable independently for solo, party, and raid.
 - **Commands:** `/exsar shotflashtest` fires the burst on demand; `/exsar shotflashreset` resets its position.
 - **Not a scorecard:** It only says *when* the shot fired, never whether it was clipped — that verdict is the Auto Shot Monitor's NO CLIP! / CLIP +x pop, which is meant to be read rather than glanced at.
