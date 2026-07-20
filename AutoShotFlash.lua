@@ -42,7 +42,7 @@ local auto = ExsarUI.GetAutoShotTracker()
 -- its whole radius to read as a release, and the auto-shot cycle it punctuates
 -- is seconds long, so there is no risk of one flash blurring into the next.
 local DEF_DURATION = 0.35
-local MIN_DURATION, MAX_DURATION = 0.15, 0.70
+local MIN_DURATION, MAX_DURATION = 0.15, 1.50
 
 -- Burst look. Cool white-blue against the melee cue's warm gold, so the two
 -- flashes are never confused in peripheral vision. Kept fairly wide and bright:

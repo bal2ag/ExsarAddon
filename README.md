@@ -545,7 +545,7 @@ A fast slash that flashes the instant your melee actually **connects**. Weaving 
 - **The animation:** A diagonal slash snaps on at full length, then erases itself from the middle outward — the two halves retreating toward their ends — leaving brief remnants at the top and bottom that fade away. It's deliberately quick (0.30s by default) and crisper than the Windfury flourish, because it's a gameplay cue rather than a reward: it resolves before your next decision.
 - **Move and size it anywhere:** Unlock the widget and the slash loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be hitting something to see it.
 - **Optional sound:** A hit sound can be enabled ("Play a sound on each melee hit"), off by default since it fires on every landed melee. You can drop your own `Sounds/meleehit.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
-- **Duration slider:** Tune how long the flash lasts (0.15–0.60s) to taste.
+- **Duration slider:** Tune how long the flash lasts (0.15–1.50s) to taste.
 - **Context toggles:** Enable or disable independently for solo, party, and raid.
 - **Commands:** `/exsar hitflashtest` fires the flash on demand; `/exsar hitflashreset` resets its position.
 
@@ -561,7 +561,7 @@ A radial burst marking the exact instant an auto shot **leaves the bow**. Every 
 - **The animation:** Energy compresses to a bright point at the centre, then radiates outward in all directions as a ring of streaks that stretch away from the flare and close up again as they reach the rim. It's the sibling of the Melee Hit Flash but deliberately **louder** — symmetric rather than directional, and in a cool white-blue against the melee cue's warm gold, so the two are never confused at a glance.
 - **Move and size it anywhere:** Unlock the widget and the burst loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be shooting anything to see it.
 - **Optional sound:** A fire sound can be enabled ("Play a sound on each auto shot"), off by default since an auto shot fires every few seconds all fight. You can drop your own `Sounds/autoshot.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
-- **Duration slider:** Tune how long the burst lasts (0.15–0.70s) to taste.
+- **Duration slider:** Tune how long the burst lasts (0.15–1.50s) to taste.
 - **Context toggles:** Enable or disable independently for solo, party, and raid.
 - **Commands:** `/exsar shotflashtest` fires the burst on demand; `/exsar shotflashreset` resets its position.
 - **Not a scorecard:** It only says *when* the shot fired, never whether it was clipped — that verdict is the Auto Shot Monitor's NO CLIP! / CLIP +x pop, which is meant to be read rather than glanced at.

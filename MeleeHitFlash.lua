@@ -37,7 +37,7 @@ local melee = ExsarUI.GetMeleeSwingTracker()
 -- can never blur into the next one (the melee swing cycle is ~3.6s on a 2H, but
 -- Raptor plus a white swing can land close together).
 local DEF_DURATION = 0.30
-local MIN_DURATION, MAX_DURATION = 0.15, 0.60
+local MIN_DURATION, MAX_DURATION = 0.15, 1.50
 
 -- Slash look. Deliberately crisper and flatter than the Windfury flourish:
 -- softness < 1 tightens the glow halo (less diffuse), and the low depth keeps it
