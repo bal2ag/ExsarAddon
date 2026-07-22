@@ -92,7 +92,16 @@ local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 -- WoW indexes sound files at launch. Use .ogg (not .wav) on the Anniversary client.
 local WINDFURY_SOUND          = "Interface\\AddOns\\ExsarAddon\\Sounds\\windfury.ogg"
 local WINDFURY_SOUND_FALLBACK = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
-local SLASH_DURATION = 0.8     -- slash flourish lifetime (s) — a quick, punchy sweep
+local SLASH_DURATION = 0.8     -- default slash flourish lifetime (s) — a quick, punchy sweep
+local MIN_SLASH_DUR, MAX_SLASH_DUR = 0.15, 2.00
+
+-- Windfury slash lifetime, read live from the DB so the config slider retunes it
+-- without a /reload (CreateSlashEffect resolves a function `duration` once per
+-- Trigger — same pattern as MeleeHitFlash's Flash-duration knob).
+local function SlashDuration()
+    local v = mwDB().windfurySlashDuration
+    return type(v) == "number" and v or SLASH_DURATION
+end
 
 -- Play the Windfury whoosh: the custom bundled file, or the built-in Whirlwind if
 -- that file isn't present (so it still whooshes before you've added your own).
@@ -136,9 +145,10 @@ local S = {
     wfPreviewNext   = 0,      -- next time to re-fire the unlocked Windfury preview slash
 }
 
--- How often the Windfury slash re-fires in the unlocked preview loop. Leaves a
--- clear gap after the animation so each swipe reads as a distinct pulse.
-local WF_PREVIEW_INTERVAL = SLASH_DURATION + 0.6
+-- Gap left after each preview swipe so it reads as a distinct pulse; the loop
+-- interval is the live slash duration plus this, so the preview keeps pace when
+-- the duration slider is dragged.
+local WF_PREVIEW_GAP = 0.6
 
 local results = {}   -- reused range-probe results
 local auto  = ExsarUI.GetAutoShotTracker()
@@ -199,7 +209,7 @@ end
 -- Windfury proc flourish: a blade-slash streaking up-and-forward, on the shared
 -- helper's own UIParent-child frame (fires even when the widget frame is hidden).
 local slash = ExsarUI.CreateSlashEffect(frame, {
-    duration   = SLASH_DURATION,
+    duration   = SlashDuration,   -- live: the config slider retunes it without a reload
     dotTexture = "Interface\\Cooldown\\star4",  -- chosen in-game via /exsar slashtex
     getScale   = function() return mwDB().scale or 1 end,
 })
@@ -531,7 +541,7 @@ local function UpdateDisplay()
         if mwDB().windfuryEffect ~= false then
             if now >= S.wfPreviewNext then
                 slash:Trigger()
-                S.wfPreviewNext = now + WF_PREVIEW_INTERVAL
+                S.wfPreviewNext = now + SlashDuration() + WF_PREVIEW_GAP
             end
         end
     else
@@ -633,7 +643,14 @@ ExsarAddon.RegisterModule({
 
         ExsarAddon.CreateButton(parent, "Test flourish now", 16, y, WFTest)
         ExsarAddon.CreateButton(parent, "Show Windfury log", 190, y, WFDump)
-        y = y - 34
+        y = y - 44
+
+        ExsarAddon.CreateSlider(parent, "Windfury slash duration (s)", 16, y,
+            MIN_SLASH_DUR, MAX_SLASH_DUR, 0.05,
+            function() return SlashDuration() end,
+            function(v) mwDB().windfurySlashDuration = math.floor(v * 20 + 0.5) / 20 end
+        )
+        y = y - 55
 
         y = AddKnobSlider(parent, y, "Weave cost (window/clip buffer, s)", "weaveCost", 0.2, 0.8, DEF_WEAVE_COST)
         y = AddKnobSlider(parent, y, "Shot-fit buffer (s)", "shotFitBuffer", 0.0, 0.5, DEF_SHOT_FIT_BUF)
