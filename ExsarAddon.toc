@@ -45,3 +45,4 @@ AutoShotMonitor.lua
 MeleeWeaveHelper.lua
 MeleeHitFlash.lua
 AutoShotFlash.lua
+WindfuryHitFlash.lua

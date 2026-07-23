@@ -81,43 +81,6 @@ local POP_FONT_LATE = 18   -- the coaching cue is a long string
 local RETRY_THRESHOLD  = 0.35   -- press->swing latency at or above this = a retry
 local PRESS_ATTRIB_WIN = 3.0    -- a swing later than this belongs to no press
 
--- Windfury proc flourish: a quick slash animation + whoosh when a Windfury
--- extra-attack lands on your melee (Windfury Totem from a group shaman grants a
--- single extra attack — one SPELL_EXTRA_ATTACKS proc, so no de-dupe needed).
--- Pure celebration/feedback — gated behind its own config toggle.
--- Custom bundled sound (drop your own .ogg at Sounds/windfury.ogg). PlaySoundFile
--- takes a path OR a FileDataID; if the custom file is missing/unreadable it returns
--- willPlay=false, so PlayWindfurySound falls back to the built-in Whirlwind whoosh.
--- NOTE: a NEWLY added sound file needs a full client RESTART (not just /reload) —
--- WoW indexes sound files at launch. Use .ogg (not .wav) on the Anniversary client.
-local WINDFURY_SOUND          = "Interface\\AddOns\\ExsarAddon\\Sounds\\windfury.ogg"
-local WINDFURY_SOUND_FALLBACK = 568519  -- Whirlwind (FileDataID) — a sweeping "whoosh"
-local SLASH_DURATION = 0.8     -- default slash flourish lifetime (s) — a quick, punchy sweep
-local MIN_SLASH_DUR, MAX_SLASH_DUR = 0.15, 2.00
-
--- Windfury slash lifetime, read live from the DB so the config slider retunes it
--- without a /reload (CreateSlashEffect resolves a function `duration` once per
--- Trigger — same pattern as MeleeHitFlash's Flash-duration knob).
-local function SlashDuration()
-    local v = mwDB().windfurySlashDuration
-    return type(v) == "number" and v or SLASH_DURATION
-end
-
--- Play the Windfury whoosh: the custom bundled file, or the built-in Whirlwind if
--- that file isn't present (so it still whooshes before you've added your own).
-local function PlayWindfurySound()
-    local willPlay = PlaySoundFile(WINDFURY_SOUND, "Master")
-    if not willPlay and WINDFURY_SOUND_FALLBACK then
-        PlaySoundFile(WINDFURY_SOUND_FALLBACK, "Master")
-    end
-end
-
--- TEMP DIAGNOSTIC: persistent ring buffer for the Windfury-proc flourish, so a
--- rare shaman-grouped repro can be captured and inspected later via /exsar wfdump
--- (chat is useless mid-raid — see the diagnostic-persistence principle). Remove
--- once the proc flourish is confirmed working.
-local WF_DEBUG_CAP = 80
-
 -- A MISS is only true once the auto shot has actually FIRED: the weave window
 -- closes ~weaveCost before the auto, and a retried swing can still land in that
 -- gap. So arm the MISS at window close and resolve it when the auto lands (or a
@@ -142,13 +105,7 @@ local S = {
     missPending     = false,  -- window expired unweaved; waiting on the auto to confirm
     missAnchor      = 0,      -- auto.lastShotTime when the MISS was armed
     missDeadline    = 0,      -- give up on the pending MISS after this time
-    wfPreviewNext   = 0,      -- next time to re-fire the unlocked Windfury preview slash
 }
-
--- Gap left after each preview swipe so it reads as a distinct pulse; the loop
--- interval is the live slash duration plus this, so the preview keeps pace when
--- the duration slider is dragged.
-local WF_PREVIEW_GAP = 0.6
 
 local results = {}   -- reused range-probe results
 local auto  = ExsarUI.GetAutoShotTracker()
@@ -205,14 +162,6 @@ local function TriggerPop(text, color, size)
     if mwDB().feedback == false then return end
     pop:Trigger(text, color, size)
 end
-
--- Windfury proc flourish: a blade-slash streaking up-and-forward, on the shared
--- helper's own UIParent-child frame (fires even when the widget frame is hidden).
-local slash = ExsarUI.CreateSlashEffect(frame, {
-    duration   = SlashDuration,   -- live: the config slider retunes it without a reload
-    dotTexture = "Interface\\Cooldown\\star4",  -- chosen in-game via /exsar slashtex
-    getScale   = function() return mwDB().scale or 1 end,
-})
 
 -- =========================================================
 -- Config accessors (read live so slider edits apply immediately)
@@ -272,130 +221,6 @@ local function OnMeleeLanded(landedTime)
     end
 end
 melee:OnLanded(OnMeleeLanded)
-
--- Fired by the shared melee tracker on a Windfury extra-attack proc. Optional
--- eye-candy (own config toggle, default ON): a quick up-and-forward slash + a
--- "whoosh". Windfury Totem grants a single extra attack, so one proc = one
--- flourish (no de-dupe needed).
--- ==========================================================================
--- TEMP DIAGNOSTIC: Windfury-proc capture (remove once confirmed working)
--- ==========================================================================
--- Persists to ExsarAddonDB.meleeWeave.wfDebugLog so a rare shaman repro can be
--- reviewed after the fact with /exsar wfdump. Captures the whole chain:
---   raw     — every player SPELL_EXTRA_ATTACKS seen by an INDEPENDENT combat-log
---             frame (does the event even arrive live? does the name match?)
---   proc    — the shared melee tracker's OnWindfury callback actually fired
---   gate    — gating result inside OnWindfuryProc (effect/context/combat)
---   fire    — slash+sound dispatched
---   test    — /exsar wftest force-fire
-local function wfLog(msg)
-    local db = mwDB()
-    local log = db.wfDebugLog or {}
-    log[#log + 1] = date("%H:%M:%S") .. "  " .. msg
-    while #log > WF_DEBUG_CAP do table.remove(log, 1) end
-    db.wfDebugLog = log
-    if db.wfDebugEcho then print("|cffffcc00[WeaveWF]|r " .. msg) end
-end
-
--- Independent listener: proves whether the SPELL_EXTRA_ATTACKS event is delivered
--- live and whether ExsarLogic.IsWindfuryProc matches its name — separate from the
--- shared tracker, so we can tell "event never arrived" from "arrived, name didn't
--- match" from "matched, but tracker/gating dropped it".
-local wfDiag = CreateFrame("Frame")
-wfDiag:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-wfDiag:SetScript("OnEvent", function()
-    local _, subEvent, _, srcGUID, _, _, _, _, _, _, _, spellId, spellName =
-        CombatLogGetCurrentEventInfo()
-    if subEvent ~= "SPELL_EXTRA_ATTACKS" then return end
-    if srcGUID ~= UnitGUID("player") then return end
-    wfLog(string.format("raw SPELL_EXTRA_ATTACKS id=%s name=%q matched=%s",
-        tostring(spellId), tostring(spellName),
-        tostring(ExsarLogic.IsWindfuryProc(subEvent, spellName))))
-end)
-
-local function OnWindfuryProc()
-    local effect = mwDB().windfuryEffect
-    local ctx    = ContextEnabled()
-    local combat = UnitAffectingCombat("player")
-    wfLog(string.format("proc callback fired: effect=%s ctx=%s combat=%s",
-        tostring(effect), tostring(ctx), tostring(combat)))
-    if effect == false then wfLog("gate: DROPPED (effect off)"); return end
-    if not (ctx and combat) then wfLog("gate: DROPPED (context/combat)"); return end
-    wfLog("fire: slash + whoosh dispatched")
-    slash:Trigger()
-    PlayWindfurySound()
-end
-melee:OnWindfury(OnWindfuryProc)
-
--- /exsar wftest — force-fire the flourish (bypasses detection + gating) to bisect
--- "effect broken" vs "detection broken". Named local so the config button reuses it.
-local function WFTest()
-    wfLog(string.format("test: force-fire (effect=%s ctx=%s combat=%s scale=%s)",
-        tostring(mwDB().windfuryEffect), tostring(ContextEnabled()),
-        tostring(UnitAffectingCombat("player")), tostring(mwDB().scale)))
-    slash:Trigger()
-    PlayWindfurySound()
-    print("|cffffcc00[WeaveWF]|r wftest fired — did you see a slash + hear a whoosh?")
-end
-ExsarAddon.AddSlashCommand("wftest", WFTest)
-
--- /exsar slashtex [path] — swap the slash brush texture live (no /reload) and
--- re-fire, so we can A/B soft-glow textures while blind to the in-game render.
--- With an explicit path it applies that; with no arg it cycles a candidate list.
--- A wrong/missing path renders as a green square or nothing — that's the tell.
-local SLASH_TEX_CANDIDATES = {
-    "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle",   -- soft white radial (default)
-    "Interface\\Cooldown\\star4",                            -- softer star
-    "Interface\\Masks\\CircleMaskScalable",                  -- smooth circle mask
-    "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask",      -- the old hard disc (baseline)
-    "Interface\\GLUES\\MODELS\\UI_MainMenu_Legion\\GLOW",    -- big soft glow
-}
-local slashTexIdx = 0
-ExsarAddon.AddSlashCommand("slashtex", function(arg)
-    local path
-    if type(arg) == "string" then arg = arg:gsub("^%s*(.-)%s*$", "%1") end
-    if arg and arg ~= "" then
-        path = arg
-    else
-        slashTexIdx = (slashTexIdx % #SLASH_TEX_CANDIDATES) + 1
-        path = SLASH_TEX_CANDIDATES[slashTexIdx]
-    end
-    slash:SetTexture(path)
-    slash:Trigger()
-    PlayWindfurySound()
-    print("|cffffcc00[WeaveWF]|r slash texture -> |cff88ccff" .. path
-        .. "|r  (re-run /exsar slashtex to cycle; soft/diffuse = keeper)")
-end)
-
--- /exsar wfdump — open the captured log in a copy-paste window.
-local function WFDump()
-    local log = mwDB().wfDebugLog
-    if not log or #log == 0 then
-        print(ADDON_NAME .. ": no Windfury events captured yet.")
-        return
-    end
-    local lines = { ADDON_NAME .. " — " .. #log .. " Windfury diagnostic event(s)",
-        string.rep("-", 72) }
-    for _, line in ipairs(log) do lines[#lines + 1] = line end
-    ExsarUI.ShowCopyableText(table.concat(lines, "\n"),
-        { title = "ExsarAddon — Windfury Diagnostics" })
-end
-ExsarAddon.AddSlashCommand("wfdump", WFDump)
-
--- /exsar wfclear — wipe the capture; /exsar wfecho — toggle live chat echo.
-ExsarAddon.AddSlashCommand("wfclear", function()
-    mwDB().wfDebugLog = nil
-    print(ADDON_NAME .. ": Windfury diagnostic log cleared.")
-end)
-ExsarAddon.AddSlashCommand("wfecho", function()
-    local db = mwDB()
-    db.wfDebugEcho = not db.wfDebugEcho
-    print(ADDON_NAME .. ": Windfury live chat echo " ..
-        (db.wfDebugEcho and "ON" or "OFF") .. " (capture always persists).")
-end)
--- ==========================================================================
--- END TEMP DIAGNOSTIC
--- ==========================================================================
 
 -- =========================================================
 -- Cue rendering
@@ -536,14 +361,6 @@ local function UpdateDisplay()
         frame:SetAlpha(PREVIEW_ALPHA)
         ShowPreviewContent()
         frame:Show()
-        -- Loop the Windfury slash (silently) so its placement can be previewed
-        -- while positioning the widget. Only when the effect is enabled.
-        if mwDB().windfuryEffect ~= false then
-            if now >= S.wfPreviewNext then
-                slash:Trigger()
-                S.wfPreviewNext = now + SlashDuration() + WF_PREVIEW_GAP
-            end
-        end
     else
         HideCue()
         frame:Hide()
@@ -617,40 +434,15 @@ ExsarAddon.RegisterModule({
             function() return mwDB().feedback ~= false end,
             function(v) mwDB().feedback = v end
         )
-        y = y - 30
-
-        ExsarAddon.CreateCheckbox(parent, "Windfury proc flourish (slash + whoosh)", 16, y,
-            function() return mwDB().windfuryEffect ~= false end,
-            function(v) mwDB().windfuryEffect = v end
-        )
         y = y - 34
 
-        -- TEMP DIAGNOSTIC: Windfury-proc capture help + dump. Remove with the
-        -- rest of the WF diagnostic block once the flourish is confirmed working.
         local wfNote = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         wfNote:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
         wfNote:SetWidth(360)
         wfNote:SetJustifyH("LEFT")
-        wfNote:SetText("|cffffcc00Windfury diagnostics (temporary):|r the flourish only "
-            .. "fires on a real Windfury Totem proc (needs a grouped shaman). Each proc "
-            .. "is captured to SavedVariables so it survives the fight and /reload.\n"
-            .. "  /exsar wftest  — force-fire the slash+whoosh now (no shaman needed)\n"
-            .. "  /exsar wfdump  — show the captured proc log (copy-paste window)\n"
-            .. "  /exsar wfclear — wipe the log   /exsar wfecho — live chat echo on/off\n"
-            .. "When you group with a shaman: /exsar wfclear, weave the fight, then "
-            .. "/exsar wfdump and send it over.")
-        y = y - 108
-
-        ExsarAddon.CreateButton(parent, "Test flourish now", 16, y, WFTest)
-        ExsarAddon.CreateButton(parent, "Show Windfury log", 190, y, WFDump)
-        y = y - 44
-
-        ExsarAddon.CreateSlider(parent, "Windfury slash duration (s)", 16, y,
-            MIN_SLASH_DUR, MAX_SLASH_DUR, 0.05,
-            function() return SlashDuration() end,
-            function(v) mwDB().windfurySlashDuration = math.floor(v * 20 + 0.5) / 20 end
-        )
-        y = y - 55
+        wfNote:SetText("The Windfury proc flourish moved to its own widget — see "
+            .. "\"Windfury Hit Flash\" in the sidebar.")
+        y = y - 40
 
         y = AddKnobSlider(parent, y, "Weave cost (window/clip buffer, s)", "weaveCost", 0.2, 0.8, DEF_WEAVE_COST)
         y = AddKnobSlider(parent, y, "Shot-fit buffer (s)", "shotFitBuffer", 0.0, 0.5, DEF_SHOT_FIT_BUF)

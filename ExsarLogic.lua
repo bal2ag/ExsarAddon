@@ -1324,6 +1324,48 @@ function ExsarLogic.RadialBurstAnim(t, duration)
     return inner, outer, alpha, core
 end
 
+--- Parametrize a point on a WHIRLWIND / tornado funnel spiral. Pure.
+--- Used by ExsarUI.CreateWhirlwindEffect (the Windfury-hit-flash flourish). u runs
+--- 0 (narrow bottom tip) → 1 (wide top mouth) along a helix wound `turns` times
+--- around a vertical axis; `spin` is an extra angular phase added every frame so
+--- the whole funnel rotates over its lifetime (the "whirl").
+---
+--- Returns normalized coordinates (nx roughly in [-topR, topR], ny in [-0.5, 0.5])
+--- that the renderer multiplies by pixel radius/height, plus a depth cue in [0, 1]
+--- (1 = front of the funnel, nearest the viewer; 0 = back) so the renderer can
+--- size/brighten front stamps for a pseudo-3D swirl.
+--- @param u      0..1 position along the spiral (bottom → top)
+--- @param spin   extra angular phase (radians) — animate to make it rotate
+--- @param turns  revolutions bottom→top (default 2.5)
+--- @param topR   mouth radius at the top (default 1.0)
+--- @param botR   tip radius at the bottom (default 0.12)
+--- @return nx, ny, depth
+function ExsarLogic.WhirlwindPoint(u, spin, turns, topR, botR)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    turns = turns or 2.5
+    topR  = topR or 1.0
+    botR  = botR or 0.12
+    spin  = spin or 0
+    local ang    = u * turns * 2 * math.pi + spin
+    local radius = botR + (topR - botR) * u   -- funnel widens toward the top
+    local nx = radius * math.sin(ang)
+    local ny = u - 0.5                          -- -0.5 (bottom) .. 0.5 (top)
+    local depth = 0.5 + 0.5 * math.cos(ang)     -- front (cos=1) → 1, back → 0
+    return nx, ny, depth
+end
+
+--- Width multiplier along the whirlwind spiral. Pure.
+--- A funnel: pinched to a fine point at the bottom tip (u=0), broadening toward
+--- the mouth (u=1). Because the burst timing erases from the middle (u=0.5)
+--- outward, the surviving remnants are the tip (a small speck) and the mouth (the
+--- fat top) — which reads naturally as a tornado dissipating from its waist.
+--- @param u  0..1 position along the spiral
+--- @return   width multiplier (0..1)
+function ExsarLogic.WhirlwindThickness(u)
+    if not u or u < 0 then u = 0 elseif u > 1 then u = 1 end
+    return 0.30 + 0.70 * u
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic

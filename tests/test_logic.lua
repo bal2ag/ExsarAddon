@@ -2838,3 +2838,72 @@ describe("RadialBurstAnim", function()
         assert.are.equal(0, alpha)
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- WhirlwindPoint
+-- ---------------------------------------------------------------------------
+describe("WhirlwindPoint", function()
+    it("runs bottom (-0.5) to top (0.5) in ny as u goes 0..1", function()
+        local _, ny0 = Logic.WhirlwindPoint(0, 0)
+        local _, ny1 = Logic.WhirlwindPoint(1, 0)
+        assert.are.equal(-0.5, ny0)
+        assert.are.equal(0.5, ny1)
+    end)
+
+    it("widens toward the top: |nx| reach grows with u at the same phase", function()
+        -- Sample the peak horizontal reach across a full turn at low and high u.
+        local function maxReach(u)
+            local m = 0
+            for k = 0, 200 do
+                local nx = Logic.WhirlwindPoint(u, k / 200 * 2 * math.pi)
+                if math.abs(nx) > m then m = math.abs(nx) end
+            end
+            return m
+        end
+        assert.is_true(maxReach(0.9) > maxReach(0.1))
+    end)
+
+    it("returns a depth cue in [0,1]", function()
+        for k = 0, 50 do
+            local _, _, d = Logic.WhirlwindPoint(k / 50, k / 3)
+            assert.is_true(d >= 0 and d <= 1)
+        end
+    end)
+
+    it("spin shifts the angular phase (rotates the funnel)", function()
+        local nx0 = Logic.WhirlwindPoint(0.5, 0)
+        local nxS = Logic.WhirlwindPoint(0.5, math.pi)
+        -- Half a turn flips the horizontal sign of the sine-driven x.
+        assert.is_true(math.abs(nx0 + nxS) < 1e-9)
+    end)
+
+    it("clamps u out of range", function()
+        local _, nyLo = Logic.WhirlwindPoint(-3, 0)
+        local _, nyHi = Logic.WhirlwindPoint(9, 0)
+        assert.are.equal(-0.5, nyLo)
+        assert.are.equal(0.5, nyHi)
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- WhirlwindThickness
+-- ---------------------------------------------------------------------------
+describe("WhirlwindThickness", function()
+    it("is thinnest at the bottom tip and fattest at the mouth", function()
+        assert.is_true(Logic.WhirlwindThickness(1) > Logic.WhirlwindThickness(0))
+    end)
+
+    it("increases monotonically with u", function()
+        local prev = -1
+        for k = 0, 20 do
+            local w = Logic.WhirlwindThickness(k / 20)
+            assert.is_true(w >= prev)
+            prev = w
+        end
+    end)
+
+    it("clamps u out of range", function()
+        assert.are.equal(Logic.WhirlwindThickness(0), Logic.WhirlwindThickness(-5))
+        assert.are.equal(Logic.WhirlwindThickness(1), Logic.WhirlwindThickness(5))
+    end)
+end)

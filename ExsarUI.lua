@@ -1160,7 +1160,8 @@ end
 -- stamp texture live). Reveal/fade curve is SlashAnim.
 -- @param anchor  frame to anchor to (CENTER)
 -- @param opts    { duration, color={r,g,b,a}, length, thickness, stamps,
---                  travel, depth, rotation, xOffset, yOffset, strata, getScale, dotTexture }
+--                  travel, depth, rotation, flipX, reveal, thicknessFn, softness,
+--                  xOffset, yOffset, strata, getScale, dotTexture }
 function ExsarUI.CreateSlashEffect(anchor, opts)
     opts = opts or {}
     -- A genuinely SOFT round glow: a white→transparent radial. With ADD blend the
@@ -1203,6 +1204,12 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
     -- CW θ is: x' = x·cosθ + y·sinθ ; y' = −x·sinθ + y·cosθ.
     local rotation  = opts.rotation  or 45
     local cosR, sinR = math.cos(math.rad(rotation)), math.sin(math.rad(rotation))
+
+    -- Horizontal mirror, applied to the final screen x AFTER rotation. Turns the
+    -- default lower-left→upper-right stroke ("/") into upper-left→lower-right
+    -- ("\") without disturbing the vertical drift or depth (both y-space). Used by
+    -- WindfuryHitFlash so its slash reads as the mirror of the melee-hit slash.
+    local flipX = opts.flipX and -1 or 1
 
     -- Pseudo-3D perspective constants (scaled by `depth`).
     local DEPTH_SIZE   = 1.05 * depth  -- forward stamps bigger (closer = bigger)
@@ -1277,7 +1284,7 @@ function ExsarUI.CreateSlashEffect(anchor, opts)
                     local dia = thicknessFn(u)
                         * thickness * layer.sizeMul * s * zoom * (1 + d * DEPTH_SIZE)
                     if dia < 2 then dia = 2 end
-                    local px = (x * L) * zoom
+                    local px = (x * L) * zoom * flipX
                     local py = (y * L + d * DEPTH_LIFT_Y * s) * zoom + driftY
                     dot:SetSize(dia, dia)
                     dot:SetPoint("CENTER", f, "CENTER", px, py)
@@ -1459,6 +1466,128 @@ function ExsarUI.CreateRadialBurstEffect(anchor, opts)
     end)
 
     return RB
+end
+
+--- Create a WHIRLWIND / tornado flourish — a rotating funnel of soft-dot stamps —
+--- on its own UIParent-child frame anchored to `anchor`. Same additive soft-brush
+--- rendering as CreateSlashEffect / CreateRadialBurstEffect (no hard facets), but
+--- the stamps trace a vertical helix (ExsarLogic.WhirlwindPoint) instead of an arc
+--- or spokes, and the whole funnel spins over its lifetime.
+---
+--- Its VISIBILITY behaviour matches the melee-hit burst slash on purpose: it snaps
+--- in at full height, then erases from the MIDDLE (the funnel's waist) outward
+--- toward both ends — leaving the fine bottom tip and the fat top mouth as brief
+--- remnants before they fade — driven by the same ExsarLogic.SlashBurstAnim gap.
+--- Used by WindfuryHitFlash as the "different flourish" layered over its mirrored
+--- burst slash, so a Windfury proc never reads as a plain melee-hit flash.
+--- @param anchor  frame to centre the effect on
+--- @param opts    { duration (number|function), color, radius, height, turns,
+---                  spin, stamps, thickness, softness, dotTexture, getScale,
+---                  strata, xOffset, yOffset }
+--- @return whirl  object with :Trigger() and :SetTexture(path)
+function ExsarUI.CreateWhirlwindEffect(anchor, opts)
+    opts = opts or {}
+    local SOFT_DOT = opts.dotTexture or "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle"
+    local durationOpt = opts.duration or 0.35
+    local getDuration = type(durationOpt) == "function"
+        and durationOpt or function() return durationOpt end
+    local color     = opts.color     or { 0.82, 0.93, 1.0, 1.0 }  -- airy pale blue-white
+    local radius    = opts.radius    or 34    -- px half-width of the top mouth
+    local height    = opts.height    or 96    -- px top-to-bottom extent
+    local turns     = opts.turns     or 2.5   -- revolutions bottom→top
+    local spin      = opts.spin      or 1.15  -- extra revolutions over the lifetime (the "whirl")
+    local stamps    = opts.stamps    or 110   -- soft dots along the spiral
+    local thickness = opts.thickness or 7     -- widest stamp diameter (px, at the mouth)
+    local softness  = opts.softness  or 0.7   -- glow-halo size/brightness lever
+    local getScale  = opts.getScale  or function() return 1 end
+    local topR, botR = 1.0, 0.12
+
+    local f = CreateFrame("Frame", nil, UIParent)
+    f:SetSize(math.max(radius, height) * 3, math.max(radius, height) * 3)
+    f:SetFrameStrata(opts.strata or "HIGH")
+    f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
+    f:Hide()
+
+    -- Same two-layer additive brush as the other effects: soft halo + bright core.
+    local layers = {
+        { sizeMul = 1 + 1.35 * softness, alphaMul = 0.27 * softness, sub = "ARTWORK" },
+        { sizeMul = 1.0, alphaMul = 0.24, sub = "OVERLAY" },
+    }
+    for _, layer in ipairs(layers) do
+        layer.dot = {}
+        for i = 1, stamps do
+            local t = f:CreateTexture(nil, layer.sub)
+            t:SetTexture(SOFT_DOT)
+            t:SetBlendMode("ADD")
+            t:SetVertexColor(color[1], color[2], color[3], layer.alphaMul)
+            layer.dot[i] = t
+        end
+    end
+
+    local WH = { frame = f, active = false, startTime = 0, dotTexture = SOFT_DOT }
+
+    function WH:SetTexture(path)
+        self.dotTexture = path
+        for _, layer in ipairs(layers) do
+            for i = 1, stamps do layer.dot[i]:SetTexture(path) end
+        end
+        return path
+    end
+
+    -- Draw the funnel with its waist erased by `gap` (half-width in u space, from
+    -- SlashBurstAnim), rotated by `spinPhase` radians, at overall opacity `alpha`.
+    -- Front-of-funnel stamps (depth→1) are drawn bigger and brighter for a
+    -- pseudo-3D swirl.
+    local function render(gap, spinPhase, alpha)
+        local s = getScale()
+        local RX, RY = radius * s, height * s
+        for _, layer in ipairs(layers) do
+            for i = 1, stamps do
+                local dot = layer.dot[i]
+                local u = stamps > 1 and (i - 1) / (stamps - 1) or 0.5
+                if gap > 0 and math.abs(u - 0.5) < gap then
+                    dot:Hide()
+                else
+                    local nx, ny, d = ExsarLogic.WhirlwindPoint(u, spinPhase, turns, topR, botR)
+                    local dia = ExsarLogic.WhirlwindThickness(u)
+                        * thickness * layer.sizeMul * s * (0.65 + 0.5 * d)
+                    if dia < 2 then dia = 2 end
+                    dot:SetSize(dia, dia)
+                    dot:SetPoint("CENTER", f, "CENTER", nx * RX, ny * RY)
+                    dot:SetVertexColor(color[1], color[2], color[3],
+                        layer.alphaMul * alpha * (0.5 + 0.5 * d))
+                    dot:Show()
+                end
+            end
+        end
+    end
+
+    local function frameAt(t, duration)
+        local gap, alpha = ExsarLogic.SlashBurstAnim(t, duration)
+        local p = duration > 0 and (t / duration) or 1
+        return gap, p * spin * 2 * math.pi, alpha
+    end
+
+    function WH:Trigger()
+        self.startTime = GetTime()
+        self.duration  = getDuration() or 0.35
+        self.active = true
+        render(frameAt(0, self.duration))
+        f:Show()
+    end
+
+    f:SetScript("OnUpdate", function()
+        if not WH.active then return end
+        local t = GetTime() - WH.startTime
+        if t >= WH.duration then
+            WH.active = false
+            f:Hide()
+            return
+        end
+        render(frameAt(t, WH.duration))
+    end)
+
+    return WH
 end
 
 -- =========================================================

@@ -528,7 +528,7 @@ A single **WEAVE NOW!** cue that lights up when it's a good moment to step in fo
   That delay is worth understanding, because it's the single biggest thing costing you white hits. The server only updates your position when you press a movement key, cast a spell, or half a second after either. If you step into melee and hit the weave macro immediately, the server may still think you're standing where you were — the melee range check fails, and your attack waits out a hidden 500ms retry timer. Often you've stepped back out by then and the swing never happens at all. Raptor Strike is immune (casting a spell refreshes your position), which is why it always lands instantly while your white hits feel unreliable.
 
   The fix is a habit: for white hits, **step in, start stepping back out, and *then* press the macro**. That backward keypress snapshots your position while you're still in range. When you get it right you'll see WEAVE HIT!; when you don't, LATE tells you exactly what went wrong. Toggle it with the "Hit / miss feedback text" checkbox.
-- **Windfury proc flourish:** When a Windfury proc lands on your melee (from a shaman's Windfury Totem), an arcing crescent blade-slash sweeps up across the widget — curving left then thrusting back up the center and forward toward the enemy, anime style — with a "whoosh" — a bit of satisfying feedback that your weave caught the extra attacks. Purely cosmetic; toggle it with the "Windfury proc flourish (slash + whoosh)" checkbox. A **"Windfury slash duration (s)" slider** tunes how long the sweep lasts (0.15–2.00s), applied live without a reload. While the widget is unlocked, the slash loops silently so you can see exactly where it appears and position the widget accordingly.
+- **Windfury proc reward:** Moved to its own widget — see **Windfury Hit Flash** below.
 - **Only when you're weaving:** The cue only appears when you're actually in weave range (within ~8 yards of the target), so it self-silences on pure-ranged fights — no need to toggle it off and on per fight.
 - **Positioning:** Unlock it and it shows a dimmed preview of the real cue (text + a partly-full bar) so you can place it accurately.
 - **Context toggles + tuning:** Enable/disable per solo/party/raid, and tune the timing knobs (weave cost, shot-fit buffer, melee-ready lookahead, anti-flicker hold) with config sliders — defaulted to realistic values grounded in the actual timings, so you can nudge them to taste at a target dummy.
@@ -542,7 +542,7 @@ A single **WEAVE NOW!** cue that lights up when it's a good moment to step in fo
 A fast slash that flashes the instant your melee actually **connects**. Weaving happens too quickly to confirm off the swing timer mid-fight, so this turns "did that land?" into something you can catch out of the corner of your eye.
 
 - **When it fires:** The moment a melee attack lands — a white swing or a Raptor Strike. Misses, dodges and parries do **not** flash, so the cue only ever means "that hit."
-- **The animation:** A diagonal slash snaps on at full length, then erases itself from the middle outward — the two halves retreating toward their ends — leaving brief remnants at the top and bottom that fade away. It's deliberately quick (0.30s by default) and crisper than the Windfury flourish, because it's a gameplay cue rather than a reward: it resolves before your next decision.
+- **The animation:** A diagonal slash snaps on at full length, then erases itself from the middle outward — the two halves retreating toward their ends — leaving brief remnants at the top and bottom that fade away. It's deliberately quick (0.30s by default) because it's a gameplay cue rather than a reward: it resolves before your next decision. It runs lower-left→upper-right; its Windfury sibling is the mirror image plus a whirlwind (see below).
 - **Move and size it anywhere:** Unlock the widget and the slash loops silently on a timer so you can position and scale it exactly where your eye already is — no need to be hitting something to see it.
 - **Optional sound:** A hit sound can be enabled ("Play a sound on each melee hit"), off by default since it fires on every landed melee. You can drop your own `Sounds/meleehit.ogg` into the addon folder to replace it — note that a newly added sound file needs a full client restart, not just `/reload`.
 - **Duration slider:** Tune how long the flash lasts (0.15–1.50s) to taste.
@@ -567,6 +567,22 @@ A radial burst marking the exact instant an auto shot **leaves the bow**. Every 
 - **Not a scorecard:** It only says *when* the shot fired, never whether it was clipped — that verdict is the Auto Shot Monitor's NO CLIP! / CLIP +x pop, which is meant to be read rather than glanced at.
 
 <!-- ![Auto Shot Flash](screenshots/auto-shot-flash.png) -->
+
+### Windfury Hit Flash
+
+![Experimental](https://img.shields.io/badge/Experimental-orange)
+
+A reward flash when a **Windfury Totem extra-attack** lands on your melee. When you're grouped with an enhancement shaman dropping Windfury Totem, its procs give your weaves a burst of free damage — this makes those procs something you can see and enjoy.
+
+- **When it fires:** The instant a Windfury extra-attack connects on your melee (needs a grouped shaman with the totem down). One proc, one flash.
+- **The animation:** It's a close cousin of the Melee Hit Flash — the same snap-on, erase-from-the-middle slash — but deliberately distinct so you never confuse the two: the slash is **mirrored** (upper-left→lower-right, the opposite diagonal), and a **whirlwind** — a little rotating tornado in a cooler blue-white — spins up over the top, snapping in and dissolving from its waist outward on the same beat as the slash.
+- **Move and size it anywhere:** Unlock the widget and the flash loops silently on a timer so you can position and scale it without needing a real proc.
+- **Optional sound:** A "whoosh" plays on each proc, **on by default** (Windfury procs are the rarer, rewarding moment, unlike a landed melee every swing). Drop your own `Sounds/windfury.ogg` into the addon folder to replace it — a newly added sound file needs a full client restart, not just `/reload`.
+- **Duration slider:** Tune how long the flash lasts (0.15–2.00s) to taste; it retunes both the slash and the whirlwind together, live.
+- **Context toggles:** Enable or disable independently for solo, party, and raid.
+- **Commands:** `/exsar wfflashtest` fires the flash on demand; `/exsar wfflashreset` resets its position.
+
+<!-- ![Windfury Hit Flash](screenshots/windfury-hit-flash.png) -->
 
 ### Pet Management
 
