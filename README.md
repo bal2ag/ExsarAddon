@@ -148,8 +148,8 @@ Pulsing wing-shaped alert when Kill Command is ready and your pet is active.
 
 Icons with animated borders and countdowns for relevant rotation buffs (Quick Shots, Haste Potion, Bloodlust, Rapid Fire, etc.) and trinket procs.
 
-- **Buffs tracked:** Quick Shots (Improved Aspect of the Hawk proc), Haste Potion, Bloodlust, Heroism, Rapid Fire, The Beast Within, Drums of Battle
-- **Trinkets:** Automatically detects on-use trinket buffs from your equipped trinkets
+- **Buffs tracked:** Quick Shots (Improved Aspect of the Hawk proc), Haste Potion, Bloodlust, Heroism, Rapid Fire, The Beast Within, Drums of Battle, Haste (Dragonspine Trophy proc)
+- **Trinkets:** Automatically detects on-use trinket buffs from your equipped trinkets. Proc trinkets (like Dragonspine Trophy) have no on-use spell to detect, so their buffs are tracked explicitly
 - **Active effect appearance:** Each active buff shows its icon with a gold marching-ants animated border, a reverse cooldown sweep that fills as the buff expires, and a countdown timer
 - **Hidden when:** No tracked buffs are active (and widget is locked)
 

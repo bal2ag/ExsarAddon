@@ -13,12 +13,18 @@ local aeDB = ExsarUI.MakeDB("activeEffects")
 -- =========================================================
 -- Each entry: { name = "Buff Name", id = spellId }
 -- Detection tries spell ID first, then falls back to name.
--- Set id = nil to match by name only.
+-- Set id = nil to match by name only; omit name to match by ID only.
 --
 -- Notes:
 --   "Bloodlust"        — Horde Shaman version
 --   "Heroism"          — Alliance Draenei Shaman version (ID 32182)
 --   "The Beast Within" — hunter buff while Bestial Wrath is active (requires talent)
+--   Dragonspine Trophy — a PROC, not an on-use, so the dynamic trinket slots
+--                        below (which read GetItemSpell) never see it; it needs
+--                        a static entry.  Matched by spell ID only: the buff is
+--                        literally named "Haste", a name other trinket buffs
+--                        share (e.g. Bloodlust Brooch), so a name fallback would
+--                        double-report those alongside their dynamic slot.
 
 local STATIC_EFFECTS = {
     { name = "Quick Shots",       id = 6150  },
@@ -28,6 +34,7 @@ local STATIC_EFFECTS = {
     { name = "Rapid Fire",        id = 3045  },
     { name = "The Beast Within",  id = 34471 },
     { name = "Drums of Battle",   id = nil   },
+    {                             id = 34775 },  -- Haste (Dragonspine Trophy 28830 proc)
 }
 
 -- Trinket inventory slots tracked dynamically via GetItemSpell
