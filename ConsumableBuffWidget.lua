@@ -23,7 +23,8 @@ local TRACKED_ITEMS = {
           { name = "Scroll of Strength IV", id = 10310, buffId = 12179 },
           { name = "Scroll of Strength III",id = 4426,  buffId = 8120  },
           { name = "Scroll of Strength II", id = 2289,  buffId = 8119  },
-          { name = "Scroll of Strength I",  id = 954,   buffId = 8118  },
+          -- Rank 1 carries no numeral in-game ("Scroll of Strength", not "I").
+          { name = "Scroll of Strength",    id = 954,   buffId = 8118  },
       },
     },
     { name = "Flask of Relentless Assault",   id = 22854, buffName = "Flask of Relentless Assault", buffId = 28520 },
@@ -36,7 +37,8 @@ local TRACKED_ITEMS = {
           { name = "Scroll of Agility IV", id = 10309, buffId = 12174 },
           { name = "Scroll of Agility III",id = 4425,  buffId = 8117  },
           { name = "Scroll of Agility II", id = 1477,  buffId = 8116  },
-          { name = "Scroll of Agility I",  id = 3012,  buffId = 8115  },
+          -- Rank 1 carries no numeral in-game ("Scroll of Agility", not "I").
+          { name = "Scroll of Agility",    id = 3012,  buffId = 8115  },
       },
     },
     { name = "Adamantite Sharpening Stone",   id = 23529, weaponEnchant = true, enchantId = 2713, buffDuration = 3600 },
@@ -116,6 +118,7 @@ for i, item in ipairs(TRACKED_ITEMS) do
     s.iconFrame:RegisterForClicks("AnyUp", "AnyDown")
     s.iconFrame:SetAttribute("type", "item")
     s.iconFrame:SetAttribute("item", item.name)
+    s.attrName = item.name  -- what the secure button currently holds
     s.iconFrame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetItemByID(s.itemId)
@@ -174,6 +177,26 @@ end
 -- Bag scanning
 -- =========================================================
 
+-- Push the slot's active item onto its secure button.
+--
+-- The `item` attribute is matched by NAME, so any table name that differs from
+-- the client's makes the click a silent no-op (the icon and bag count still
+-- work — those go through the item ID).  That bit the rank-1 scrolls, which
+-- carry no numeral in-game.  So prefer the name the client reports for the ID
+-- and fall back to the table's only while the item is still uncached.
+--
+-- SetAttribute is protected, so a rank switch that lands in combat (burning
+-- the last of a rank mid-fight) cannot be written then.  `s.attrName` records
+-- what the button actually holds; the desired-vs-written difference IS the
+-- pending state, and ScanBags re-tries it (incl. on PLAYER_REGEN_ENABLED)
+-- until it sticks.
+local function RefreshItemAttr(s)
+    local name = GetItemInfo(s.itemId) or s.itemName
+    if name == s.attrName or InCombatLockdown() then return end
+    s.iconFrame:SetAttribute("item", name)
+    s.attrName = name
+end
+
 -- Switch a ranked slot to a different rank (update icon, item attribute, etc.)
 local function SwitchRank(s, rank)
     if s.itemId == rank.id then return end
@@ -182,9 +205,7 @@ local function SwitchRank(s, rank)
     s.buffId   = rank.buffId
     local tex = select(10, GetItemInfo(rank.id))
     if tex then s.icon:SetTexture(tex) end
-    if not InCombatLockdown() then
-        s.iconFrame:SetAttribute("item", rank.name)
-    end
+    RefreshItemAttr(s)
 end
 
 local function ScanBags()
@@ -218,6 +239,10 @@ local function ScanBags()
 
         s.icon:SetDesaturated(not s.known)
         s.icon:SetAlpha(s.known and 1.0 or 0.35)
+
+        -- Catches a name that was uncached at construction and any attribute
+        -- write a combat lockdown blocked earlier.
+        RefreshItemAttr(s)
     end
 end
 
@@ -334,6 +359,7 @@ frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 frame:RegisterEvent("UNIT_PET")
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -361,6 +387,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         UpdateBuffs()
 
     elseif event == "ITEM_DATA_LOAD_RESULT" then
+        ScanBags()
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Re-apply any secure `item` attribute a combat rank switch blocked.
         ScanBags()
     end
 end)
