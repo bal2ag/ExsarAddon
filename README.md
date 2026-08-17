@@ -80,7 +80,7 @@ Settings are saved per-character in `ExsarAddonDB` (WoW's SavedVariables system)
 Shows core abilities, trinkets, and cooldowns, and tracks cooldown time remaining.
 
 - **Abilities tracked:** Multi-Shot, Arcane Shot, Rapid Fire, Bestial Wrath (if talented), Readiness (if talented)
-- **Trinkets:** Automatically shows equipped trinkets that have an on-use effect; updates when gear changes
+- **Trinkets:** Automatically shows equipped trinkets that have an on-use effect; updates when gear changes, and re-checks itself once a second so a trinket can't stay missing after a loading screen or a mid-fight glitch (proc trinkets have no on-use effect and are not shown here — see the Active Effects Tracker)
 - **Click to use:** Clicking a spell icon casts it; clicking a trinket icon uses it
 - **Cooldown appearance:** Icons go desaturated/dimmed with a circular sweep overlay and countdown text while on cooldown; a pulsing gold glow border appears when ready in combat
 

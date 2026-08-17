@@ -89,6 +89,11 @@ local PADDING   = 6
 local TRINKET_SLOT_1 = 13
 local TRINKET_SLOT_2 = 14
 
+-- How often the equipped trinkets are re-verified from the OnUpdate tick.
+-- ScanTrinkets is otherwise driven only by rare events, so a single bad read
+-- would persist until an unequip/re-equip -- see the note on ScanTrinkets.
+local TRINKET_RESCAN_INTERVAL = 1.0
+
 -- =========================================================
 -- Main frame
 -- =========================================================
@@ -199,7 +204,28 @@ local trinketFrames = {
 -- Layout
 -- =========================================================
 
+-- Set when a layout was requested while it could not be applied, so leaving
+-- combat can replay it (see the protection note on ApplyLayout).
+local layoutPending = false
+
+-- Positions and shows the icon strip.
+--
+-- PROTECTED: the spell and trinket icons are SecureActionButtonTemplate
+-- buttons, so Show / Hide / ClearAllPoints / SetPoint on them are blocked --
+-- silently, as no-ops -- while InCombatLockdown() holds. A layout asked for in
+-- combat is therefore recorded in layoutPending and replayed on
+-- PLAYER_REGEN_ENABLED (the same discipline as ExsarUI.CreateActionBar's
+-- ApplyLayout). Without the replay, a known-state flip landing mid-fight was
+-- dropped for good -- ScanTrinkets only re-lays out when the state *changes*,
+-- so nothing ever asked again and the trinket stayed missing until an
+-- unequip/re-equip.
 local function ApplyLayout(gap)
+    if InCombatLockdown() then
+        layoutPending = true
+        return
+    end
+    layoutPending = false
+
     local x = PADDING
     local anyPlaced = false
 
@@ -273,8 +299,16 @@ local function UpdateKnownSpells()
 end
 
 -- Checks each trinket slot for an equipped item with a USE effect.
--- Loads the icon texture and updates the layout.  Called on login,
--- world entry, and whenever equipment changes.
+-- Loads the icon texture and updates the layout.  Called on login, world entry,
+-- whenever a trinket slot changes, on leaving combat, and on a slow OnUpdate
+-- tick (TRINKET_RESCAN_INTERVAL).
+--
+-- The periodic re-verification matters because `tf.known` is cached state that
+-- the event-driven callers recompute only rarely: a transient nil from
+-- GetInventoryItemID (mid loading screen, or an /equipslot swap in flight) is
+-- classified "empty" here, wipes the icon, and unregisters the item-data
+-- listener -- so before the rescan a single bad read stranded the trinket until
+-- the next equipment change.
 local function ScanTrinkets()
     local changed = false
     local pending = false
@@ -410,6 +444,8 @@ local function UpdateGlowPulse()
 end
 
 local updateElapsed = 0
+local scanElapsed   = 0
+
 mainFrame:SetScript("OnUpdate", function(self, elapsed)
     updateElapsed = updateElapsed + elapsed
     if updateElapsed >= 0.1 then
@@ -417,6 +453,17 @@ mainFrame:SetScript("OnUpdate", function(self, elapsed)
         UpdateCooldowns()
         UpdateTrinketCooldowns()
     end
+
+    -- Slow re-verification of the equipped trinkets: three API calls per slot
+    -- at 1 Hz, which is cheaper than trusting a cached flag that only rare
+    -- events refresh. Any misread now self-heals within a second instead of
+    -- persisting until an unequip/re-equip.
+    scanElapsed = scanElapsed + elapsed
+    if scanElapsed >= TRINKET_RESCAN_INTERVAL then
+        scanElapsed = 0
+        ScanTrinkets()
+    end
+
     UpdateGlowPulse()
 end)
 
@@ -429,6 +476,7 @@ mainFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("SPELLS_CHANGED")
 mainFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+mainFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 mainFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -441,11 +489,23 @@ mainFrame:SetScript("OnEvent", function(self, event, arg1)
         UpdateCooldowns()
         ScanTrinkets()
         UpdateTrinketCooldowns()
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "GET_ITEM_INFO_RECEIVED" then
-        -- Equipment change, or a previously-uncached trinket's data just arrived
-        -- (GET_ITEM_INFO_RECEIVED, registered by ScanTrinkets only while pending).
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Left combat: re-check the trinkets, then replay any layout that was
+        -- blocked while protected. ScanTrinkets lays out itself if the state
+        -- changed; layoutPending covers a change that was already recorded.
         ScanTrinkets()
+        if layoutPending then ApplyLayout(cDB().groupGap or GROUP_GAP) end
         UpdateTrinketCooldowns()
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "GET_ITEM_INFO_RECEIVED" then
+        -- A trinket slot changed, or a previously-uncached trinket's data just
+        -- arrived (GET_ITEM_INFO_RECEIVED, registered by ScanTrinkets only while
+        -- pending). arg1 is the equipment slot: filter to the two trinket slots,
+        -- since this fires constantly for the ammo slot in combat.
+        if event == "GET_ITEM_INFO_RECEIVED"
+           or arg1 == TRINKET_SLOT_1 or arg1 == TRINKET_SLOT_2 then
+            ScanTrinkets()
+            UpdateTrinketCooldowns()
+        end
     else
         UpdateCooldowns()
         UpdateTrinketCooldowns()
