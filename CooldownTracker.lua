@@ -17,7 +17,6 @@ local SPELL_GROUPS = {
     {
         { name = "Multi-Shot"  },
         { name = "Arcane Shot" },
-        { name = "Raptor Strike" },
     },
     {
         { name = "Rapid Fire"     },
