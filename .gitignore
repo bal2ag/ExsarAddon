@@ -1,0 +1,39 @@
+# The repo IS the addon folder — WoW loads it from
+# Interface/AddOns/ExsarAddon/ — so anything the game, the OS, or a tool drops
+# in here lands right next to the source. Keep those out of the history.
+
+# --- macOS -------------------------------------------------------------------
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# --- WoW combat logs ---------------------------------------------------------
+# Captured for the timing/weave analysis written up in CLAUDE.md (the retry-timer
+# and position-snapshot work). They are large, per-session, and regenerated at
+# will — the conclusions belong in CLAUDE.md, not the raw logs in git.
+WoWCombatLog*.txt
+Archive-WoWCombatLog*.txt
+
+# --- Partial / in-progress downloads ------------------------------------------
+*.crdownload
+*.part
+*.download
+Unconfirmed*.crdownload
+
+# --- Lua tooling --------------------------------------------------------------
+luacov.stats.out
+luacov.report.out
+luacov.report.html
+
+# --- Editors ------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Claude Code --------------------------------------------------------------
+# Per-machine overrides only. Shared project config (.claude/settings.json,
+# skills, agents) stays tracked deliberately.
+.claude/settings.local.json
