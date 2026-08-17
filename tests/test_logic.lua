@@ -1155,6 +1155,70 @@ describe("SelectFirstInStock", function()
 end)
 
 -- =========================================================
+-- Spell rank pinning (RankedCastName / RankedCastMacro / RankPinLabel)
+-- =========================================================
+
+describe("RankedCastName", function()
+    local RANKS = { "Rank 1", "Rank 2", "Rank 3" }
+
+    it("returns the bare name for no pin (highest known)", function()
+        assert.equals("Wing Clip", Logic.RankedCastName("Wing Clip", RANKS, 0))
+        assert.equals("Wing Clip", Logic.RankedCastName("Wing Clip", RANKS, nil))
+    end)
+
+    it("appends the pinned rank's subtext", function()
+        assert.equals("Wing Clip(Rank 1)", Logic.RankedCastName("Wing Clip", RANKS, 1))
+        assert.equals("Wing Clip(Rank 3)", Logic.RankedCastName("Wing Clip", RANKS, 3))
+    end)
+
+    it("uses the localized subtext verbatim", function()
+        assert.equals("Flügelstutzen(Rang 2)",
+            Logic.RankedCastName("Flügelstutzen", { "Rang 1", "Rang 2" }, 2))
+    end)
+
+    it("falls back to highest known for a rank not trained yet", function()
+        assert.equals("Wing Clip", Logic.RankedCastName("Wing Clip", { "Rank 1" }, 3))
+        assert.equals("Wing Clip", Logic.RankedCastName("Wing Clip", {}, 1))
+        assert.equals("Wing Clip", Logic.RankedCastName("Wing Clip", nil, 1))
+    end)
+end)
+
+describe("RankedCastMacro", function()
+    it("builds a /cast body for the pinned rank", function()
+        assert.equals("/cast Wing Clip(Rank 1)",
+            Logic.RankedCastMacro("Wing Clip", { "Rank 1", "Rank 2" }, 1))
+    end)
+
+    it("builds a plain /cast for no pin", function()
+        assert.equals("/cast Wing Clip",
+            Logic.RankedCastMacro("Wing Clip", { "Rank 1", "Rank 2" }, 0))
+    end)
+
+    it("stays a single /cast line, so the slot keeps its spell tooltip path", function()
+        assert.is_true(Logic.IsSimpleCastMacro(
+            Logic.RankedCastMacro("Wing Clip", { "Rank 1" }, 1)))
+    end)
+end)
+
+describe("RankPinLabel", function()
+    local RANKS = { "Rank 1", "Rank 2", "Rank 3" }
+
+    it("names the default", function()
+        assert.equals("highest known", Logic.RankPinLabel(RANKS, 0))
+        assert.equals("highest known", Logic.RankPinLabel(RANKS, nil))
+    end)
+
+    it("shows a trained rank's own subtext", function()
+        assert.equals("Rank 2", Logic.RankPinLabel(RANKS, 2))
+    end)
+
+    it("flags a rank the character has not trained", function()
+        assert.equals("rank 3 (not learned)", Logic.RankPinLabel({ "Rank 1" }, 3))
+        assert.equals("rank 1 (not learned)", Logic.RankPinLabel(nil, 1))
+    end)
+end)
+
+-- =========================================================
 -- IsSimpleCastMacro
 -- =========================================================
 

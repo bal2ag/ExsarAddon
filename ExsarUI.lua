@@ -2528,7 +2528,10 @@ end
 --   lack of mana; see manaSpell. Takes precedence over the range shade),
 --   moduleName,
 --   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
---   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval.
+--   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval,
+--   extraConfig(parent, y, dbFunc) -> y   bar-specific config rows, inserted
+--     after the scale/lock rows and before the reset button (which stays last,
+--     as everywhere else). E.g. CoreCombatWidget's Wing Clip rank pin.
 -- Returns a handle { frame, slots, Refresh, ApplyLayout, dbFunc }.
 
 local AB_ICON_SIZE = 29
@@ -3442,6 +3445,7 @@ function ExsarUI.CreateActionBar(opts)
         BuildConfig = function(parent, y)
             y = ExsarUI.AddScaleSlider(parent, y, dbFunc, frame)
             y = ExsarUI.AddLockCheckbox(parent, y, dbFunc, frame, function() ApplyLayout() end)
+            if opts.extraConfig then y = opts.extraConfig(parent, y, dbFunc) end
             y = ExsarUI.AddResetButton(parent, y, dbFunc, frame,
                 opts.configName or opts.moduleName or opts.name, defaultX, defaultY)
             return y

@@ -714,6 +714,44 @@ function ExsarLogic.IsSimpleCastMacro(macro)
 end
 
 -- =========================================================
+-- Spell rank pinning (action bars)
+-- =========================================================
+
+--- Resolve a rank-pinned ability to the spell name a "/cast" line should carry.
+-- "/cast <name>" always fires the HIGHEST known rank, so a lower rank has to be
+-- requested explicitly by appending its rank subtext: "Wing Clip(Rank 1)". That
+-- subtext is LOCALIZED, so callers pass the list read from the spellbook rather
+-- than this building "Rank N" itself. Pure.
+-- @param name   base spell name ("Wing Clip")
+-- @param ranks  ordered list of the spell's known rank subtexts, lowest first
+--               ({ "Rank 1", "Rank 2", ... })
+-- @param index  1-based rank to pin; nil/0 = highest known. An index past the
+--               known ranks also falls back to highest known, so a pin the
+--               character has not trained yet still casts something.
+-- @return string  "Wing Clip" or "Wing Clip(Rank 1)"
+function ExsarLogic.RankedCastName(name, ranks, index)
+    local sub = index and index > 0 and ranks and ranks[index]
+    if sub and sub ~= "" then return name .. "(" .. sub .. ")" end
+    return name
+end
+
+--- The "/cast" macro body for a rank-pinned ability. See RankedCastName. Pure.
+function ExsarLogic.RankedCastMacro(name, ranks, index)
+    return "/cast " .. ExsarLogic.RankedCastName(name, ranks, index)
+end
+
+--- Human label for a rank pin, for the config slider. Pure.
+-- nil/0 → "highest known"; a trained rank → its localized subtext ("Rank 1"); a
+-- rank above what the character knows → "rank N (not learned)", so the slider
+-- never silently claims a rank that would not actually be cast.
+function ExsarLogic.RankPinLabel(ranks, index)
+    if not index or index <= 0 then return "highest known" end
+    local sub = ranks and ranks[index]
+    if sub and sub ~= "" then return sub end
+    return "rank " .. index .. " (not learned)"
+end
+
+-- =========================================================
 -- Raid debuff tracker (missing critical debuffs)
 -- =========================================================
 

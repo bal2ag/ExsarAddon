@@ -72,6 +72,7 @@ read_globals = {
     "UnitIsConnected",
     "GetSpellCooldown",
     "GetItemIcon",
+    "GetSpellBookItemName",
     "GetSpellInfo",
     "GetSpellLink",
     "GetSpellTexture",

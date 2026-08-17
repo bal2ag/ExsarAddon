@@ -26,7 +26,11 @@ end
 -- Config widget helpers (available to all modules)
 -- =========================================================
 
-function ExsarAddon.CreateSlider(parent, label, x, y, minV, maxV, step, getter, setter)
+-- `formatValue(v) -> string` is optional: when given it renders the value in the
+-- slider's centre label instead of the raw number (e.g. a rank pin showing
+-- "highest known" rather than "0"), and the min/max end labels are blanked so
+-- the wider text has room.
+function ExsarAddon.CreateSlider(parent, label, x, y, minV, maxV, step, getter, setter, formatValue)
     OPT_ID = OPT_ID + 1
     local s = CreateFrame("Slider", ADDON_NAME .. "OptSl" .. OPT_ID, parent, "OptionsSliderTemplate")
     s:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -51,13 +55,15 @@ function ExsarAddon.CreateSlider(parent, label, x, y, minV, maxV, step, getter, 
     local sText = _G[s:GetName() .. "Text"]
     local sLow  = _G[s:GetName() .. "Low"]
     local sHigh = _G[s:GetName() .. "High"]
-    if sLow  then sLow:SetText(tostring(minV)) end
-    if sHigh then sHigh:SetText(tostring(maxV)) end
+    if sLow  then sLow:SetText(formatValue and "" or tostring(minV)) end
+    if sHigh then sHigh:SetText(formatValue and "" or tostring(maxV)) end
 
     local function updateLabel(v)
         if sText then
             local display
-            if step >= 1 then
+            if formatValue then
+                display = formatValue(v)
+            elseif step >= 1 then
                 display = tostring(math.floor(v + 0.5))
             else
                 display = string.format("%." .. math.max(0, math.ceil(-math.log10(step))) .. "f", v)
