@@ -1590,6 +1590,218 @@ function ExsarUI.CreateWhirlwindEffect(anchor, opts)
     return WH
 end
 
+--- Create a MAELSTROM — soft-dot swirls cascading INWARD toward a centre, like
+--- matter spiralling into a black hole — on its own UIParent-child frame anchored
+--- to `anchor`.
+---
+--- The anchored widget IS the black hole: `radiusX`/`radiusY` describe its event
+--- HORIZON (normally the widget's outline plus a small margin) and swirls spawn
+--- out at `reach` times that, wind inward, and are snuffed out as they reach it.
+--- Nothing is ever drawn inside the horizon, so the widget's own contents stay
+--- completely clear.
+---
+--- Unlike the slash / radial-burst / whirlwind effects (one-shot :Trigger cues),
+--- this is a persistent STATE indicator: it runs for as long as `getParams`
+--- returns a params table and stops the frame that returns nil. Driving it off a
+--- live params function rather than a SetIntensity call is deliberate — a config
+--- slider or a forced debug tier then retunes it on the very next frame, with no
+--- restart and no stale cached intensity.
+---
+--- Same soft additive brush as the other effects (overlapping round dots, so no
+--- facets or hard corners). Each swirl is a comet — a head stamp with a tapering
+--- trail behind it (ExsarLogic.MaelstromTrailProfile) — riding the logarithmic
+--- infall spiral of ExsarLogic.MaelstromPoint, brightening and compressing on the
+--- way down per ExsarLogic.MaelstromInfallEnvelope.
+---
+--- The SILHOUETTE comes entirely from params (arms/trail/turns/reach) and is meant
+--- to stay fixed while only intensity escalates — see the shape note on
+--- ExsarLogic.MAELSTROM_ARMS. `softness` is read per frame rather than baked in at
+--- construction precisely so the glow can be one of those intensity channels.
+---
+--- The frame stays shown permanently and inactivity is expressed by hiding every
+--- stamp — a hidden frame gets no OnUpdate, so hiding the frame itself would
+--- leave nothing running to notice that params came back.
+--- Because it is a UIParent child rather than a child of the anchor, its depth is
+--- its OWN frame strata -- it does not inherit the widget's. It defaults to "HIGH"
+--- so it draws over ordinary widgets (which sit at the default MEDIUM); at a lower
+--- strata any neighbouring widget will cover it. Use :SetStrata to move it.
+--- @param anchor  frame to centre the maelstrom on
+--- @param opts    { getParams (-> ExsarLogic.MaelstromTierParams table or nil),
+---                  radiusX, radiusY, trailStep, dotTexture, fps,
+---                  getScale, strata, frameLevel, xOffset, yOffset }
+--- @return maelstrom  object with :SetTexture(path) and :SetStrata(name)
+function ExsarUI.CreateMaelstromEffect(anchor, opts)
+    opts = opts or {}
+    local SOFT_DOT  = opts.dotTexture or "Interface\\GLUES\\MODELS\\UI_Tauren\\gradientCircle"
+    local getParams = opts.getParams or function() return nil end
+    local getScale  = opts.getScale  or function() return 1 end
+    local radiusX   = opts.radiusX   or 36    -- px half-width of the HORIZON ellipse
+    local radiusY   = opts.radiusY   or 23    -- px half-height
+    -- Spacing between a swirl's trail stamps, in infall units. Kept just under
+    -- 1/arms so consecutive swirls stay visually distinct instead of fusing into
+    -- one continuous spiral band.
+    local trailStep = opts.trailStep or 0.014
+
+    -- This effect runs continuously (potentially a whole fight), unlike the
+    -- sub-second one-shots, so it renders on a throttle. The phases still
+    -- accumulate off real elapsed time, so throttling changes the frame rate of
+    -- the swirl and never its speed.
+    local frameInterval = 1 / (opts.fps or 30)
+
+    local arms   = ExsarLogic.MAELSTROM_ARMS
+    local trail  = ExsarLogic.MAELSTROM_TRAIL
+    local stamps = arms * trail
+
+    -- Depth. HIGH by default so the effect is not buried under neighbouring
+    -- widgets (which sit at the default MEDIUM); the frame level then places it
+    -- above ordinary frames that share the strata.
+    local strata     = opts.strata or "HIGH"
+    local frameLevel = opts.frameLevel or 100
+
+    local f = CreateFrame("Frame", nil, UIParent)
+    local span = ExsarLogic.MAELSTROM_REACH * 2.2
+    f:SetSize(radiusX * span, radiusY * span)
+    f:SetFrameStrata(strata)
+    f:SetFrameLevel(frameLevel)
+    f:SetPoint("CENTER", anchor, "CENTER", opts.xOffset or 0, opts.yOffset or 0)
+
+    -- Same two-layer additive brush as the other effects: soft halo + bright core.
+    -- The halo's size/alpha multipliers are applied per frame from p.softness (see
+    -- the note above), so only the core's constants can live here.
+    --
+    -- These per-stamp alphas are roughly TWICE those of the slash/burst effects,
+    -- and deliberately so. Those stamp ~89 dots along a short dense curve, so heavy
+    -- overlap sums them additively into a bright stroke; a maelstrom swirl is only
+    -- ~9 stamps strung along a long spiral, so almost nothing overlaps and the same
+    -- constants came out far too faint. Per-stamp alpha is the effect's real
+    -- brightness ceiling -- the tier `alpha` is a multiplier on top of it.
+    local CORE_ALPHA, HALO_ALPHA = 0.48, 0.44
+    local layers = {
+        { halo = true,  sub = "ARTWORK" },
+        { halo = false, sizeMul = 1.0, alphaMul = CORE_ALPHA, sub = "OVERLAY" },
+    }
+    for _, layer in ipairs(layers) do
+        layer.dot = {}
+        for i = 1, stamps do
+            local t = f:CreateTexture(nil, layer.sub)
+            t:SetTexture(SOFT_DOT)
+            t:SetBlendMode("ADD")
+            t:Hide()
+            layer.dot[i] = t
+        end
+    end
+
+    local MS = { frame = f, dotTexture = SOFT_DOT, strata = strata, flow = 0, spin = 0 }
+    local hiddenAll = true
+    local sinceRender = 0
+
+    function MS:SetTexture(path)
+        self.dotTexture = path
+        for _, layer in ipairs(layers) do
+            for i = 1, stamps do layer.dot[i]:SetTexture(path) end
+        end
+        return path
+    end
+
+    --- Move the effect to a different frame strata -- its "z index". Cheap and
+    --- safe to call repeatedly (a no-op when unchanged), and not combat-protected,
+    --- since this is an ordinary non-secure frame. Pass a name from
+    --- ExsarLogic.STRATA_ORDER; anything WoW does not recognize would throw, so
+    --- callers driving this from a slider should map through
+    --- ExsarLogic.StrataForLevel.
+    --- @return the strata now in effect
+    function MS:SetStrata(name)
+        if not name or name == strata then return strata end
+        strata = name
+        f:SetFrameStrata(name)
+        -- SetFrameStrata resets the frame level, so it has to be re-applied or the
+        -- effect silently drops behind same-strata frames.
+        f:SetFrameLevel(frameLevel)
+        self.strata = strata
+        return strata
+    end
+
+    local function HideAll()
+        if hiddenAll then return end
+        for _, layer in ipairs(layers) do
+            for i = 1, stamps do layer.dot[i]:Hide() end
+        end
+        hiddenAll = true
+    end
+
+    -- Place each swirl's head at its own point in the infall and string its trail
+    -- out behind it (at smaller v, i.e. further out). A trail stamp whose v has
+    -- gone negative has not emerged from the spawn rim yet and is hidden, which is
+    -- what makes swirls grow out of the rim rather than pop into existence whole.
+    local function render(p)
+        local s = getScale()
+        local RX, RY = radiusX * s, radiusY * s
+        local c = p.color
+        local haloSize, haloAlpha = 1 + 1.35 * p.softness, HALO_ALPHA * p.softness
+        for _, layer in ipairs(layers) do
+            local sizeMul  = layer.halo and haloSize  or layer.sizeMul
+            local alphaMul = layer.halo and haloAlpha or layer.alphaMul
+            local n = 0
+            for a = 1, p.arms do
+                local armAngle = (a - 1) / p.arms * 2 * math.pi
+                local headV    = (MS.flow + (a - 1) / p.arms) % 1
+                for k = 0, p.trail - 1 do
+                    n = n + 1
+                    local dot = layer.dot[n]
+                    local v = headV - k * trailStep
+                    if v < 0 then
+                        dot:Hide()
+                    else
+                        -- Divide by `trail`, not `trail - 1`: sampling the profile
+                        -- inclusive of k = 1 would put the last stamp of every
+                        -- swirl at exactly zero width and alpha, spending a
+                        -- texture per swirl on something invisible.
+                        local w, ta = ExsarLogic.MaelstromTrailProfile(k / p.trail)
+                        local ea, es = ExsarLogic.MaelstromInfallEnvelope(v)
+                        local nx, ny = ExsarLogic.MaelstromPoint(
+                            v, armAngle, MS.spin, p.turns, p.reach)
+                        local dia = w * es * p.thickness * sizeMul * s
+                        if dia < 2 then dia = 2 end
+                        -- p.alpha is a brightness MULTIPLIER, not an absolute
+                        -- opacity, and the intensity slider can push it past 1 --
+                        -- so the final per-stamp value is clamped here rather than
+                        -- in the pure params.
+                        local av = alphaMul * p.alpha * ta * ea
+                        if av > 1 then av = 1 end
+                        dot:SetSize(dia, dia)
+                        dot:SetPoint("CENTER", f, "CENTER", nx * RX, ny * RY)
+                        dot:SetVertexColor(c[1], c[2], c[3], av)
+                        dot:Show()
+                    end
+                end
+            end
+            for i = n + 1, stamps do layer.dot[i]:Hide() end
+        end
+        hiddenAll = false
+    end
+
+    f:SetScript("OnUpdate", function(_, elapsed)
+        local p = getParams()
+        if not p then
+            HideAll()
+            return
+        end
+        -- Advance both clocks every frame (cheap) even when the render is
+        -- throttled, so motion stays tied to wall time. `flow` is the cascade
+        -- itself; `spin` is a slow drift of the whole pattern on top of it, which
+        -- breaks the strict periodicity of the infall.
+        MS.flow = (MS.flow + elapsed * p.infallPerSec) % 1
+        MS.spin = (MS.spin + elapsed * p.spinPerSec * 2 * math.pi) % (2 * math.pi)
+
+        sinceRender = sinceRender + elapsed
+        if sinceRender < frameInterval then return end
+        sinceRender = 0
+        render(p)
+    end)
+
+    return MS
+end
+
 -- =========================================================
 -- Ranged weapon helpers
 -- =========================================================

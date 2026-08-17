@@ -2907,3 +2907,425 @@ describe("WhirlwindThickness", function()
         assert.are.equal(Logic.WhirlwindThickness(1), Logic.WhirlwindThickness(5))
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- RotationHasteTier
+-- ---------------------------------------------------------------------------
+describe("RotationHasteTier", function()
+    it("maps each rotation to its escalation tier", function()
+        assert.are.equal(0, Logic.RotationHasteTier("5:6:1:1"))
+        assert.are.equal(1, Logic.RotationHasteTier("1:1"))
+        assert.are.equal(2, Logic.RotationHasteTier("2:3"))
+        assert.are.equal(3, Logic.RotationHasteTier("1:2"))
+    end)
+
+    it("tiers ascend as SuggestRotation's speed thresholds descend", function()
+        -- The tier must climb monotonically with haste, keyed off the same
+        -- thresholds SuggestRotation owns.
+        local speeds = { 3.00, 1.83, 1.22, 0.84, 0.50 }
+        local prev = -1
+        for _, sp in ipairs(speeds) do
+            local tier = Logic.RotationHasteTier(Logic.SuggestRotation(sp))
+            assert.is_true(tier >= prev)
+            prev = tier
+        end
+        assert.are.equal(3, prev)
+    end)
+
+    it("treats an unknown rotation as the baseline tier", function()
+        assert.are.equal(0, Logic.RotationHasteTier("nonsense"))
+        assert.are.equal(0, Logic.RotationHasteTier(nil))
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- MaelstromTierParams
+-- ---------------------------------------------------------------------------
+describe("MaelstromTierParams", function()
+    it("returns nil at tier 0 (and for nil/unknown tiers)", function()
+        assert.is_nil(Logic.MaelstromTierParams(0))
+        assert.is_nil(Logic.MaelstromTierParams(nil))
+        assert.is_nil(Logic.MaelstromTierParams(9))
+    end)
+
+    it("keeps the SHAPE identical at every tier", function()
+        -- The whole design rule: a tier change must read as the same maelstrom
+        -- spun up, never as a different picture.
+        local t1 = Logic.MaelstromTierParams(1)
+        local t2 = Logic.MaelstromTierParams(2)
+        local t3 = Logic.MaelstromTierParams(3)
+        for _, key in ipairs({ "arms", "trail", "turns", "reach" }) do
+            assert.are.equal(t1[key], t2[key], key .. " must not vary by tier")
+            assert.are.equal(t2[key], t3[key], key .. " must not vary by tier")
+        end
+    end)
+
+    it("keeps the shape identical under the user multipliers too", function()
+        local base  = Logic.MaelstromTierParams(2)
+        local tuned = Logic.MaelstromTierParams(2, 2.0, 3.0)
+        for _, key in ipairs({ "arms", "trail", "turns", "reach" }) do
+            assert.are.equal(base[key], tuned[key], key .. " must not respond to multipliers")
+        end
+    end)
+
+    it("keeps the text face off the multipliers (a slider must not jitter it)", function()
+        local base  = Logic.MaelstromTierParams(3)
+        local tuned = Logic.MaelstromTierParams(3, 2.0, 3.0)
+        assert.are.equal(base.fontSize, tuned.fontSize)
+        assert.are.equal(base.fontFlags, tuned.fontFlags)
+    end)
+
+    it("exposes the shape constants unchanged", function()
+        local p = Logic.MaelstromTierParams(1)
+        assert.are.equal(Logic.MAELSTROM_ARMS,  p.arms)
+        assert.are.equal(Logic.MAELSTROM_TRAIL, p.trail)
+        assert.are.equal(Logic.MAELSTROM_TURNS, p.turns)
+        assert.are.equal(Logic.MAELSTROM_REACH, p.reach)
+    end)
+
+    it("spaces the swirl heads evenly (the ARMS/TURNS gcd rule)", function()
+        -- The renderer staggers arm a by (a-1)/ARMS in both track angle and infall
+        -- phase, so heads land (1 + TURNS) slots apart around ARMS slots. Coprime
+        -- => every slot is used exactly once; otherwise the heads bunch up.
+        local arms  = Logic.MAELSTROM_ARMS
+        local step  = 1 + Logic.MAELSTROM_TURNS
+        assert.are.equal(step, math.floor(step), "1 + TURNS must be a whole number of slots")
+        local seen, n = {}, 0
+        for a = 0, arms - 1 do
+            local slot = (a * step) % arms
+            if not seen[slot] then seen[slot] = true; n = n + 1 end
+        end
+        assert.are.equal(arms, n, "swirl heads must occupy every angular slot")
+    end)
+
+    it("escalates every intensity channel with the tier", function()
+        local t1 = Logic.MaelstromTierParams(1)
+        local t2 = Logic.MaelstromTierParams(2)
+        local t3 = Logic.MaelstromTierParams(3)
+        for _, key in ipairs({ "infallPerSec", "spinPerSec", "alpha", "thickness",
+                               "softness", "pulseFreq", "fontSize" }) do
+            assert.is_true(t2[key] > t1[key], key .. " should grow from tier 1 to 2")
+            assert.is_true(t3[key] > t2[key], key .. " should grow from tier 2 to 3")
+        end
+        -- pulseMin falls (a deeper trough = a more pronounced pulse).
+        assert.is_true(t2.pulseMin < t1.pulseMin)
+        assert.is_true(t3.pulseMin < t2.pulseMin)
+    end)
+
+    it("keeps opacity nearly flat so every tier stays legible", function()
+        -- The readability constraint: escalating alpha hard made tier 1 close to
+        -- invisible in play. Rate, colour, size, glow and text weight carry the
+        -- escalation instead -- opacity must not drift far between tiers again.
+        local a1 = Logic.MaelstromTierParams(1).alpha
+        local a3 = Logic.MaelstromTierParams(3).alpha
+        assert.is_true(a1 >= 0.85, "tier 1 must be plainly visible")
+        assert.is_true(a1 >= a3 * 0.9, "opacity must not escalate steeply")
+    end)
+
+    it("escalates the rotation text's weight, not just its size", function()
+        assert.are.equal("OUTLINE", Logic.MaelstromTierParams(1).fontFlags)
+        assert.are.equal("THICKOUTLINE", Logic.MaelstromTierParams(2).fontFlags)
+        assert.are.equal("THICKOUTLINE", Logic.MaelstromTierParams(3).fontFlags)
+    end)
+
+    it("runs the colour cool -> warm as haste climbs (blue, yellow, orange)", function()
+        local c1 = Logic.MaelstromTierParams(1).color
+        local c2 = Logic.MaelstromTierParams(2).color
+        local c3 = Logic.MaelstromTierParams(3).color
+        -- distinct
+        assert.is_false(c1[1] == c2[1] and c1[2] == c2[2] and c1[3] == c2[3])
+        assert.is_false(c2[1] == c3[1] and c2[2] == c3[2] and c2[3] == c3[3])
+        -- tier 1 blue: blue dominates
+        assert.is_true(c1[3] > c1[1] and c1[3] > c1[2])
+        -- tier 2 yellow: red and green high together, blue low
+        assert.is_true(c2[1] > 0.8 and c2[2] > 0.8 and c2[3] < 0.3)
+        -- tier 3 orange: red high, green mid, blue low -- warmer than tier 2
+        assert.is_true(c3[1] > 0.8 and c3[3] < 0.3)
+        assert.is_true(c3[2] < c2[2], "tier 3 must be warmer (less green) than tier 2")
+        -- warmth climbs monotonically: blue channel falls all the way
+        assert.is_true(c2[3] < c1[3] and c3[3] <= c2[3])
+    end)
+
+    it("lets the intensity slider overdrive brightness, within a cap", function()
+        -- alpha is a multiplier on the renderer's per-stamp brush alpha, not an
+        -- absolute opacity, so it may exceed 1 -- otherwise the slider could not
+        -- brighten a tier that already sits at its own ceiling. The renderer does
+        -- the final clamp.
+        local base = Logic.MaelstromTierParams(3)
+        assert.is_true(Logic.MaelstromTierParams(3, 1.5).alpha > base.alpha)
+        for tier = 1, 3 do
+            assert.is_true(Logic.MaelstromTierParams(tier, 99, 99).alpha <= 2)
+        end
+    end)
+
+    it("scales look with intensity and rate with speed, independently", function()
+        local base  = Logic.MaelstromTierParams(2)
+        local loud  = Logic.MaelstromTierParams(2, 1.5)
+        local fast  = Logic.MaelstromTierParams(2, 1, 2)
+        assert.is_true(loud.thickness > base.thickness)
+        assert.is_true(loud.softness > base.softness)
+        assert.are.equal(base.infallPerSec, loud.infallPerSec)
+        assert.are.equal(base.thickness, fast.thickness)
+        assert.is_true(approx(base.infallPerSec * 2, fast.infallPerSec))
+        assert.is_true(approx(base.spinPerSec * 2, fast.spinPerSec))
+        assert.is_true(approx(base.pulseFreq * 2, fast.pulseFreq))
+    end)
+
+    it("ignores non-positive / non-numeric multipliers", function()
+        local base = Logic.MaelstromTierParams(3)
+        for _, bad in ipairs({ 0, -1, "x" }) do
+            local p = Logic.MaelstromTierParams(3, bad, bad)
+            assert.are.equal(base.thickness, p.thickness)
+            assert.are.equal(base.infallPerSec, p.infallPerSec)
+        end
+    end)
+
+    it("returns a fresh table each call (callers may cache or mutate)", function()
+        local a = Logic.MaelstromTierParams(2)
+        a.thickness = 999
+        a.color[1] = 0
+        local b = Logic.MaelstromTierParams(2)
+        assert.is_false(b.thickness == 999)
+        assert.is_false(b.color[1] == 0)
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- MaelstromPoint
+-- ---------------------------------------------------------------------------
+describe("MaelstromPoint", function()
+    local REACH = Logic.MAELSTROM_REACH
+
+    it("spawns at the rim and lands exactly on the horizon", function()
+        local _, _, rOut = Logic.MaelstromPoint(0, 0, 0)
+        local _, _, rIn  = Logic.MaelstromPoint(1, 0, 0)
+        assert.is_true(approx(REACH, rOut))
+        assert.is_true(approx(1, rIn))
+    end)
+
+    it("never draws inside the horizon (the widget stays clear)", function()
+        for k = 0, 100 do
+            local nx, ny, r = Logic.MaelstromPoint(k / 100, 1.2, 0.4)
+            assert.is_true(r >= 1 - 1e-9)
+            assert.is_true(approx(r, math.sqrt(nx * nx + ny * ny)))
+        end
+    end)
+
+    it("falls inward monotonically", function()
+        local prev = math.huge
+        for k = 0, 50 do
+            local _, _, r = Logic.MaelstromPoint(k / 50, 0, 0)
+            assert.is_true(r <= prev)
+            prev = r
+        end
+    end)
+
+    it("accelerates: a log spiral covers less distance per step near the horizon", function()
+        -- Geometric radius decay means equal angular steps shrink in radial extent,
+        -- which is what makes the fall read as speeding up.
+        local _, _, rA = Logic.MaelstromPoint(0.0, 0, 0)
+        local _, _, rB = Logic.MaelstromPoint(0.1, 0, 0)
+        local _, _, rC = Logic.MaelstromPoint(0.9, 0, 0)
+        local _, _, rD = Logic.MaelstromPoint(1.0, 0, 0)
+        assert.is_true((rA - rB) > (rC - rD))
+    end)
+
+    it("winds `turns` revolutions between rim and horizon", function()
+        -- With armAngle = spin = 0 the angle is exactly v * turns * 2pi, so at
+        -- turns = 1 the halfway point sits diametrically opposite the spawn.
+        local x0, y0 = Logic.MaelstromPoint(0, 0, 0, 1, 2)
+        local xh, yh = Logic.MaelstromPoint(0.5, 0, 0, 1, 2)
+        local x1, y1 = Logic.MaelstromPoint(1, 0, 0, 1, 2)
+        assert.is_true(approx(2, x0) and approx(0, y0))       -- rim, angle 0
+        assert.is_true(approx(-math.sqrt(2), xh) and approx(0, yh))  -- half turn
+        assert.is_true(approx(1, x1) and approx(0, y1))       -- horizon, full turn
+    end)
+
+    it("armAngle and spin both rotate the track", function()
+        local x0, y0 = Logic.MaelstromPoint(0.3, 0, 0)
+        local xA, yA = Logic.MaelstromPoint(0.3, math.pi, 0)
+        local xS, yS = Logic.MaelstromPoint(0.3, 0, math.pi)
+        assert.is_true(approx(-x0, xA) and approx(-y0, yA))
+        assert.is_true(approx(-x0, xS) and approx(-y0, yS))
+    end)
+
+    it("clamps v out of range", function()
+        local _, _, rLo = Logic.MaelstromPoint(-4, 0, 0)
+        local _, _, rHi = Logic.MaelstromPoint(9, 0, 0)
+        assert.is_true(approx(REACH, rLo))
+        assert.is_true(approx(1, rHi))
+    end)
+
+    it("degrades safely when reach is at or below the horizon", function()
+        for k = 0, 10 do
+            local _, _, r = Logic.MaelstromPoint(k / 10, 0, 0, 2, 0.5)
+            assert.is_true(approx(1, r))
+        end
+    end)
+
+    it("defaults turns and reach to the shape constants", function()
+        local xa, ya = Logic.MaelstromPoint(0.4, 0.2, 0.1)
+        local xb, yb = Logic.MaelstromPoint(0.4, 0.2, 0.1,
+            Logic.MAELSTROM_TURNS, Logic.MAELSTROM_REACH)
+        assert.is_true(approx(xa, xb) and approx(ya, yb))
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- MaelstromInfallEnvelope
+-- ---------------------------------------------------------------------------
+describe("MaelstromInfallEnvelope", function()
+    it("brightens on the way in, then snuffs out at the horizon", function()
+        local aRim  = Logic.MaelstromInfallEnvelope(0)
+        local aMid  = Logic.MaelstromInfallEnvelope(0.8)
+        local aEdge = Logic.MaelstromInfallEnvelope(1)
+        assert.is_true(aMid > aRim)
+        assert.is_true(approx(0, aEdge))
+    end)
+
+    it("compresses the stamp as it falls", function()
+        local _, sRim = Logic.MaelstromInfallEnvelope(0)
+        local _, sIn  = Logic.MaelstromInfallEnvelope(1)
+        assert.is_true(sIn < sRim)
+        assert.is_true(sIn > 0)
+    end)
+
+    it("keeps both multipliers in 0..1 across the fall", function()
+        for k = 0, 40 do
+            local a, sz = Logic.MaelstromInfallEnvelope(k / 40)
+            assert.is_true(a >= 0 and a <= 1)
+            assert.is_true(sz > 0 and sz <= 1)
+        end
+    end)
+
+    it("clamps v out of range", function()
+        local a0, s0 = Logic.MaelstromInfallEnvelope(0)
+        local al, sl = Logic.MaelstromInfallEnvelope(-2)
+        assert.are.equal(a0, al)
+        assert.are.equal(s0, sl)
+        local a1, s1 = Logic.MaelstromInfallEnvelope(1)
+        local ah, sh = Logic.MaelstromInfallEnvelope(6)
+        assert.are.equal(a1, ah)
+        assert.are.equal(s1, sh)
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- MaelstromTrailProfile
+-- ---------------------------------------------------------------------------
+describe("MaelstromTrailProfile", function()
+    it("peaks just behind the head, not at it", function()
+        local head = Logic.MaelstromTrailProfile(0)
+        local peak = Logic.MaelstromTrailProfile(0.18)
+        assert.is_true(peak > head)
+        assert.is_true(approx(1, peak))
+    end)
+
+    it("tapers to nothing at the tail", function()
+        local w, a = Logic.MaelstromTrailProfile(1)
+        assert.is_true(approx(0, w))
+        assert.is_true(approx(0, a))
+    end)
+
+    it("fades alpha monotonically from head to tail", function()
+        local prev = 2
+        for k = 0, 20 do
+            local _, a = Logic.MaelstromTrailProfile(k / 20)
+            assert.is_true(a <= prev)
+            prev = a
+        end
+    end)
+
+    it("stays within 0..1 across the whole trail", function()
+        for k = 0, 40 do
+            local w, a = Logic.MaelstromTrailProfile(k / 40)
+            assert.is_true(w >= 0 and w <= 1)
+            assert.is_true(a >= 0 and a <= 1)
+        end
+    end)
+
+    it("clamps k out of range", function()
+        local w0, a0 = Logic.MaelstromTrailProfile(0)
+        local wl, al = Logic.MaelstromTrailProfile(-3)
+        assert.are.equal(w0, wl)
+        assert.are.equal(a0, al)
+        local w1, a1 = Logic.MaelstromTrailProfile(1)
+        local wh, ah = Logic.MaelstromTrailProfile(7)
+        assert.are.equal(w1, wh)
+        assert.are.equal(a1, ah)
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- StrataForLevel
+-- ---------------------------------------------------------------------------
+describe("StrataForLevel", function()
+    it("maps the 1..5 scale back to front", function()
+        assert.are.equal("BACKGROUND", Logic.StrataForLevel(1))
+        assert.are.equal("LOW",        Logic.StrataForLevel(2))
+        assert.are.equal("MEDIUM",     Logic.StrataForLevel(3))
+        assert.are.equal("HIGH",       Logic.StrataForLevel(4))
+        assert.are.equal("DIALOG",     Logic.StrataForLevel(5))
+    end)
+
+    it("returns the clamped index alongside the name", function()
+        local name, i = Logic.StrataForLevel(4)
+        assert.are.equal("HIGH", name)
+        assert.are.equal(4, i)
+    end)
+
+    it("never yields a name SetFrameStrata would reject", function()
+        -- A slider, or a garbage saved value, must not be able to throw.
+        local valid = {}
+        for _, n in ipairs(Logic.STRATA_ORDER) do valid[n] = true end
+        for _, bad in ipairs({ -100, 0, 0.4, 5.6, 999, "x", nil, true }) do
+            local name, i = Logic.StrataForLevel(bad)
+            assert.is_true(valid[name], tostring(bad) .. " produced " .. tostring(name))
+            assert.is_true(i >= 1 and i <= #Logic.STRATA_ORDER)
+        end
+    end)
+
+    it("rounds to the nearest layer", function()
+        assert.are.equal("MEDIUM", Logic.StrataForLevel(2.6))
+        assert.are.equal("LOW",    Logic.StrataForLevel(2.4))
+    end)
+
+    it("stops below the strata reserved for dialogs and tooltips", function()
+        -- A decorative effect must never be able to cover a Blizzard dialog or a
+        -- tooltip, so those strata are deliberately not on the scale.
+        for _, n in ipairs(Logic.STRATA_ORDER) do
+            assert.is_false(n == "FULLSCREEN_DIALOG" or n == "TOOLTIP")
+        end
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- LerpColor
+-- ---------------------------------------------------------------------------
+describe("LerpColor", function()
+    local BLACK = { 0, 0, 0 }
+    local WHITE = { 1, 1, 1 }
+
+    it("returns the endpoints at t = 0 and t = 1", function()
+        local r, g, b = Logic.LerpColor(BLACK, WHITE, 0)
+        assert.are.equal(0, r); assert.are.equal(0, g); assert.are.equal(0, b)
+        r, g, b = Logic.LerpColor(BLACK, WHITE, 1)
+        assert.are.equal(1, r); assert.are.equal(1, g); assert.are.equal(1, b)
+    end)
+
+    it("interpolates each channel independently", function()
+        local r, g, b = Logic.LerpColor({ 0, 0.5, 1 }, { 1, 0.5, 0 }, 0.25)
+        assert.is_true(approx(0.25, r))
+        assert.is_true(approx(0.5, g))
+        assert.is_true(approx(0.75, b))
+    end)
+
+    it("clamps t outside 0..1", function()
+        local r = Logic.LerpColor(BLACK, WHITE, -4)
+        assert.are.equal(0, r)
+        r = Logic.LerpColor(BLACK, WHITE, 9)
+        assert.are.equal(1, r)
+        r = Logic.LerpColor(BLACK, WHITE, nil)
+        assert.are.equal(0, r)
+    end)
+end)

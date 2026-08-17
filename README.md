@@ -483,6 +483,16 @@ Shows your effective weapon speed and suggests the matching shot rotation based 
   - **0.84s–1.21s** → `2:3` (2 autos per 3 steadies)
   - **≤0.83s** → `1:2` (1 auto per 2 steadies)
 - **Effective speed:** Read from `UnitRangedDamage("player")`, which accounts for all haste sources (quiver, talents, buffs, haste rating).
+- **Haste effects:** Crossing a rotation threshold is easy to miss when the only change is two characters of text, so each faster rotation adds a progressively more intense visual — a **maelstrom** of swirls cascading inward into the widget, like matter spiralling into a black hole, plus a **pulse** on the rotation text. The swirls spawn out beyond the widget, wind inward along a spiral, and are swallowed at its outline, so they never draw over the text.
+  - **`5:6:1:1`** → nothing (the baseline rotation)
+  - **`1:1`** → slow, in blue
+  - **`2:3`** → roughly twice the rate, in yellow
+  - **`1:2`** → full tilt, in hot orange
+- **Escalating text emphasis:** The rotation text takes the tier's colour and gets progressively more prominent — a heavier outline and a larger point size at each step — on top of the colour pulse. So the tier is readable off the number alone, even with the swirls turned off.
+- **Same shape and brightness at every tier:** The swirl count, trail, spiral, footprint and opacity stay put; what escalates is the rate (about 3.5× from tier 1 to tier 3), the colour, the stamp size, the glow and the text weight. Every tier is plainly visible — a tier change reads as the same maelstrom spun up, not as a different effect.
+- **Tuning the effect:** Both parts can be toggled independently ("Haste effects" and "Emphasize the rotation text"), and "Effect intensity" (0.2–2.0) and "Effect speed" (0.2–3.0) sliders scale size/brightness/glow and infall/pulse rate. All are read live, so changes apply immediately with no `/reload`.
+- **Draw layer:** The swirls are drawn on their own frame, so they can end up behind neighbouring widgets. The "Effect layer" slider (1 = behind the UI, 5 = in front; default 4) raises or lowers them — bump it if something is covering the effect.
+- **Previewing a tier:** `/exsar rotfx 0|1|2|3` forces a tier so you can judge the effect without gearing or buffing into it; `/exsar rotfx auto` hands control back to the live rotation, and a bare `/exsar rotfx` prints the current state. Unlocking the widget also previews the swirl so you can see its real footprint while positioning.
 
 <!-- ![Rotation Helper](screenshots/rotation-helper.png) -->
 

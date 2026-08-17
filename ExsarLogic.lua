@@ -1366,6 +1366,241 @@ function ExsarLogic.WhirlwindThickness(u)
     return 0.30 + 0.70 * u
 end
 
+-- =========================================================
+-- Rotation haste tiers + maelstrom swirl
+-- =========================================================
+-- RotationHelper escalates a visual effect as haste crosses each rotation
+-- threshold: a maelstrom of swirls cascading INWARD into the widget — the widget
+-- itself reads as the black hole and its outline as the event horizon — plus a
+-- pulse on the rotation text. The tier is derived from the ROTATION STRING rather
+-- than the raw speed, so ExsarLogic.SuggestRotation stays the single source of
+-- truth for where the thresholds actually sit.
+--
+-- THE SHAPE IS IDENTICAL AT EVERY TIER. Arm count, trail length, the number of
+-- revolutions a streak makes falling in, and the spawn radius are all fixed
+-- constants; only INTENSITY escalates (infall rate, spin rate, stamp size,
+-- opacity, glow, pulse rate, colour). A tier change must read as "the same
+-- maelstrom, spun up", never as a different picture — so anything that would
+-- alter the silhouette belongs in the constants below, not in the tier table.
+
+--- Haste tier of a suggested rotation string. Pure.
+--- 0 = the baseline rotation (no effect) through 3 = the fastest.
+--- @param rotation  a string as returned by ExsarLogic.SuggestRotation
+--- @return tier  0..3
+function ExsarLogic.RotationHasteTier(rotation)
+    if rotation == "1:1" then return 1 end
+    if rotation == "2:3" then return 2 end
+    if rotation == "1:2" then return 3 end
+    return 0    -- "5:6:1:1" (the slow baseline) and anything unrecognized
+end
+
+-- Shape constants — the silhouette, identical at every tier, and shared with the
+-- renderer (which allocates exactly ARMS x TRAIL stamps up front, so a tier change
+-- is only ever a visibility/intensity change and never a re-allocation).
+--
+-- ARMS and TURNS are chosen TOGETHER, not independently. The renderer staggers arm
+-- a by (a-1)/ARMS in both its track angle and its infall phase, so the streak
+-- heads end up spaced (1 + TURNS) * 2*pi/ARMS apart. With TURNS = 2 that is
+-- 3 * 2*pi/ARMS, and since gcd(3, 7) = 1 the seven heads land on all seven evenly
+-- spaced angular slots. The result cascades continuously (each head is at a
+-- different radius) yet stays rotationally symmetric — change ARMS or TURNS
+-- without re-checking that gcd and the heads will bunch up on one side.
+ExsarLogic.MAELSTROM_ARMS  = 7      -- swirls cascading inward
+ExsarLogic.MAELSTROM_TRAIL = 9      -- stamps per swirl
+ExsarLogic.MAELSTROM_TURNS = 2.0    -- revolutions a swirl makes falling in
+ExsarLogic.MAELSTROM_REACH = 2.10   -- spawn radius, as a multiple of the horizon
+
+-- Per-tier look — INTENSITY ONLY (see the shape note above).
+--
+-- OPACITY IS DELIBERATELY NEARLY FLAT. An earlier version escalated alpha hard
+-- (0.50 / 0.78 / 1.00) and tier 1 was close to invisible in play while tier 2 was
+-- still a squint. Every tier must be plainly legible, so alpha now barely moves
+-- and the escalation is carried by the channels that can climb without hurting
+-- readability: RATE (infall/spin/pulse, a 3.5x span), COLOUR, stamp SIZE, GLOW,
+-- and the rotation text's own weight. Keep tier 1's alpha within ~10% of tier 3's
+-- if these are ever retuned.
+--
+-- Colour runs cool -> warm as haste climbs: blue (unhurried) -> yellow -> orange
+-- (running hot). The text takes the same colour, so tier is readable from the
+-- number alone even if the maelstrom is off.
+local MAELSTROM_TIERS = {
+    -- tier 1 — "1:1": cool blue, unhurried. Fully visible, but slow and calm
+    -- enough that it never competes for attention.
+    { infallPerSec = 0.30, spinPerSec = 0.04, alpha = 0.90, thickness = 5.6,
+      softness = 1.00, pulseFreq = 0.9, pulseMin = 0.72,
+      fontSize = 14, fontFlags = "OUTLINE",
+      color = { 0.40, 0.72, 1.00 } },
+    -- tier 2 — "2:3": twice the rate, warming to yellow, text goes heavy.
+    { infallPerSec = 0.62, spinPerSec = 0.09, alpha = 0.95, thickness = 6.5,
+      softness = 1.20, pulseFreq = 1.6, pulseMin = 0.58,
+      fontSize = 15, fontFlags = "THICKOUTLINE",
+      color = { 1.00, 0.90, 0.15 } },
+    -- tier 3 — "1:2": full tilt, hot orange, biggest and boldest text.
+    { infallPerSec = 1.05, spinPerSec = 0.16, alpha = 1.00, thickness = 7.6,
+      softness = 1.45, pulseFreq = 2.6, pulseMin = 0.42,
+      fontSize = 17, fontFlags = "THICKOUTLINE",
+      color = { 1.00, 0.48, 0.08 } },
+}
+
+--- Resolve the maelstrom/pulse parameters for a haste tier. Pure.
+--- Returns a FRESH table every call (never the shared template), so a caller can
+--- safely cache or mutate the result. The shape fields (arms/trail/turns/reach)
+--- are copied in from the constants above and are the SAME for every tier — only
+--- the intensity fields differ, and only those respond to the user multipliers.
+--- @param tier          0..3 (0 or nil/unknown = no effect)
+--- @param intensityMul  user size/brightness/glow multiplier (default 1)
+--- @param speedMul      user infall/spin/pulse rate multiplier (default 1)
+--- @return params table { tier, arms, trail, turns, reach, infallPerSec,
+---                        spinPerSec, alpha, thickness, softness, pulseFreq,
+---                        pulseMin, fontSize, fontFlags, color }, or nil at tier 0
+function ExsarLogic.MaelstromTierParams(tier, intensityMul, speedMul)
+    local base = MAELSTROM_TIERS[tier or 0]
+    if not base then return nil end
+
+    local im = (type(intensityMul) == "number" and intensityMul > 0) and intensityMul or 1
+    local sm = (type(speedMul) == "number" and speedMul > 0) and speedMul or 1
+
+    -- A brightness MULTIPLIER on the renderer's per-stamp brush alpha, not an
+    -- absolute opacity -- so it may legitimately exceed 1, which is what lets the
+    -- intensity slider actually brighten a maelstrom that is already near its tier
+    -- ceiling. The renderer clamps the final per-stamp value. Capped only to keep
+    -- a wild multiplier from washing every stamp to flat white.
+    local alpha = base.alpha * im
+    if alpha > 2 then alpha = 2 end
+
+    return {
+        tier         = tier,
+        -- shape: fixed across tiers AND unaffected by the intensity multiplier
+        arms         = ExsarLogic.MAELSTROM_ARMS,
+        trail        = ExsarLogic.MAELSTROM_TRAIL,
+        turns        = ExsarLogic.MAELSTROM_TURNS,
+        reach        = ExsarLogic.MAELSTROM_REACH,
+        -- rate
+        infallPerSec = base.infallPerSec * sm,
+        spinPerSec   = base.spinPerSec * sm,
+        pulseFreq    = base.pulseFreq * sm,
+        pulseMin     = base.pulseMin,
+        -- size / opacity / glow
+        alpha        = alpha,
+        -- Stamp size moves less than opacity does: turning the intensity up should
+        -- read as brighter and glowier, not as a coarser, blobbier swirl.
+        thickness    = base.thickness * (0.65 + 0.35 * im),
+        softness     = base.softness * im,
+        -- Rotation-text emphasis: heavier face and a bigger point size each tier,
+        -- so the number itself escalates even with the maelstrom turned off.
+        -- Deliberately NOT scaled by the multipliers — these are discrete font
+        -- settings, and letting a slider wobble them just makes the text jitter.
+        fontSize     = base.fontSize,
+        fontFlags    = base.fontFlags,
+        color        = { base.color[1], base.color[2], base.color[3] },
+    }
+end
+
+--- Parametrize a point on one MAELSTROM swirl, falling inward. Pure.
+--- Used by ExsarUI.CreateMaelstromEffect. `v` is how far a stamp has fallen: 0 at
+--- the outer rim where it spawns, 1 at the horizon (the widget's own outline)
+--- where it is swallowed. The caller advances v over time to make material
+--- cascade inward, and offsets `armAngle` per swirl.
+---
+--- The track is a LOGARITHMIC spiral: the radius decays geometrically while the
+--- angle advances linearly. That is what sells the black-hole read — the same
+--- angular step covers less and less distance as the streak nears the horizon, so
+--- the fall looks like it is accelerating and winding up tighter.
+---
+--- Returns normalized coordinates (the renderer multiplies by the horizon
+--- ellipse's pixel radii) plus the radius, in units where the horizon is 1 and the
+--- spawn rim is `reach`.
+--- @param v         0 (just spawned at the rim) .. 1 (at the horizon)
+--- @param armAngle  this swirl's base angle in radians
+--- @param spin      global rotation phase in radians — animate for extra drift
+--- @param turns     revolutions a swirl makes falling in (default MAELSTROM_TURNS)
+--- @param reach     spawn radius as a multiple of the horizon (default MAELSTROM_REACH)
+--- @return nx, ny, r
+function ExsarLogic.MaelstromPoint(v, armAngle, spin, turns, reach)
+    if not v or v < 0 then v = 0 elseif v > 1 then v = 1 end
+    turns = turns or ExsarLogic.MAELSTROM_TURNS
+    reach = reach or ExsarLogic.MAELSTROM_REACH
+    if reach < 1 then reach = 1 end
+    local r   = reach * (1 / reach) ^ v
+    local ang = (armAngle or 0) + (spin or 0) + v * turns * 2 * math.pi
+    return r * math.cos(ang), r * math.sin(ang), r
+end
+
+-- Where the infall snuffs out. Past this the stamp fades to nothing over the
+-- remaining distance, so material is swallowed AT the horizon rather than piling
+-- up on top of the widget's own contents.
+local MAELSTROM_SNUFF = 0.86
+
+--- Brightness and size multipliers for a stamp partway through its infall. Pure.
+--- Matter brightens as it accelerates inward (an accretion streak heating up) and
+--- compresses as it goes, then is snuffed out at the horizon.
+--- @param v  0 (outer rim) .. 1 (horizon)
+--- @return alphaMul, sizeMul
+function ExsarLogic.MaelstromInfallEnvelope(v)
+    if not v or v < 0 then v = 0 elseif v > 1 then v = 1 end
+    -- The floor is high on purpose: a freshly-spawned stamp out at the rim still
+    -- has to be plainly visible. Only the climb toward the horizon is a gradient.
+    local a = 0.62 + 0.38 * v
+    if v > MAELSTROM_SNUFF then
+        a = a * (1 - (v - MAELSTROM_SNUFF) / (1 - MAELSTROM_SNUFF))
+    end
+    if a < 0 then a = 0 end
+    return a, 1 - 0.45 * v
+end
+
+-- Trail stamps are fattest just BEHIND the head, not at it — the same
+-- head-weighted profile RadialRayThickness uses, which reads as a comet rather
+-- than a tapering wedge.
+local MAELSTROM_TRAIL_PEAK = 0.18
+
+--- Width and alpha multipliers along one maelstrom arm's trail. Pure.
+--- @param k  0 (the head stamp) .. 1 (the tail stamp)
+--- @return width, alpha  multipliers in 0..1
+function ExsarLogic.MaelstromTrailProfile(k)
+    if not k or k < 0 then k = 0 elseif k > 1 then k = 1 end
+    local w
+    if k < MAELSTROM_TRAIL_PEAK then
+        w = 0.55 + 0.45 * (k / MAELSTROM_TRAIL_PEAK)
+    else
+        w = (1 - (k - MAELSTROM_TRAIL_PEAK) / (1 - MAELSTROM_TRAIL_PEAK)) ^ 0.85
+    end
+    if w < 0 then w = 0 end
+    -- A gentle exponent: the trail still fades to nothing at the tail (that is
+    -- what makes a swirl read as a streak rather than a bar), but not so fast that
+    -- most of its stamps are effectively invisible.
+    return w, (1 - k) ^ 1.15
+end
+
+-- Frame strata, ordered back-to-front, exposed as a 1..5 scale so a config slider
+-- can drive a widget's "z index". Stops at DIALOG on purpose: the strata above it
+-- (FULLSCREEN_DIALOG, TOOLTIP) are where Blizzard puts things the user must be
+-- able to read and click, and a decorative effect must never cover those.
+ExsarLogic.STRATA_ORDER = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG" }
+
+--- Map a 1..5 layer number to a WoW frame strata name. Pure.
+--- Clamps and rounds, so a slider (or a garbage saved value) can never produce an
+--- invalid name -- SetFrameStrata throws on one it does not recognize.
+--- @param level  1 (furthest back) .. 5 (furthest forward)
+--- @return strata name, clamped index
+function ExsarLogic.StrataForLevel(level)
+    local n = #ExsarLogic.STRATA_ORDER
+    local i = math.floor((tonumber(level) or 0) + 0.5)
+    if i < 1 then i = 1 elseif i > n then i = n end
+    return ExsarLogic.STRATA_ORDER[i], i
+end
+
+--- Linear interpolation between two {r, g, b} colors. Pure.
+--- @param c1  color table at t = 0
+--- @param c2  color table at t = 1
+--- @param t   blend factor, clamped to 0..1
+--- @return r, g, b
+function ExsarLogic.LerpColor(c1, c2, t)
+    if not t or t < 0 then t = 0 elseif t > 1 then t = 1 end
+    return c1[1] + (c2[1] - c1[1]) * t,
+           c1[2] + (c2[2] - c1[2]) * t,
+           c1[3] + (c2[3] - c1[3]) * t
+end
+
 -- Set global for WoW (loaded before Core.lua, so ExsarAddon doesn't exist yet).
 -- Tests use require() which also gets the return value.
 _G.ExsarLogic = ExsarLogic
