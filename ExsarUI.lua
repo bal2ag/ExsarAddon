@@ -2184,6 +2184,7 @@ function ExsarUI.CreateMeleeSwingTracker()
     f:RegisterEvent("PLAYER_DEAD")
     f:RegisterEvent("UNIT_AURA")
     f:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    f:RegisterEvent("UNIT_ATTACK_SPEED")
     f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
     f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, _, arg5)
         if event == "PLAYER_ENTERING_WORLD" then
@@ -2223,9 +2224,26 @@ function ExsarUI.CreateMeleeSwingTracker()
                 RefreshSpeed()
             end
 
+        elseif event == "UNIT_ATTACK_SPEED" then
+            -- The dedicated melee attack-speed change event: fires when a haste
+            -- buff/proc or a weapon swap moves the swing speed.
+            if arg1 == "player" then RefreshSpeed() end
+
         elseif event == "PLAYER_EQUIPMENT_CHANGED" then
             RefreshSpeed()
         end
+    end)
+
+    -- Poll the hasted speed every 1s: UnitAttackSpeed can lag behind the events
+    -- that announce a haste change (UNIT_AURA fires before the stat block is
+    -- recalculated, so the read inside that handler can return the pre-change
+    -- speed). Mirrors RangedSwingTimer's speed poll.
+    local speedPoll = 0
+    f:SetScript("OnUpdate", function(_, elapsed)
+        speedPoll = speedPoll + elapsed
+        if speedPoll < 1 then return end
+        speedPoll = 0
+        RefreshSpeed()
     end)
 
     RefreshSpeed()

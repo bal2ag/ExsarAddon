@@ -51,6 +51,7 @@ local AIMED_SHOT_NAME_ID = 19434   -- used only to resolve the localized name
 local M = {
     inRange     = false,
     pollElapsed = 0,
+    speedPoll   = 0,      -- accumulator for the 1s speed poll
     -- Swing timer state
     speed       = 0,      -- hasted main-hand attack speed (seconds)
     lastSwing   = 0,      -- GetTime() when the last melee swing fired
@@ -484,6 +485,16 @@ end
 
 local pollFrame = CreateFrame("Frame")
 pollFrame:SetScript("OnUpdate", function(self, elapsed)
+    -- Poll the hasted speed every 1s: UnitAttackSpeed can lag behind the events
+    -- that announce a haste change (UNIT_AURA fires before the stat block is
+    -- recalculated, so the read inside that handler can return the pre-change
+    -- speed). Mirrors RangedSwingTimer's speed poll.
+    M.speedPoll = M.speedPoll + elapsed
+    if M.speedPoll >= 1 then
+        M.speedPoll = 0
+        RefreshSpeed()
+    end
+
     M.pollElapsed = M.pollElapsed + elapsed
     if M.pollElapsed < 0.03 then return end
     M.pollElapsed = 0
@@ -502,6 +513,7 @@ frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+frame:RegisterEvent("UNIT_ATTACK_SPEED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
@@ -563,6 +575,13 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 M.lastSwing   = GetTime()
                 M.swingActive = true
             end
+            RefreshSpeed()
+        end
+
+    elseif event == "UNIT_ATTACK_SPEED" then
+        -- The dedicated melee attack-speed change event: fires when a haste
+        -- buff/proc or a weapon swap moves the swing speed.
+        if arg1 == "player" then
             RefreshSpeed()
         end
 
