@@ -53,7 +53,9 @@ local M = {
     pollElapsed = 0,
     speedPoll   = 0,      -- accumulator for the 1s speed poll
     -- Swing timer state
-    speed       = 0,      -- hasted main-hand attack speed (seconds)
+    speed       = 0,      -- hasted main-hand attack speed (seconds), live
+    cycleSpeed  = 0,      -- in-flight cycle's effective DURATION (0 = no cycle stamped)
+    cycleRate   = 0,      -- weapon speed that cycle is currently running at
     lastSwing   = 0,      -- GetTime() when the last melee swing fired
     swingActive = false,   -- true once we've seen at least one swing this session
     feigning    = false,   -- Feign Death buff is up; cycle restarts when it fades
@@ -61,11 +63,45 @@ local M = {
     aimedShotName  = "Aimed Shot",
 }
 
+-- Melee "model B": a haste change landing MID-SWING speeds up the swing already
+-- in flight, by re-rating only the portion still to come (verified in-game — a
+-- haste proc between swings lands the next white swing before a full old-speed
+-- cycle elapses). Ranged does NOT do this; see ExsarLogic.CycleSpeed.
+local function RescaleCycle(newSpeed)
+    if not M.swingActive then return end
+    M.cycleSpeed, M.cycleRate = ExsarLogic.RescaleCycle(
+        GetTime() - M.lastSwing, M.cycleSpeed, M.cycleRate, newSpeed)
+end
+
 local function RefreshSpeed()
     local speed = select(1, UnitAttackSpeed("player"))
     if type(speed) == "number" and speed > 0 then
+        RescaleCycle(speed)
         M.speed = speed
     end
+end
+
+-- Start a swing cycle at `now` at the speed in effect right now. `lastSwing` is
+-- the true swing timestamp and is never moved by a rescale; the re-rating lands
+-- in cycleSpeed/cycleRate instead.
+local function StartCycle(now)
+    M.lastSwing   = now
+    M.cycleSpeed  = M.speed
+    M.cycleRate   = M.speed
+    M.swingActive = true
+end
+
+local function ClearCycle()
+    M.lastSwing   = 0
+    M.cycleSpeed  = 0
+    M.cycleRate   = 0
+    M.swingActive = false
+end
+
+-- Effective duration of the cycle currently in flight (rescaled by any
+-- mid-swing haste change); falls back to the live speed for an unstamped cycle.
+local function CycleSpeed()
+    return ExsarLogic.CycleSpeed(M.cycleSpeed, M.speed)
 end
 
 -- =========================================================
@@ -331,8 +367,7 @@ end
 local function OnSwing()
     local now = GetTime()
     if now - M.lastSwing < 0.15 then return end
-    M.lastSwing   = now
-    M.swingActive = true
+    StartCycle(now)
 end
 
 local combatFrame = CreateFrame("Frame")
@@ -368,8 +403,9 @@ end
 -- =========================================================
 
 local function IsSwingOnCooldown()
-    if not M.swingActive or M.speed <= 0 then return false end
-    local remaining = M.speed - (GetTime() - M.lastSwing)
+    local speed = CycleSpeed()
+    if not M.swingActive or speed <= 0 then return false end
+    local remaining = speed - (GetTime() - M.lastSwing)
     return remaining > 0
 end
 
@@ -465,9 +501,10 @@ local function UpdateState()
     end
 
     -- Drive the cooldown sweep and timer text
-    if onCooldown and M.speed > 0 then
-        cooldown:SetCooldown(M.lastSwing, M.speed)
-        local remaining = M.speed - (GetTime() - M.lastSwing)
+    local cycleSpeed = CycleSpeed()
+    if onCooldown and cycleSpeed > 0 then
+        cooldown:SetCooldown(M.lastSwing, cycleSpeed)
+        local remaining = cycleSpeed - (GetTime() - M.lastSwing)
         if remaining > 0 then
             timerText:SetText(string.format("%.1f", remaining))
         else
@@ -530,8 +567,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         UpdateState()
 
     elseif event == "PLAYER_DEAD" then
-        M.swingActive = false
-        M.lastSwing   = 0
+        ClearCycle()
         UpdateState()
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
@@ -545,8 +581,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or (arg5 == FEIGN_DEATH_ID)
             if isFeignDeath then
                 M.feigning    = true
-                M.swingActive = false
-                M.lastSwing   = 0
+                ClearCycle()
                 UpdateState()
                 return
             end
@@ -559,23 +594,23 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or AIMED_SHOT_IDS[arg3]
                 or AIMED_SHOT_IDS[arg5]
             if isAimedShot then
-                M.lastSwing   = GetTime()
-                M.swingActive = true
+                StartCycle(GetTime())
                 UpdateState()
             end
         end
 
     elseif event == "UNIT_AURA" then
         if arg1 == "player" then
+            -- Refreshed before the restart below so the new cycle is stamped
+            -- with the current speed rather than the pre-feign one.
+            RefreshSpeed()
             -- Feign Death ended (buff faded): restart the swing cycle a full
             -- weapon speed from now, so the sweep counts down to the first
             -- post-FD swing rather than waiting for it to land.
             if M.feigning and not ExsarUI.PlayerHasBuff(M.feignDeathName) then
-                M.feigning    = false
-                M.lastSwing   = GetTime()
-                M.swingActive = true
+                M.feigning = false
+                StartCycle(GetTime())
             end
-            RefreshSpeed()
         end
 
     elseif event == "UNIT_ATTACK_SPEED" then

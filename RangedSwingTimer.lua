@@ -57,7 +57,8 @@ local CLIP_OVERDUE_GRACE = 0.2
 local S = {
     shooting       = false,
     lastShotTime   = 0,
-    speed          = 0,      -- hasted ranged weapon speed (seconds)
+    speed          = 0,      -- hasted ranged weapon speed (seconds); governs the NEXT cycle
+    cycleSpeed     = 0,      -- speed stamped at the in-flight cycle's start (0 = unstamped)
     baseSpeed      = 0,      -- base (unhasted) ranged weapon speed (seconds)
     aimWindow      = 0.5,    -- hasted clip window (0.5s scaled by haste + latency)
     autoShotName   = "Auto Shot",
@@ -73,6 +74,24 @@ local S = {
     refreshDelay   = 0,      -- seconds remaining before a deferred RefreshAll fires; 0 = inactive
     speedPoll      = 0,      -- accumulator for 1s speed poll
 }
+
+-- The speed governing the shot cycle currently in flight. A haste change landing
+-- mid-cycle applies to the NEXT shot, not this one, so the cycle keeps the speed
+-- stamped at its start (see ExsarLogic.CycleSpeed).
+local function CycleSpeed()
+    return ExsarLogic.CycleSpeed(S.cycleSpeed, S.speed)
+end
+
+-- Start a shot cycle at `now`, stamping it with the speed in effect right now.
+local function StartCycle(now)
+    S.lastShotTime = now
+    S.cycleSpeed   = S.speed
+end
+
+local function ClearCycle()
+    S.lastShotTime = 0
+    S.cycleSpeed   = 0
+end
 
 -- =========================================================
 -- Frame
@@ -149,7 +168,9 @@ local function ApplySize()
 end
 
 local function UpdateReticulePositions()
-    local speed = S.speed
+    -- Denominator must match the bar's (CycleSpeed), or the marks drift off the
+    -- drawn bar whenever haste changed mid-cycle.
+    local speed = CycleSpeed()
     if speed <= 0 then
         glowL:Hide();  glowR:Hide()
         innerL:Hide(); innerR:Hide()
@@ -190,7 +211,14 @@ end
 local function RefreshAimWindow()
     -- Reticules mark the hasted clipping window: starting a cast inside
     -- this zone will delay the next auto shot.
-    S.aimWindow = ExsarUI.GetAutoShotClipWindow(S.speed, S.baseSpeed)
+    --
+    -- Derived from the CYCLE's speed, not the live one. Under model A the whole
+    -- in-flight cycle is governed by the speed it started at — including the
+    -- wind-up at its end, which is part of that same schedule. Using the live
+    -- speed here would slide the reticules (and the red zone boundary below,
+    -- which shares S.aimWindow) mid-cycle, under a bar whose length correctly
+    -- is NOT moving. They step once, at the next shot, along with the bar.
+    S.aimWindow = ExsarUI.GetAutoShotClipWindow(CycleSpeed(), S.baseSpeed)
 end
 
 local function RefreshAll()
@@ -223,7 +251,7 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         RefreshAll()
     end
 
-    if S.speed <= 0 or S.lastShotTime == 0 then
+    if CycleSpeed() <= 0 or S.lastShotTime == 0 then
         bar:Hide()
         edgeGlowL:Hide()
         edgeGlowR:Hide()
@@ -240,8 +268,9 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         return
     end
 
-    local now       = GetTime()
-    local remaining = math.max(0, S.speed - (now - S.lastShotTime))
+    local now        = GetTime()
+    local cycleSpeed = CycleSpeed()
+    local remaining  = math.max(0, cycleSpeed - (now - S.lastShotTime))
 
     -- Delay indicator, recomputed every frame: while a cast runs past the due
     -- time it is the predicted clip (static), and once the shot is overdue
@@ -250,7 +279,7 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     local clipStr, clipPredicted = "", false
     if S.autoFired then
         local delay, predicted = ExsarLogic.AutoShotDelay(now, S.lastShotTime,
-            S.speed, S.castEnd, CLIP_PREDICT_GRACE, CLIP_OVERDUE_GRACE)
+            cycleSpeed, S.castEnd, CLIP_PREDICT_GRACE, CLIP_OVERDUE_GRACE)
         if delay then
             clipStr = string.format(predicted and "(%.2f)" or "(+%.1f)", delay)
             clipPredicted = predicted
@@ -277,7 +306,7 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         return
     end
 
-    local frac      = remaining / S.speed
+    local frac      = remaining / cycleSpeed
 
     local barW    = math.max(0.01, frac * cachedMaxBarW)
     local halfBarW = barW / 2
@@ -390,7 +419,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
         S.shooting = true
         -- Seed lastShotTime so the bar shows something until the first real sync
         if S.lastShotTime == 0 then
-            S.lastShotTime = GetTime()
+            StartCycle(GetTime())
+            RefreshAimWindow()          -- must follow the stamp (see RefreshAimWindow)
+            UpdateReticulePositions()
         end
 
     elseif event == "STOP_AUTOREPEAT_SPELL" then
@@ -422,11 +453,13 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or (arg3 == AUTO_SHOT_ID)
                 or (arg5 == AUTO_SHOT_ID)
             if isAutoShot then
-                S.lastShotTime = GetTime()
                 S.autoFired    = true  -- first real auto shot; enable clip detection
                 S.barZone      = -1    -- force color re-evaluation on next frame
-                -- Resync speed/aim in case haste changed mid-cycle
+                -- Resync speed/aim first, so the new cycle is stamped with the
+                -- speed it will actually run at (haste may have changed during
+                -- the cycle that just ended — that change lands on THIS one).
                 RefreshSpeed()
+                StartCycle(GetTime())
                 RefreshAimWindow()
                 UpdateReticulePositions()
             end
@@ -438,9 +471,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or AIMED_SHOT_IDS[arg3]
                 or AIMED_SHOT_IDS[arg5]
             if isAimedShot then
-                S.lastShotTime = GetTime()
                 S.barZone      = -1
                 RefreshSpeed()
+                StartCycle(GetTime())
                 RefreshAimWindow()
                 UpdateReticulePositions()
             end
@@ -458,9 +491,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or (arg5 == FEIGN_DEATH_ID)
             if isFeignDeath then
                 S.feigning     = true
-                S.lastShotTime = 0
                 S.shooting     = false
                 S.autoFired    = false
+                ClearCycle()
                 bar:Hide()
                 edgeGlowL:Hide()
                 edgeGlowR:Hide()
@@ -473,12 +506,16 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             -- a full weapon cycle from the moment FD ends, before any attack
             -- resume. The bar redraws from full even though shooting is off
             -- (OnUpdate draws whenever the weapon cooldown is running).
-            if S.feigning and not ExsarUI.PlayerHasBuff(S.feignDeathName) then
-                S.feigning     = false
-                S.lastShotTime = GetTime()
-                S.barZone      = -1
-            end
+            -- Refreshed before the restart so the new cycle is stamped with the
+            -- current speed rather than the pre-feign one.
             RefreshAll()
+            if S.feigning and not ExsarUI.PlayerHasBuff(S.feignDeathName) then
+                S.feigning = false
+                S.barZone  = -1
+                StartCycle(GetTime())
+                RefreshAimWindow()      -- must follow the stamp (RefreshAll's pass ran before it)
+                UpdateReticulePositions()
+            end
         end
 
     elseif event == "UNIT_ATTACK_SPEED" then

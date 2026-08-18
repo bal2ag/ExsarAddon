@@ -195,6 +195,66 @@ function ExsarLogic.ReticuleFraction(aimWindow, speed)
     return math.min(aimWindow / speed, 0.98)
 end
 
+--- Resolve which weapon speed governs a swing/shot cycle already in flight.
+-- Encodes the TBC haste model for auto-attack cycles: a haste change landing
+-- MID-CYCLE does not alter the cycle already underway — it applies to the NEXT
+-- one. So a cycle is stamped with the speed in effect when it started
+-- (`cycleSpeed`) and keeps it until the next swing/shot re-stamps it.
+--
+-- Why this matters: reading the LIVE speed against the cycle start instead
+-- retroactively re-rates the time already elapsed. Pop Heroism 2.0s into a 3.6s
+-- swing (hasted 2.77s) and the live-speed form reports 0.77s remaining when the
+-- true answer is 1.6s; land it past the hasted speed and it reports the swing as
+-- already due, so a readiness cue fires while the swing is still pending.
+--
+-- `liveSpeed` is only a fallback, for a cycle that predates any stamp (cold
+-- start, or state restored without one). Pure.
+-- @param cycleSpeed  speed stamped at the cycle's start (0/nil = unstamped)
+-- @param liveSpeed   current hasted weapon speed, used only when unstamped
+-- @return the governing speed in seconds, or 0 when neither is usable
+function ExsarLogic.CycleSpeed(cycleSpeed, liveSpeed)
+    if type(cycleSpeed) == "number" and cycleSpeed > 0 then return cycleSpeed end
+    if type(liveSpeed) == "number" and liveSpeed > 0 then return liveSpeed end
+    return 0
+end
+
+--- Rescale an in-flight MELEE swing cycle for a mid-cycle haste change.
+-- Melee uses "model B": unlike the ranged cycle (model A — see CycleSpeed), a
+-- haste change landing mid-swing DOES speed up the swing already in flight, by
+-- scaling the REMAINING portion. Verified in-game: a haste proc landing between
+-- swings makes the next white swing land before a full old-speed cycle elapses.
+-- The time already elapsed keeps its old rate; only what is left is re-rated.
+--
+-- Two fields describe the cycle because they answer different questions:
+--   * `cycleSpeed` = the cycle's effective total DURATION as currently known.
+--     Every read site uses this (`remaining = cycleSpeed - elapsed`), and it is
+--     what changes as the cycle is re-rated partway through.
+--   * `cycleRate`  = the weapon SPEED the cycle is currently running at. Needed
+--     so a SECOND haste change in the same cycle scales against the rate then in
+--     effect rather than against an already-blended duration.
+-- Keeping them apart also leaves the cycle's start timestamp untouched, so swing
+-- debounce and press->landing latency measurements are unaffected.
+--
+-- At elapsed = 0 this returns exactly newSpeed, i.e. rescaling the remainder and
+-- recomputing the whole cycle agree when nothing has elapsed yet. Pure.
+-- @param elapsed     seconds since the cycle started
+-- @param cycleSpeed  the cycle's effective duration as currently known
+-- @param cycleRate   the weapon speed the cycle is currently running at
+-- @param newSpeed    the new hasted weapon speed
+-- @return cycleSpeed, cycleRate  (inputs returned unchanged when no rescale applies)
+function ExsarLogic.RescaleCycle(elapsed, cycleSpeed, cycleRate, newSpeed)
+    if type(cycleSpeed) ~= "number" or cycleSpeed <= 0 then return cycleSpeed, cycleRate end
+    if type(cycleRate) ~= "number" or cycleRate <= 0 then return cycleSpeed, cycleRate end
+    if type(newSpeed) ~= "number" or newSpeed <= 0 then return cycleSpeed, cycleRate end
+    if newSpeed == cycleRate then return cycleSpeed, cycleRate end
+    if type(elapsed) ~= "number" or elapsed < 0 then elapsed = 0 end
+    local remaining = cycleSpeed - elapsed
+    -- Cycle already complete (the swing is pending, not running): leave it be.
+    -- The next swing stamps a fresh cycle at the new speed anyway.
+    if remaining <= 0 then return cycleSpeed, cycleRate end
+    return elapsed + remaining * (newSpeed / cycleRate), newSpeed
+end
+
 --- Compute the projected delay to the next auto shot.
 -- Covers both delay regimes: a cast in progress that will finish after the
 -- shot is due (predicted clip), and a shot already past due that has not
@@ -230,14 +290,16 @@ end
 -- the shared event latency cancels out and the result needs no grace bias.
 -- @param firedTime     time the auto shot fired
 -- @param prevShotTime  time the previous shot (or cycle reset) landed; 0/nil = no cycle
--- @param speed         hasted weapon speed in seconds
+-- @param speed         the speed THAT cycle ran at (its ExsarLogic.CycleSpeed
+--                      stamp, not the live speed — a haste change during the
+--                      cycle applies to the next one, not the one being scored)
 -- @return delay in seconds (>= 0), or nil when there was no cycle to measure
 function ExsarLogic.AutoShotFiredDelay(firedTime, prevShotTime, speed)
     if not firedTime then return nil end
     if not prevShotTime or prevShotTime <= 0 then return nil end
     if not speed or speed <= 0 then return nil end
     local delay = firedTime - (prevShotTime + speed)
-    if delay < 0 then delay = 0 end   -- a mid-cycle haste gain can fire "early"
+    if delay < 0 then delay = 0 end   -- defensive: a shot can never beat its cycle
     return delay
 end
 

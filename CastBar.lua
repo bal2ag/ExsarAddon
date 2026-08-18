@@ -90,7 +90,8 @@ local C = {
     multiIcon    = nil,    -- cached icon texture for multi-shot
     lastAutoTime = 0,      -- GetTime() of the last swing-cycle anchor (Auto Shot fire or
                            -- Aimed Shot landing — both start a full cycle); drives aim-window detection
-    autoSpeed    = 0,      -- hasted ranged weapon speed (seconds); from UnitRangedDamage
+    autoSpeed    = 0,      -- hasted ranged weapon speed (seconds); from UnitRangedDamage. Governs the NEXT cycle
+    autoCycleSpeed = 0,    -- speed stamped at the in-flight cycle's start (0 = unstamped)
     baseSpeed    = 0,      -- base (unhasted) ranged weapon speed (seconds)
     inAutoAim    = false,  -- gate: true once the hasted aim window bar has been shown this cycle
     fdReset      = false,  -- Feign Death reset the cycle; re-anchor on attack resume
@@ -112,12 +113,37 @@ local function RefreshAutoSpeed()
     C.autoSpeed = (type(speed) == "number" and speed > 0) and speed or 0
 end
 
+-- The speed governing the shot cycle currently in flight. A haste change landing
+-- mid-cycle applies to the NEXT shot, not this one, so the cycle keeps the speed
+-- stamped at its start (see ExsarLogic.CycleSpeed). Mirrors RangedSwingTimer.
+local function AutoCycleSpeed()
+    return ExsarLogic.CycleSpeed(C.autoCycleSpeed, C.autoSpeed)
+end
+
+-- Anchor a shot cycle at `now`, stamping it with the speed in effect right now.
+local function AnchorAutoCycle(now)
+    C.lastAutoTime   = now
+    C.autoCycleSpeed = C.autoSpeed
+end
+
+local function ClearAutoCycle()
+    C.lastAutoTime   = 0
+    C.autoCycleSpeed = 0
+end
+
 local function RefreshBaseSpeed()
     C.baseSpeed = ExsarUI.GetBaseRangedSpeed()
 end
 
 local function RefreshAutoAimTime()
-    AUTO_CLIP_TIME = ExsarUI.GetAutoShotClipWindow(C.autoSpeed, C.baseSpeed)
+    -- AUTO_CLIP_TIME comes from the CYCLE's speed, not the live one: the aim bar
+    -- starts at naturalEnd - AUTO_CLIP_TIME, and under model A the in-flight
+    -- cycle keeps the speed it started at, so a mid-cycle haste change must not
+    -- move the aim window's start. It steps at the next shot. (Mirrors
+    -- RangedSwingTimer.RefreshAimWindow — keep the two in sync.)
+    AUTO_CLIP_TIME = ExsarUI.GetAutoShotClipWindow(AutoCycleSpeed(), C.baseSpeed)
+    -- AUTO_WIND_UP is the post-movement wind-up, deliberately UNhasted, so it
+    -- has no cycle dependence at all.
     AUTO_WIND_UP   = ExsarUI.GetAutoShotWindUpTime()
 end
 
@@ -380,8 +406,9 @@ autoAimTicker:SetScript("OnUpdate", function(self, elapsed)
     -- If the player moved and stopped after the window began, the aim restarted
     -- at autoAimStopTime rather than at the original naturalStart, so we anchor
     -- the bar to the new stop time instead of the stale schedule.
-    if C.autoSpeed > 0 and C.lastAutoTime > 0 then
-        local naturalEnd   = C.lastAutoTime + C.autoSpeed
+    local autoCycleSpeed = AutoCycleSpeed()
+    if autoCycleSpeed > 0 and C.lastAutoTime > 0 then
+        local naturalEnd   = C.lastAutoTime + autoCycleSpeed
         local naturalStart = naturalEnd - AUTO_CLIP_TIME
         local autoRemaining = naturalEnd - now
         if autoRemaining > 0 and autoRemaining <= AUTO_CLIP_TIME then
@@ -408,7 +435,7 @@ autoAimTicker:SetScript("OnUpdate", function(self, elapsed)
     -- means "cycle restarts on attack resume", not "first shot fires on stop").
     if not inAim and autoAimStopTime > 0 and not C.fdReset then
         local autoOverdue = (C.lastAutoTime == 0)
-            or (C.autoSpeed > 0 and (C.autoSpeed - (now - C.lastAutoTime)) <= 0)
+            or (autoCycleSpeed > 0 and (autoCycleSpeed - (now - C.lastAutoTime)) <= 0)
         if autoOverdue then
             barStart = autoAimStopTime
             barEnd   = autoAimStopTime + AUTO_WIND_UP
@@ -623,7 +650,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             -- would take the first-shot fast path and show the aim bar
             -- immediately, a full cycle early.
             C.fdReset      = false
-            C.lastAutoTime = GetTime()
+            AnchorAutoCycle(GetTime())
+            RefreshAutoAimTime()        -- must follow the anchor (see RefreshAutoAimTime)
         end
 
     elseif event == "STOP_AUTOREPEAT_SPELL" then
@@ -659,11 +687,13 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 if C.casting and C.spellName == C.nameAuto then
                     C.casting = false
                 end
-                -- Resync shot timestamp; resets the inAutoAim gate for the next cycle
-                C.lastAutoTime = GetTime()
-                C.inAutoAim    = false
-                -- Refresh speed and aim time; haste or latency may have changed
+                C.inAutoAim = false
+                -- Refresh speed and aim time first (haste or latency may have
+                -- changed), so the new cycle is stamped with the speed it will
+                -- actually run at; a haste change during the cycle that just
+                -- ended lands on THIS one.
                 RefreshAutoSpeed()
+                AnchorAutoCycle(GetTime())
                 RefreshAutoAimTime()
             end
 
@@ -675,9 +705,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or AIMED_SHOT_IDS[arg3]
                 or AIMED_SHOT_IDS[arg5]
             if isAimed then
-                C.lastAutoTime = GetTime()
-                C.inAutoAim    = false
+                C.inAutoAim = false
                 RefreshAutoSpeed()
+                AnchorAutoCycle(GetTime())
                 RefreshAutoAimTime()
             end
 
@@ -689,9 +719,9 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
                 or (arg5 == SPELL_ID_FEIGN)
             if isFeign then
                 EndHold()
-                C.fdReset      = true
-                C.lastAutoTime = 0
-                C.inAutoAim    = false
+                C.fdReset   = true
+                C.inAutoAim = false
+                ClearAutoCycle()
                 if C.casting and C.spellName == C.nameAuto then
                     C.casting = false   -- stale aim bar; frame hides next tick
                 end
@@ -708,12 +738,15 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, _, arg5)
             -- anchor the aim-window prediction a full cycle from this moment.
             -- (START_AUTOREPEAT_SPELL keeps a fallback anchor in case the
             -- fade was missed, but it does not reliably fire after FD.)
-            if C.fdReset and not ExsarUI.PlayerHasBuff(C.nameFeign) then
-                C.fdReset      = false
-                C.lastAutoTime = GetTime()
-            end
+            -- Refreshed before the restart so the new cycle is stamped with the
+            -- current speed rather than the pre-feign one.
             RefreshAutoSpeed()
             RefreshAutoAimTime()
+            if C.fdReset and not ExsarUI.PlayerHasBuff(C.nameFeign) then
+                C.fdReset = false
+                AnchorAutoCycle(GetTime())
+                RefreshAutoAimTime()    -- must follow the anchor (the pass above ran before it)
+            end
         end
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then

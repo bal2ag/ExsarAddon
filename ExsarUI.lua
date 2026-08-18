@@ -1929,7 +1929,8 @@ local AST_AIMED_SHOT_NAME_ID = 19434
 function ExsarUI.CreateAutoShotTracker()
     local T = {
         lastShotTime = 0,
-        speed        = 0,
+        speed        = 0,   -- hasted ranged speed; governs the NEXT cycle
+        cycleSpeed   = 0,   -- speed stamped at the in-flight cycle's start (0 = unstamped)
         baseSpeed    = 0,
         castEnd      = 0,
         autoFired    = false,
@@ -1949,13 +1950,32 @@ function ExsarUI.CreateAutoShotTracker()
         RefreshSpeed()
     end
 
+    -- Start a shot cycle at `now`, stamping it with the speed in effect right
+    -- now: a haste change landing mid-cycle applies to the NEXT shot, not this
+    -- one (see ExsarLogic.CycleSpeed).
+    local function StartCycle(now)
+        T.lastShotTime = now
+        T.cycleSpeed   = T.speed
+    end
+
+    local function ClearCycle()
+        T.lastShotTime = 0
+        T.cycleSpeed   = 0
+    end
+
+    -- The speed governing the cycle currently in flight.
+    function T:CycleSpeed()
+        return ExsarLogic.CycleSpeed(self.cycleSpeed, self.speed)
+    end
+
     function T:TimeToNextAuto(now)
-        if self.speed <= 0 or self.lastShotTime <= 0 then return nil end
-        return self.lastShotTime + self.speed - now
+        local speed = self:CycleSpeed()
+        if speed <= 0 or self.lastShotTime <= 0 then return nil end
+        return self.lastShotTime + speed - now
     end
     function T:Overdue(now, predictGrace, overdueGrace)
         if not self.autoFired then return nil end
-        return ExsarLogic.AutoShotDelay(now, self.lastShotTime, self.speed,
+        return ExsarLogic.AutoShotDelay(now, self.lastShotTime, self:CycleSpeed(),
             self.castEnd, predictGrace, overdueGrace)
     end
 
@@ -1995,7 +2015,7 @@ function ExsarUI.CreateAutoShotTracker()
 
         elseif event == "START_AUTOREPEAT_SPELL" then
             T.autoRepeatOn = true
-            if T.lastShotTime == 0 then T.lastShotTime = GetTime() end
+            if T.lastShotTime == 0 then StartCycle(GetTime()) end
 
         elseif event == "STOP_AUTOREPEAT_SPELL" then
             T.autoRepeatOn = false
@@ -2020,37 +2040,44 @@ function ExsarUI.CreateAutoShotTracker()
                     or (arg3 == AST_AUTO_SHOT_ID) or (arg5 == AST_AUTO_SHOT_ID)
                 if isAutoShot then
                     local now = GetTime()
-                    -- Measure against the cycle that just ended, before we
-                    -- overwrite it with the new one.
-                    local delay = ExsarLogic.AutoShotFiredDelay(now, T.lastShotTime, T.speed)
-                    T.lastShotTime = now
-                    T.autoFired    = true
+                    -- Measure against the cycle that just ended, using the speed
+                    -- THAT cycle actually ran at (not the live speed, which a
+                    -- mid-cycle haste change may have already moved), and before
+                    -- we overwrite it with the new one.
+                    local delay = ExsarLogic.AutoShotFiredDelay(now, T.lastShotTime,
+                        T:CycleSpeed())
+                    -- Refresh first so the new cycle is stamped with the speed
+                    -- it will actually run at.
                     RefreshSpeed()
+                    StartCycle(now)
+                    T.autoFired = true
                     FireAutoShot(now, delay)
                 end
                 local isAimedShot = (arg2 == T.aimedShotName)
                     or AST_AIMED_SHOT_IDS[arg3] or AST_AIMED_SHOT_IDS[arg5]
                 if isAimedShot then
-                    T.lastShotTime = GetTime()
                     RefreshSpeed()
+                    StartCycle(GetTime())
                 end
                 local isFeignDeath = (arg2 == T.feignDeathName)
                     or (arg3 == AST_FEIGN_DEATH_ID) or (arg5 == AST_FEIGN_DEATH_ID)
                 if isFeignDeath then
                     T.feigning     = true
-                    T.lastShotTime = 0
                     T.autoRepeatOn = false
                     T.autoFired    = false
+                    ClearCycle()
                 end
             end
 
         elseif event == "UNIT_AURA" then
             if arg1 == "player" then
-                if T.feigning and not ExsarUI.PlayerHasBuff(T.feignDeathName) then
-                    T.feigning     = false
-                    T.lastShotTime = GetTime()
-                end
+                -- Refreshed before the restart so the new cycle is stamped with
+                -- the current speed rather than the pre-feign one.
                 RefreshAll()
+                if T.feigning and not ExsarUI.PlayerHasBuff(T.feignDeathName) then
+                    T.feigning = false
+                    StartCycle(GetTime())
+                end
             end
 
         elseif event == "UNIT_ATTACK_SPEED" then
@@ -2105,7 +2132,9 @@ local MST_RAPTOR_STRIKE_IDS = {
 
 function ExsarUI.CreateMeleeSwingTracker()
     local M = {
-        speed          = 0,
+        speed          = 0,   -- hasted main-hand speed, live
+        cycleSpeed     = 0,   -- in-flight cycle's effective DURATION (0 = no cycle stamped)
+        cycleRate      = 0,   -- weapon speed that cycle is currently running at
         lastSwing      = 0,
         swingActive    = false,
         feigning       = false,
@@ -2114,22 +2143,50 @@ function ExsarUI.CreateMeleeSwingTracker()
         lastPress      = 0,   -- GetTime() of the last weave-macro press (see NotePress)
     }
 
+    -- Melee "model B": a haste change landing MID-SWING re-rates the portion of
+    -- the swing still to come. Ranged does NOT (see ExsarLogic.CycleSpeed).
+    -- Mirrors MeleeRangeIndicator.
+    local function RescaleCycle(newSpeed)
+        if not M.swingActive then return end
+        M.cycleSpeed, M.cycleRate = ExsarLogic.RescaleCycle(
+            GetTime() - M.lastSwing, M.cycleSpeed, M.cycleRate, newSpeed)
+    end
+
     local function RefreshSpeed()
         local speed = select(1, UnitAttackSpeed("player"))
-        if type(speed) == "number" and speed > 0 then M.speed = speed end
+        if type(speed) == "number" and speed > 0 then
+            RescaleCycle(speed)
+            M.speed = speed
+        end
+    end
+
+    -- Start a swing cycle at `now` at the speed in effect right now. `lastSwing`
+    -- is the true swing timestamp and is never moved by a rescale.
+    local function StartCycle(now)
+        M.lastSwing   = now
+        M.cycleSpeed  = M.speed
+        M.cycleRate   = M.speed
+        M.swingActive = true
+    end
+
+    local function ClearCycle()
+        M.lastSwing   = 0
+        M.cycleSpeed  = 0
+        M.cycleRate   = 0
+        M.swingActive = false
     end
 
     local function OnSwing()
         local now = GetTime()
         if now - M.lastSwing < 0.15 then return end
-        M.lastSwing   = now
-        M.swingActive = true
+        StartCycle(now)
     end
 
     function M:Ready(now, lookahead)
         if not self.swingActive then return true end
-        if self.speed <= 0 then return true end
-        return (now - self.lastSwing) >= (self.speed - (lookahead or 0))
+        local speed = ExsarLogic.CycleSpeed(self.cycleSpeed, self.speed)
+        if speed <= 0 then return true end
+        return (now - self.lastSwing) >= (speed - (lookahead or 0))
     end
 
     -- Stamped by the weave-macro button's PostClick (CoreCombatWidget). Lets a
@@ -2193,35 +2250,33 @@ function ExsarUI.CreateMeleeSwingTracker()
             RefreshSpeed()
 
         elseif event == "PLAYER_DEAD" then
-            M.swingActive = false
-            M.lastSwing   = 0
+            ClearCycle()
 
         elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
             if arg1 == "player" then
                 local isFeignDeath = (arg2 == M.feignDeathName)
                     or (arg3 == AST_FEIGN_DEATH_ID) or (arg5 == AST_FEIGN_DEATH_ID)
                 if isFeignDeath then
-                    M.feigning    = true
-                    M.swingActive = false
-                    M.lastSwing   = 0
+                    M.feigning = true
+                    ClearCycle()
                     return
                 end
                 local isAimedShot = (arg2 == M.aimedShotName)
                     or AST_AIMED_SHOT_IDS[arg3] or AST_AIMED_SHOT_IDS[arg5]
                 if isAimedShot then
-                    M.lastSwing   = GetTime()
-                    M.swingActive = true
+                    StartCycle(GetTime())
                 end
             end
 
         elseif event == "UNIT_AURA" then
             if arg1 == "player" then
-                if M.feigning and not ExsarUI.PlayerHasBuff(M.feignDeathName) then
-                    M.feigning    = false
-                    M.lastSwing   = GetTime()
-                    M.swingActive = true
-                end
+                -- Refreshed before the restart so the new cycle is stamped with
+                -- the current speed rather than the pre-feign one.
                 RefreshSpeed()
+                if M.feigning and not ExsarUI.PlayerHasBuff(M.feignDeathName) then
+                    M.feigning = false
+                    StartCycle(GetTime())
+                end
             end
 
         elseif event == "UNIT_ATTACK_SPEED" then

@@ -537,6 +537,125 @@ end)
 -- AutoShotDelay
 -- =========================================================
 
+describe("CycleSpeed", function()
+    -- Model A: a haste change landing mid-cycle applies to the NEXT swing/shot,
+    -- so an in-flight cycle keeps the speed stamped at its start.
+
+    it("prefers the stamped cycle speed over the live speed", function()
+        -- 3.6s swing underway; Heroism has since taken live speed to 2.77
+        assert.are.equal(3.6, Logic.CycleSpeed(3.6, 2.77))
+    end)
+
+    it("falls back to live speed for an unstamped cycle", function()
+        assert.are.equal(2.77, Logic.CycleSpeed(0, 2.77))
+        assert.are.equal(2.77, Logic.CycleSpeed(nil, 2.77))
+    end)
+
+    it("returns 0 when neither speed is usable", function()
+        assert.are.equal(0, Logic.CycleSpeed(0, 0))
+        assert.are.equal(0, Logic.CycleSpeed(nil, nil))
+        assert.are.equal(0, Logic.CycleSpeed(0, nil))
+    end)
+
+    it("ignores non-numeric and non-positive values", function()
+        assert.are.equal(2.5, Logic.CycleSpeed("3.6", 2.5))
+        assert.are.equal(2.5, Logic.CycleSpeed(-1, 2.5))
+        assert.are.equal(0, Logic.CycleSpeed(-1, -2))
+    end)
+
+    it("keeps a mid-cycle haste gain off the in-flight cycle", function()
+        -- Swing landed at t=0 at 3.6s. Heroism lands at t=2.0 (live -> 2.77).
+        -- Model A: still due at 3.6, i.e. 1.6s remaining.
+        local remaining = Logic.CycleSpeed(3.6, 2.77) - 2.0
+        assert.is_true(approx(1.6, remaining))
+        -- The live-speed form (the old model C) would have claimed 0.77s.
+        assert.is_true(approx(0.77, 2.77 - 2.0))
+    end)
+
+    it("never reports an in-flight cycle as already due after a haste gain", function()
+        -- Heroism at t=3.0 of a 3.6s swing: model C goes negative (fires the
+        -- ready cue 0.6s early); model A still has 0.6s to run.
+        assert.is_true(Logic.CycleSpeed(3.6, 2.77) - 3.0 > 0)
+        assert.is_true(2.77 - 3.0 < 0)
+    end)
+
+    it("adopts the new speed once the next cycle is stamped", function()
+        -- Next swing re-stamps from the live speed.
+        assert.are.equal(2.77, Logic.CycleSpeed(2.77, 2.77))
+    end)
+end)
+
+describe("RescaleCycle", function()
+    -- Melee model B: a haste change mid-swing re-rates only the REMAINING
+    -- portion. 3.6s swing, +30% haste -> 2.77s.
+    local S0, S1 = 3.6, 2.77
+
+    it("re-rates only the remaining portion", function()
+        -- 2.0s elapsed: 1.6s left, re-rated to 1.6 * (2.77/3.6) = 1.231
+        local dur, rate = Logic.RescaleCycle(2.0, S0, S0, S1)
+        assert.is_true(approx(2.0 + 1.6 * (S1 / S0), dur))
+        assert.are.equal(S1, rate)
+        -- remaining is what the read sites compute from the duration
+        assert.is_true(approx(1.231, dur - 2.0, 0.001))
+    end)
+
+    it("equals a whole-cycle recompute when nothing has elapsed", function()
+        -- At elapsed 0, model B and the old model C agree exactly.
+        local dur = Logic.RescaleCycle(0, S0, S0, S1)
+        assert.is_true(approx(S1, dur))
+    end)
+
+    it("never makes an in-flight cycle already due", function()
+        -- Buff landing at 3.0s of a 3.6s swing: model C would report the swing
+        -- as overdue (2.77 < 3.0); B still leaves time on the clock.
+        local dur = Logic.RescaleCycle(3.0, S0, S0, S1)
+        assert.is_true(dur > 3.0)
+        assert.is_true(approx(0.6 * (S1 / S0), dur - 3.0))
+    end)
+
+    it("composes across two changes in one cycle", function()
+        -- Rate must be tracked separately, or the second change would scale
+        -- against an already-blended duration.
+        local dur, rate = Logic.RescaleCycle(1.0, S0, S0, S1)      -- +30% at t=1
+        local dur2, rate2 = Logic.RescaleCycle(2.0, dur, rate, S0) -- buff drops at t=2
+        assert.are.equal(S0, rate2)
+        -- remaining at t=2 under the hasted rate, restored to the base rate
+        local remHasted = dur - 2.0
+        assert.is_true(approx(2.0 + remHasted * (S0 / S1), dur2))
+    end)
+
+    it("leaves a completed cycle alone", function()
+        -- Swing already due and pending: the next swing stamps fresh anyway.
+        local dur, rate = Logic.RescaleCycle(4.0, S0, S0, S1)
+        assert.are.equal(S0, dur)
+        assert.are.equal(S0, rate)
+    end)
+
+    it("is a no-op when the speed did not change", function()
+        local dur, rate = Logic.RescaleCycle(1.0, S0, S0, S0)
+        assert.are.equal(S0, dur)
+        assert.are.equal(S0, rate)
+    end)
+
+    it("is a no-op for an unstamped cycle or bad input", function()
+        assert.are.equal(0, (Logic.RescaleCycle(1.0, 0, 0, S1)))
+        assert.are.equal(S0, (Logic.RescaleCycle(1.0, S0, 0, S1)))
+        assert.are.equal(S0, (Logic.RescaleCycle(1.0, S0, S0, 0)))
+        assert.are.equal(S0, (Logic.RescaleCycle(1.0, S0, S0, nil)))
+    end)
+
+    it("treats negative elapsed as zero", function()
+        local dur = Logic.RescaleCycle(-1, S0, S0, S1)
+        assert.is_true(approx(S1, dur))
+    end)
+
+    it("slows the cycle back down when haste is lost", function()
+        local dur, rate = Logic.RescaleCycle(1.0, S1, S1, S0)
+        assert.is_true(dur > S1)
+        assert.are.equal(S0, rate)
+    end)
+end)
+
 describe("AutoShotDelay", function()
     -- Baseline: last shot at t=100, speed 2.8 → due at t=102.8
 
