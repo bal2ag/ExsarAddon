@@ -9,7 +9,9 @@ ExsarLogic.lua
 ExsarUI.lua
 Core.lua
 ErrorCapture.lua
-CooldownTracker.lua
+CoreRotationCooldownTracker.lua
+LongCooldownTracker.lua
+TrinketCooldownTracker.lua
 RangedSwingTimer.lua
 CastBar.lua
 KillCommandAlert.lua

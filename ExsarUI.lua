@@ -2527,6 +2527,11 @@ end
 --   trinketSlot      equipped inventory slot (13/14): macro kind that defaults
 --                    to "/use <slot>", with icon from GetInventoryItemTexture
 --                    and CD from GetInventoryItemCooldown (for a cooldowns bar)
+--   hideWhenNoUse    (trinketSlot only) HIDE the slot unless the equipped
+--                    trinket actually has an on-use effect, so a bar of trinket
+--                    cooldowns shows 0, 1 or 2 icons and packs them together.
+--                    Classified by ExsarLogic.TrinketScanState -- note a PROC
+--                    trinket has no on-use spell and so counts as empty here.
 --   gcd              force the GCD sweep via the shared Wing Clip probe -- for
 --                    spell-LESS macro slots (all-in-one pet button, Steam Tonk)
 --                    whose cast spell can't be resolved. Slots WITH a resolvable
@@ -2595,10 +2600,19 @@ end
 --   layout ("horizontal"|"vertical"|"grid"), gridCols, border (gold 1px ring
 --   active indicator) / activeAnts (marching-ants active indicator),
 --   dimOnCooldown (dim macro/spell slots while a real CD runs),
+--   readyPulse (pulsing gold ready glow on macro/spell slots that are off
+--   cooldown WHILE IN COMBAT -- the glanceable-readout indicator used by the
+--   cooldown trackers. A running GCD counts as "not ready", so the glow does
+--   not strobe on every global. Widens the icon gap so neighbouring glows
+--   don't touch),
 --   rangeCheck (red out-of-range shade over slots whose ability is out of range
 --   of its target -- hostile, friendly, or pet; see rangeSpell / rangeUnit),
 --   manaCheck (blue out-of-mana shade over slots whose spell is unusable for
 --   lack of mana; see manaSpell. Takes precedence over the range shade),
+--   hideEmptyBar (hide the whole frame when every slot is hidden AND the widget
+--   is locked, instead of leaving an empty backing rectangle + placeholder --
+--   for a bar that can legitimately end up with nothing to show, e.g. a
+--   hideWhenNoUse trinket bar with two proc trinkets equipped),
 --   moduleName,
 --   configName, defaultX, defaultY, slashReset, bindingPrefix, bindingCount,
 --   bindingHeaderGlobal, bindingHeaderText, extraEvents, pollInterval,
@@ -2611,6 +2625,22 @@ local AB_ICON_SIZE = 29
 local AB_ICON_GAP  = 4
 local AB_PADDING   = 6
 local AB_GCD_PROBE = "Wing Clip"  -- no CD of its own -> GetSpellCooldown = GCD only
+
+-- Pulsing ready glow (opts.readyPulse) -- the glanceable-readout indicator.
+-- Its own texture, separate from the opts.border / activeAnts active
+-- indicators, so a bar can run both without them fighting over one ring.
+local AB_READY_GLOW_SIZE  = 4
+local AB_READY_GLOW_COLOR = { 1.0, 0.82, 0.25, 0.85 }
+local AB_READY_PULSE_HZ   = 1.2
+local AB_READY_PULSE_MIN  = 0.45
+local AB_READY_PULSE_MAX  = 1.0
+
+-- How often trinket slots with `hideWhenNoUse` are re-verified. The known
+-- state is cached, and a transient nil from GetInventoryItemID (mid loading
+-- screen, or an /equipslot swap in flight) classifies as "empty" -- so without
+-- periodic re-verification one bad read would strand the slot hidden until the
+-- next equipment change. Equipment changes force a scan regardless.
+local AB_TRINKET_RESCAN = 1.0
 
 -- Marching-ants active indicator (opts.activeAnts) -- standard params.
 local AB_DASH_BORDER_W = 2
@@ -2746,6 +2776,12 @@ function ExsarUI.CreateActionBar(opts)
     local FormatCooldown = ExsarLogic.FormatCooldown
     local MIN_CD         = ExsarLogic.MIN_COOLDOWN_DURATION
 
+    -- The ready glow extends AB_READY_GLOW_SIZE px beyond every icon edge, so
+    -- a bar carrying it needs that much extra gap on each side or adjacent
+    -- glows run together into one bar-wide smear.
+    local ICON_GAP = opts.readyPulse
+        and (AB_ICON_GAP + AB_READY_GLOW_SIZE * 2) or AB_ICON_GAP
+
     local frame = CreateFrame("Frame", opts.frameName, UIParent)
     ExsarUI.SetupMovableFrame(frame, dbFunc)
     local placeholderText = ExsarUI.CreatePlaceholder(frame, opts.placeholder or "Bar")
@@ -2867,6 +2903,19 @@ function ExsarUI.CreateActionBar(opts)
             if c then r, g, b, a = c[1] or r, c[2] or g, c[3] or b, c[4] or a end
             s.border = ExsarUI.CreateGlow(btn, r, g, b, a, 1)
         end
+        -- Pulsing ready glow (opts.readyPulse): its own texture rather than a
+        -- mode on s.border, so the two indicators stay independently driven
+        -- (s.ready vs s.active). Created before slotBg for the same reason the
+        -- border is -- the opaque backing covers its centre, leaving a ring.
+        -- Note it is WIDER than the border ring and drawn after it, so while a
+        -- bar may declare both, a lit ready glow paints over the 1px ring.
+        -- Macro/spell slots only: an item slot's "ready" is stock, not cooldown,
+        -- and already reads off the icon dim.
+        if opts.readyPulse and kind ~= "item" then
+            local c = AB_READY_GLOW_COLOR
+            s.readyGlow = ExsarUI.CreateGlow(btn, c[1], c[2], c[3], c[4],
+                                             AB_READY_GLOW_SIZE)
+        end
         local slotBg = btn:CreateTexture(nil, "BACKGROUND")
         slotBg:SetAllPoints()
         slotBg:SetColorTexture(0, 0, 0, 1.0)
@@ -2959,17 +3008,29 @@ function ExsarUI.CreateActionBar(opts)
                     s.btn:ClearAllPoints()
                     if layout == "horizontal" then
                         s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                            AB_PADDING + vis * (AB_ICON_SIZE + AB_ICON_GAP), -AB_PADDING)
+                            AB_PADDING + vis * (AB_ICON_SIZE + ICON_GAP), -AB_PADDING)
                     else
                         s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                            AB_PADDING, -(AB_PADDING + vis * (AB_ICON_SIZE + AB_ICON_GAP)))
+                            AB_PADDING, -(AB_PADDING + vis * (AB_ICON_SIZE + ICON_GAP)))
                     end
                     s.btn:Show()
                     vis = vis + 1
                 end
             end
-            if vis == 0 then placeholderText:Show(); vis = 1 end
-            local long  = AB_PADDING * 2 + vis * AB_ICON_SIZE + (vis - 1) * AB_ICON_GAP
+            if vis == 0 then
+                -- Every slot hidden (e.g. two proc trinkets on a hideWhenNoUse
+                -- trinket bar). A locked bar has nothing to say and nothing to
+                -- drag, so opts.hideEmptyBar takes the whole frame away rather
+                -- than parking its backing rectangle + placeholder on screen.
+                -- Unlocked it still shows, or it could never be repositioned.
+                if opts.hideEmptyBar and dbFunc().locked then
+                    frame:Hide()
+                    return
+                end
+                placeholderText:Show()
+                vis = 1
+            end
+            local long  = AB_PADDING * 2 + vis * AB_ICON_SIZE + (vis - 1) * ICON_GAP
             local short = AB_ICON_SIZE + AB_PADDING * 2
             frame:SetSize(layout == "horizontal" and long or short,
                           layout == "horizontal" and short or long)
@@ -2993,8 +3054,8 @@ function ExsarUI.CreateActionBar(opts)
                     if a.groupFallback and not groupHasAny[key] then
                         s.btn:ClearAllPoints()
                         s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                            AB_PADDING + s.col * (AB_ICON_SIZE + AB_ICON_GAP),
-                            -(AB_PADDING + s.row * (AB_ICON_SIZE + AB_ICON_GAP)))
+                            AB_PADDING + s.col * (AB_ICON_SIZE + ICON_GAP),
+                            -(AB_PADDING + s.row * (AB_ICON_SIZE + ICON_GAP)))
                         s.btn:Show()
                     else
                         s.btn:Hide()
@@ -3009,14 +3070,14 @@ function ExsarUI.CreateActionBar(opts)
                     if row > maxRow then maxRow = row end
                     s.btn:ClearAllPoints()
                     s.btn:SetPoint("TOPLEFT", frame, "TOPLEFT",
-                        AB_PADDING + s.col * (AB_ICON_SIZE + AB_ICON_GAP),
-                        -(AB_PADDING + row * (AB_ICON_SIZE + AB_ICON_GAP)))
+                        AB_PADDING + s.col * (AB_ICON_SIZE + ICON_GAP),
+                        -(AB_PADDING + row * (AB_ICON_SIZE + ICON_GAP)))
                     s.btn:Show()
                 end
             end
             local rows = maxRow + 1
-            local gw = gridCols * AB_ICON_SIZE + (gridCols - 1) * AB_ICON_GAP + AB_PADDING * 2
-            frame:SetSize(gw, rows * AB_ICON_SIZE + (rows - 1) * AB_ICON_GAP + AB_PADDING * 2)
+            local gw = gridCols * AB_ICON_SIZE + (gridCols - 1) * ICON_GAP + AB_PADDING * 2
+            frame:SetSize(gw, rows * AB_ICON_SIZE + (rows - 1) * ICON_GAP + AB_PADDING * 2)
         end
         frame:Show()
     end
@@ -3050,6 +3111,56 @@ function ExsarUI.CreateActionBar(opts)
                 local hidden = active == nil
                 if hidden ~= (s.hidden == true) then needLayout = true end
                 s.hidden, s.activeSpell = hidden, active
+            end
+        end
+        if needLayout then ApplyLayout() end
+    end
+
+    -- ---------- trinket on-use resolution (hideWhenNoUse) ----------
+    -- Hide a trinketSlot slot unless the equipped trinket has an on-use effect,
+    -- so a trinket bar shows only the ones it can actually fire (0, 1 or 2) and
+    -- packs them together. A PROC trinket has no on-use spell and so hides here
+    -- by design -- ActiveEffectsTracker is what surfaces those.
+    --
+    -- Throttled, because this is three API calls per slot and the poll runs at
+    -- 10 Hz; an equipment change forces a scan so a swap still lands promptly.
+    -- "pending" (item data not cached yet -- transient after zoning or a taxi)
+    -- leaves the current state alone and requests a load; the engine already
+    -- listens for GET_ITEM_INFO_RECEIVED, so the retry is automatic.
+    local lastTrinketScan = 0
+    local hideNoUseSlots = {}  -- inventory slot id -> true, for the event filter
+    for _, a in ipairs(actions) do
+        if a.trinketSlot and a.hideWhenNoUse then hideNoUseSlots[a.trinketSlot] = true end
+    end
+    local anyHideNoUse = next(hideNoUseSlots) ~= nil
+
+    local function ResolveTrinkets(force)
+        if not anyHideNoUse then return end
+        local now = GetTime()
+        if not force and (now - lastTrinketScan) < AB_TRINKET_RESCAN then return end
+        lastTrinketScan = now
+
+        local needLayout = false
+        for _, s in ipairs(slots) do
+            local a = s.action
+            if a.trinketSlot and a.hideWhenNoUse then
+                local itemId = GetInventoryItemID("player", a.trinketSlot)
+                local hasItem = itemId and itemId > 0
+                local spellName = hasItem and GetItemSpell(itemId) or nil
+                -- GetItemSpell returns nil for uncached data too, which is
+                -- indistinguishable from a passive trinket unless we probe the
+                -- cache: GetItemInfo ~= nil means loaded.
+                local cached = not hasItem or GetItemInfo(itemId) ~= nil
+                local state = ExsarLogic.TrinketScanState(itemId, spellName, cached)
+                if state == "pending" then
+                    if C_Item and C_Item.RequestLoadItemDataByID then
+                        C_Item.RequestLoadItemDataByID(itemId)
+                    end
+                else
+                    local hidden = state ~= "known"
+                    if hidden ~= (s.hidden == true) then needLayout = true end
+                    s.hidden = hidden
+                end
             end
         end
         if needLayout then ApplyLayout() end
@@ -3347,6 +3458,14 @@ function ExsarUI.CreateActionBar(opts)
                 else
                     enabled = ExsarLogic.PetActionEnabled(a.requires, petState)
                 end
+                -- Ready state for the pulsing glow (opts.readyPulse): usable,
+                -- with NO cooldown running at all -- a real CD and the brief
+                -- GCD both count as not-ready, so the glow marks "this is back
+                -- up" rather than strobing on every global. Gated on combat:
+                -- out of combat every cooldown is up and a bar of solid glows
+                -- says nothing.
+                s.ready = enabled and (not start) and InCombatLockdown() and true or false
+
                 -- Grey-out priority: requirement-disabled > on-cooldown dim
                 -- (opts.dimOnCooldown, real CDs only — not the brief GCD) > full.
                 if not enabled then
@@ -3424,6 +3543,7 @@ function ExsarUI.CreateActionBar(opts)
     local function Refresh()
         ResolveStaticIcons()
         ResolveSpells()
+        ResolveTrinkets()
         ResolveActiveAll()
         ScanCounts()
         UpdateVisuals()
@@ -3446,6 +3566,27 @@ function ExsarUI.CreateActionBar(opts)
         end)
     end
 
+    -- Pulsing ready glow: its own always-on ticker rather than the 10 Hz poll,
+    -- which would step the breathe visibly. The poll owns s.ready; this only
+    -- renders it. Same shape as the marching-ants ticker above.
+    if opts.readyPulse then
+        local pulseTicker = CreateFrame("Frame")
+        pulseTicker:SetScript("OnUpdate", function()
+            local alpha = ExsarLogic.PulseAlpha(GetTime(), AB_READY_PULSE_HZ,
+                                                AB_READY_PULSE_MIN, AB_READY_PULSE_MAX)
+            for _, s in ipairs(slots) do
+                if s.readyGlow then
+                    if s.ready then
+                        s.readyGlow:SetAlpha(alpha)
+                        s.readyGlow:Show()
+                    else
+                        s.readyGlow:Hide()
+                    end
+                end
+            end
+        end)
+    end
+
     -- ---------- events ----------
     frame:RegisterEvent("ADDON_LOADED")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -3458,6 +3599,10 @@ function ExsarUI.CreateActionBar(opts)
     frame:RegisterEvent("UNIT_PET")
     frame:RegisterEvent("UNIT_AURA")
     frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    -- Only bars with a hideWhenNoUse trinket slot care about gear changes, and
+    -- this event fires constantly for the ammo slot in combat -- so it is opt-in
+    -- and its handler filters on the slot id.
+    if anyHideNoUse then frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED") end
     for _, ev in ipairs(opts.extraEvents or {}) do frame:RegisterEvent(ev) end
 
     frame:SetScript("OnEvent", function(self, event, arg1)
@@ -3477,6 +3622,15 @@ function ExsarUI.CreateActionBar(opts)
             Refresh()
         elseif event == "UNIT_PET" or event == "UNIT_AURA" then
             if arg1 == "player" then Refresh() end
+        elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+            -- A watched trinket slot changed: bypass the rescan throttle so the
+            -- bar reflows immediately instead of up to a second later. arg1 is
+            -- the slot id; everything else (above all the ammo slot, which fires
+            -- constantly in combat) is dropped without a refresh.
+            if hideNoUseSlots[arg1] then
+                ResolveTrinkets(true)
+                Refresh()
+            end
         else
             Refresh()
         end

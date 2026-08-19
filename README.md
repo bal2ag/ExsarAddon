@@ -12,7 +12,9 @@ This addon was built primarily with [Claude Code](https://code.claude.com/docs/e
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Widgets](#widgets)
-  - [Cooldown Tracker](#cooldown-tracker)
+  - [Cooldown Tracker: Core Rotation](#cooldown-tracker-core-rotation)
+  - [Cooldown Tracker: Long](#cooldown-tracker-long)
+  - [Cooldown Tracker: Trinkets](#cooldown-tracker-trinkets)
   - [Ranged Swing Timer](#ranged-swing-timer)
   - [Cast Bar](#cast-bar)
   - [Kill Command Alert](#kill-command-alert)
@@ -67,24 +69,57 @@ All widgets are movable and individually configurable.
 
 - **Config panel:** Type `/exsar config` in chat, or open it from the game menu via **Interface > AddOns > ExsarAddon**. The panel has per-widget settings for scale, visibility, sound alerts, and other options.
 - **Moving widgets:** Type `/exsar unlock` to unlock all widgets so you can drag them into position, then `/exsar lock` to lock them in place. The config panel has **Unlock all** / **Lock all** buttons above the widget list that do the same thing. Neither works in combat.
-- **Reset positions:** Type `/exsar reset` to reset widget positions to their defaults.
+- **Reset positions:** Each widget has a **Reset position** button in its config section, and most also have a `/exsar <name>reset` command (listed with the widget below).
 
 Settings are saved per-character in `ExsarAddonDB` (WoW's SavedVariables system) and persist across sessions.
 
 ## Widgets
 
-### Cooldown Tracker
+### Cooldown Tracker: Core Rotation
 
 ![Supported](https://img.shields.io/badge/Supported-green)
 
-Shows core abilities, trinkets, and cooldowns, and tracks cooldown time remaining.
+A glanceable readout of the two shot cooldowns the rotation is built around.
 
-- **Abilities tracked:** Multi-Shot, Arcane Shot, Rapid Fire, Bestial Wrath (if talented), Readiness (if talented)
-- **Trinkets:** Automatically shows equipped trinkets that have an on-use effect; updates when gear changes, and re-checks itself once a second so a trinket can't stay missing after a loading screen or a mid-fight glitch (proc trinkets have no on-use effect and are not shown here — see the Active Effects Tracker)
-- **Click to use:** Clicking a spell icon casts it; clicking a trinket icon uses it
-- **Cooldown appearance:** Icons go desaturated/dimmed with a circular sweep overlay and countdown text while on cooldown; a pulsing gold glow border appears when ready in combat
+- **Abilities tracked:** Multi-Shot, Arcane Shot
+- **Fixed width:** Both abilities are always available, so this widget never changes size — which is the point of it being separate. You can center it under the ranged swing timer and it stays there, instead of sliding around every time a trinket changes.
+- **Click to use:** Clicking an icon casts the ability
+- **Cooldown appearance:** The icon goes desaturated/dimmed with a circular sweep overlay and countdown text while on cooldown; the brief global cooldown shows the sweep only (no dimming, no number), same as the default action bars
+- **Ready glow:** A pulsing gold border appears when the ability is off cooldown **and you are in combat** — a running global cooldown doesn't count as ready, so the glow marks "this is back up" rather than flickering on every button press
+- **Commands:** `/exsar corecdreset` resets the widget's position
 
-<!-- ![Cooldown Tracker](screenshots/cooldown-tracker.png) -->
+<!-- ![Cooldown Tracker: Core Rotation](screenshots/core-rotation-cooldown-tracker.png) -->
+
+### Cooldown Tracker: Long
+
+![Supported](https://img.shields.io/badge/Supported-green)
+
+A glanceable readout of the long (over a minute) hunter cooldowns.
+
+- **Abilities tracked:** Rapid Fire, Bestial Wrath (Beast Mastery), Readiness (Survival)
+- **Follows your spec:** Bestial Wrath and Readiness are the two 31-point talents, so you can only ever know one — a Marksmanship hunter sees just Rapid Fire. Icons appear and disappear when you respec, without a reload.
+- **Click to use:** Clicking an icon casts the ability
+- **Cooldown appearance:** Desaturated/dimmed with a sweep overlay and countdown text while on cooldown. These are all off-GCD abilities, so no global-cooldown swirl ever shows here.
+- **Ready glow:** Pulsing gold border when off cooldown and in combat
+- **Commands:** `/exsar longcdreset` resets the widget's position
+
+<!-- ![Cooldown Tracker: Long](screenshots/long-cooldown-tracker.png) -->
+
+### Cooldown Tracker: Trinkets
+
+![Supported](https://img.shields.io/badge/Supported-green)
+
+A glanceable readout of your equipped trinkets' on-use cooldowns.
+
+- **Follows your gear:** Shows a slot only when the trinket equipped in it actually has an on-use effect, so you see 0, 1, or 2 icons and they pack together with no gaps. The icon, cooldown, and click action all come from whatever is equipped — no configuration when you swap trinkets.
+- **Proc trinkets are not shown:** A proc trinket (Dragonspine Trophy and friends) has nothing to activate, so there is nothing to track here — see the Active Effects Tracker for those buffs. If both your trinkets are procs, the widget hides itself entirely rather than leaving an empty box on screen (unlock it to bring it back for positioning).
+- **Click to use:** Clicking an icon uses that trinket
+- **Cooldown appearance:** Desaturated/dimmed with a sweep overlay and countdown text while on cooldown
+- **Ready glow:** Pulsing gold border when off cooldown and in combat
+- **Self-healing:** Re-checks the equipped trinkets once a second, and immediately when you swap one, so a slot can't stay blank after a loading screen or a mid-fight glitch
+- **Commands:** `/exsar trinketcdreset` resets the widget's position
+
+<!-- ![Cooldown Tracker: Trinkets](screenshots/trinket-cooldown-tracker.png) -->
 
 ### Ranged Swing Timer
 
